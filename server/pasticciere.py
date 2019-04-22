@@ -11,11 +11,11 @@ lstat.grid(row=0, column=1)
 ltask = Label(window, text="Задание")
 ltask.grid(row=0, column=2)
 ref = Button(text="Обновить")
-# ref.pack()
 ref.grid(row=0, column=3)
+cl_v = Label(window, text="Версия клиента")
+cl_v.grid(row=0, column=4)
 
-
-window.title('MT.Pasticciere')
+window.title('MT.Pasticciere ver 0.01 (Beshenaya Lopata)')
 window.geometry("600x400+10+10")
 window.mainloop()
 # Конец отрисовки интерфейса
