@@ -16,10 +16,10 @@ while True:
     opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
     closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel2)
     median = cv2.medianBlur(opening,7)
-    cv2.imshow("original", original)
-    cv2.imshow("threshholding", opening)
-    cv2.imshow("closing", closing)
-    cv2.imshow("median", median)
+    #cv2.imshow("original", original)
+    #cv2.imshow("threshholding", opening)
+    #cv2.imshow("closing", closing)
+    cv2.imshow("threshholding", median)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
