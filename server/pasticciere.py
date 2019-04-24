@@ -1,16 +1,24 @@
-from tkinter import *
-import subprocess
+from tkinter import *       # для рисования графики
+import subprocess           # для запуска подпроцессов
+import sys
+import os
 
-# Начало отрисовки интерфейса
+# Начало программы
+
 window=Tk()
 window.config(bg="white")
 
+# Перечень функций
 
-def mask(event):
-    cmd = "python ~/Repos/MT.Pasticciere/server/polzunok_threshold.py"
-    PIPE = subprocess.PIPE
-    p = subprocess.Popen(cmd, shell = True)
+def mask(self, event=None):
+    os.system('python3 manmask.py')
 
+def mancompare(self, event=None):
+    os.system('python3 mancompare.py')
+
+# Конец перечня функций
+
+# Начало отрисовки интерфейса
 
 lname = Label(window, text= "Номер устройства")
 lname.grid(row=0, column=0)
@@ -26,12 +34,17 @@ home = Button(text="Домой")
 home.grid(row=0, column=5)
 camshot = Button(text="Снимок")
 camshot.grid(row=0, column=6)
-selfmask = Button(text="Маска")
-selfmask.bind("<Button-1>", mask)
-selfmask.grid(row=0, column=7)
+manmask = Button(text="Маска", command = mask)
+manmask.grid(row=0, column=7)
+fullstop = Button(text="СТОП")
+fullstop.grid(row=0, column=8)
+mancompare = Button(text="Сравнить", command = mancompare)
+mancompare.grid(row=0, column=9)
 
-
-window.title('MT.Pasticciere ver 0.01 (Beshenaya Lopata)')
-window.geometry("600x400+10+10")
-window.mainloop()
 # Конец отрисовки интерфейса
+
+# Параметры окна
+
+window.title('MT.Pasticciere ver 0.011 (Obossanaya Ogloblya)')
+window.geometry("800x400+10+10")
+window.mainloop()
