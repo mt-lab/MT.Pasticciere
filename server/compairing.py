@@ -21,9 +21,14 @@ cv2.imshow("photo", median)
 
 ret = cv2.matchShapes(mask,median,1,0.0)
 
+if ret < 0.01:
+    answer = "yes"
+else:
+    answer = "no"
+
 cv2.waitKey(0)
 
-compairing_result.write(str(ret))
+compairing_result.write(answer)
 cv2.destroyAllWindows()
 threshlevel_read.close()
 compairing_result.close()
