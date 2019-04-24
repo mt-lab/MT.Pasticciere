@@ -16,8 +16,8 @@ opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
 median = cv2.medianBlur(opening,7)
 mask_from_photo = median
 
-cv2.imshow("mask", mask)
-cv2.imshow("photo", median)
+#cv2.imshow("mask", mask)
+#cv2.imshow("photo", median)
 
 ret = cv2.matchShapes(mask,median,1,0.0)
 
