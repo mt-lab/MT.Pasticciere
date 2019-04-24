@@ -5,15 +5,15 @@ import os
 
 # Начало программы
 
-window=Tk()
+window = Tk()
 window.config(bg="white")
 
 # Перечень функций
 
-def mask(self, event=None):
+def mask():
     os.system('python3 manmask.py')
 
-def mancompare(self, event=None):
+def mancompare():
     os.system('python3 mancompare.py')
 
 # Конец перечня функций
