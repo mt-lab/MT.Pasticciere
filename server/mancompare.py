@@ -1,9 +1,13 @@
 import numpy as np
 import cv2
 
+counter = 0
+
 mask = cv2.imread("mask.png", 0)
 photo = cv2.imread("cookie_changed.jpg", 1)
 
+rows,cols = mask.shape
+print(rows,cols)
 
 threshlevel_read = open('threshlevel.txt', 'r')
 threshlevel = threshlevel_read.read()
@@ -16,10 +20,17 @@ opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
 median = cv2.medianBlur(opening,7)
 mask_from_photo = median
 
-#cv2.imshow("mask", mask)
-#cv2.imshow("photo", median)
+cv2.imshow("mask", mask)
+cv2.imshow("photo", median)
 
-ret = cv2.matchShapes(mask,median,1,0.0)
+ret = cv2.matchShapes(mask,mask_from_photo,1,0.0)
+
+for i in range(rows):
+    for j in range(cols):
+        if mask[i,j] != mask_from_photo[i,j]:
+            counter+=1
+
+print(counter)
 
 if ret < 0.01:
     answer = "yes"
