@@ -1,5 +1,6 @@
 import tkinter as tk          # для рисования графики
-from tkinter import filedialog
+from tkinter import messagebox as mb
+from tkinter import Toplevel
 # import subprocess           # для запуска подпроцессов
 # import sys
 import os
@@ -8,7 +9,6 @@ import os
 # Начало программы
 
 window = tk.Tk()
-window.config(bg="white")
 
 # Перечень функций
 
@@ -19,10 +19,33 @@ def mask():
 
 def mancompare():
     os.system('python3 mancompare.py')
+    with open("mancompare.txt", "r") as check:
+        checkstr = check.readline()
+    if checkstr == "no":
+        mb.showerror("Внимание!", "Печать с браком!")
 
 
 def gcoder():
     file = tk.filedialog.askopenfilename()
+
+
+def gcodesetdiag():
+
+    def gcodeset():
+        step = stepform.get()
+        gcodesettings = open("accur.txt", "w")
+        gcodesettings.write(stepform.get())
+        gcodesettings.close
+
+    gcodesetwin = Toplevel(window)
+    gcodesetwin.title("Настройка gcode")
+    gcodesetwin.minsize(width=180, height=100)
+    steplabel = tk.Label(gcodesetwin, text="Размер шага")
+    steplabel.grid(row=0, column=0)
+    stepform = tk.Entry(gcodesetwin)
+    stepform.grid(row=1, column=0)
+    stepbutton = tk.Button(gcodesetwin, text="Задать", command=gcodeset)
+    stepbutton.grid(row=2, column=0)
 
 
 # def scannet():
@@ -39,7 +62,7 @@ def gcoder():
 # Блок генератора интерфейса для одного устройства
 
 
-lname = tk.Label(window, text="Номер устройства")
+lname = tk.Label(window, height=1, text="Номер устройства")
 lname.grid(row=1, column=0)
 lstat = tk.Label(window, text="Статус")
 lstat.grid(row=1, column=1)
@@ -61,16 +84,19 @@ mancompare = tk.Button(text="Сравнить", command=mancompare)
 mancompare.grid(row=1, column=9)
 gcoderb = tk.Button(window, text="Загрузить gcode", command=gcoder)
 gcoderb.grid(row=1, column=10)
-
+gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
+gcodesetb.grid(row=1, column=11)
 
 # Конец блока генератора
 
 # Конец отрисовки интерфейса
 
 # Параметры окна
-
-window.title('MT.Pasticciere ver 0.012 (Athletic Alcoholic)')
-window.geometry("800x400+10+10")
+window['bg'] = 'gray22'
+icon = tk.Image("photo", file="icon.gif")
+window.tk.call('wm', 'iconphoto', window._w, icon)
+window.title('MT.Pasticciere 0.012 (Athletic Alcoholic)')
+window.geometry("1280x400+10+10")
 menu = tk.Menu(window)
 menu.add_command(label='Обновить')
 window.config(menu=menu)
