@@ -28,9 +28,9 @@ class Unwrap_dxf:
             self.entities.append(entity)
 
 
-def dxf2gcode(pathToDxf):
+def dxf2gcode(pathToDxf, pathToPLY):
     PATH_TO_DXF = pathToDxf
-    cloud = '../scanner/cloud.ply'
+    cloud = pathToPLY
     dxf = ez.readfile(PATH_TO_DXF)
     # get all entities from dxf
     entities = Unwrap_dxf(dxf).unwrap()
