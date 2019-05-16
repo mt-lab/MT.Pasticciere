@@ -64,6 +64,6 @@ def dxf2gcode(pathToDxf, pathToPLY):
     gcode = gcode_generator(path)
 
     # write gcode
-    with open('coockie.gcode', 'w+') as gfile:
+    with open('cookie.gcode', 'w+') as gfile:
         for line in gcode:
             gfile.write(line + '\n')
