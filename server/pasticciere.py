@@ -9,6 +9,7 @@ import os
 # from ipaddr import IPv4Address, IPNetwork
 # Начало программы
 import dxf2gcode
+import scanner
 window = tk.Tk()
 
 # Перечень функций
@@ -51,6 +52,11 @@ def gcodesetdiag():
     stepbutton.grid(row=2, column=0)
 
 
+def pointcloud():
+    pathToVideo = filedialog.askopenfilename(title="Видео для построения рельефа")
+    scanner.scan(pathToVideo)
+
+
 # def scannet():
 #    clients = 0
 #    for a in IPNetwork('192.168.0.0/28').iterhosts():
@@ -89,6 +95,8 @@ gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
 gcoderb.grid(row=1, column=10)
 gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
 gcodesetb.grid(row=1, column=11)
+pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
+pointcloudb.grid(row=1, column=12)
 
 # Конец блока генератора
 
@@ -98,7 +106,7 @@ gcodesetb.grid(row=1, column=11)
 window['bg'] = 'gray22'
 icon = tk.Image("photo", file="icon.gif")
 window.tk.call('wm', 'iconphoto', window._w, icon)
-window.title('MT.Pasticciere 0.012 (Athletic Alcoholic)')
+window.title('MT.Pasticciere 0.1 (Black Badger)')
 window.geometry("1280x400+10+10")
 menu = tk.Menu(window)
 menu.add_command(label='Обновить')
