@@ -18,8 +18,12 @@ Ky = 0.725
 Xnull = 447
 Xend = 880
 
+X, Y, Z = 0, 1, 2
+
 
 def generate_PLY(arr):
+    print('Generating point cloud...')
+    start = time.time()
     f = open("cloud.ply", "w+")
     f.write("ply\n")
     f.write("format ascii 1.0\n")
@@ -36,6 +40,8 @@ def generate_PLY(arr):
         s += '\n'
         f.write(s)
     f.close()
+    time_passed = time.time() - start
+    print('Done for %03d sec\n' % time_passed)
 
 
 def find_z_zero_lvl(img):
@@ -64,13 +70,58 @@ def get_mask(img):
     return mask
 
 
-start = time.time()
+def scan(pathToVideo):
+    Y1 = 0  # счётчик кадров
+    p = 0  # счётчик точек
 
-Y1 = 0  # счётчик кадров
-p = 0  # счётчик точек
+    cap = cv2.VideoCapture(pathToVideo)  # чтение видео
+    propId_frameCount = 7
+    frameCount = int(cap.get(propId_frameCount))  # всего кадров в файле
 
-X, Y, Z = 0, 1, 2
+    num_pnts = (Xend - Xnull) * frameCount  # количество точек в облаке
+    ply = np.zeros((num_pnts, 3))  # массив облака точек
+    zero_lvl = 0  # нулевой уровень в пикселях
+
+    start = time.time()
+    while (cap.isOpened()):
+        ret, frame = cap.read()
+        if ret == True:
+            img = get_mask(frame)
+            if Y1 == 0:
+                zero_lvl = find_z_zero_lvl(img)
+            for x in range(Xnull, Xend):
+                for y in range(zero_lvl + 1, img.shape[0]):
+                    if img.item(y, x):
+                        # new_row = np.array([(x - Xnull) * Kx + X_0, Y1 * Ky + Y_0, (y - zero_lvl) * Kz + Z_0])
+                        # ply = np.append(ply, [new_row], axis=0)
+                        ply[p, X] = (x - Xnull) * Kx + X_0
+                        ply[p, Y] = Y1 * Ky + Y_0
+                        ply[p, Z] = (y - zero_lvl) * Kz + Z_0
+                        break
+                else:
+                    # new_row = np.array([(x - Xnull) * Kx + X_0, Y1 * Ky + Y_0, Z_0])
+                    # ply = np.append(ply, [new_row], axis=0)
+                    ply[p, X] = (x - Xnull) * Kx + X_0
+                    ply[p, Y] = Y1 * Ky + Y_0
+                    ply[p, Z] = Z_0
+                p += 1
+            Y1 += 1
+            print('%03d/%03d processed for %03d sec' % (Y1, frameCount, time.time() - start))
+        else:
+            time_passed = time.time() - start
+            print('Done. Time passed %03d sec\n' % time_passed)
+            break
+    cap.release()
+    generate_PLY(ply)
+
+
+# pcd = read_point_cloud('cloud.ply')
+# draw_geometries([pcd])
+scan(VID_PATH)
+
 """
+старый кусок кода для работы с картинками
+
 files = os.listdir(IMG_PATH)
 files.sort()
 
@@ -102,44 +153,3 @@ for file in files:
     Y1 += 1
     print('%03d/%03d processed for %03d sec' % (Y1, len(files), time.time() - start))
 """
-cap = cv2.VideoCapture(VID_PATH)  # чтение видео
-propId_frameCount = 7
-frameCount = int(cap.get(propId_frameCount))# всего кадров в файле
-
-num_pnts = (Xend - Xnull) * frameCount  # количество точек в облаке
-ply = np.zeros((num_pnts, 3))  # массив облака точек
-zero_lvl = 0  # нулевой уровень в пикселях
-
-while (cap.isOpened()):
-    ret, frame = cap.read()
-    if ret == True:
-        img = get_mask(frame)
-        if Y1 == 0:
-            zero_lvl = find_z_zero_lvl(img)
-        for x in range(Xnull, Xend):
-            for y in range(zero_lvl + 1, img.shape[0]):
-                if img.item(y, x):
-                    # new_row = np.array([(x - Xnull) * Kx + X_0, Y1 * Ky + Y_0, (y - zero_lvl) * Kz + Z_0])
-                    # ply = np.append(ply, [new_row], axis=0)
-                    ply[p, X] = (x - Xnull) * Kx + X_0
-                    ply[p, Y] = Y1 * Ky + Y_0
-                    ply[p, Z] = (y - zero_lvl) * Kz + Z_0
-                    break
-            else:
-                # new_row = np.array([(x - Xnull) * Kx + X_0, Y1 * Ky + Y_0, Z_0])
-                # ply = np.append(ply, [new_row], axis=0)
-                ply[p, X] = (x - Xnull) * Kx + X_0
-                ply[p, Y] = Y1 * Ky + Y_0
-                ply[p, Z] = Z_0
-            p += 1
-        Y1 += 1
-        print('%03d/%03d processed for %03d sec' % (Y1, frameCount, time.time() - start))
-    else:
-        print('Done')
-        break
-time_passed = time.time() - start
-cap.release()
-print(time_passed)
-generate_PLY(ply)
-# pcd = read_point_cloud('cloud.ply')
-# draw_geometries([pcd])
