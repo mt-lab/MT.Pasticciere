@@ -1,13 +1,14 @@
 import tkinter as tk          # для рисования графики
 from tkinter import messagebox as mb
 from tkinter import Toplevel
+from tkinter import filedialog
 # import subprocess           # для запуска подпроцессов
 # import sys
 import os
 # import server
 # from ipaddr import IPv4Address, IPNetwork
 # Начало программы
-
+import dxf2gcode
 window = tk.Tk()
 
 # Перечень функций
@@ -26,16 +27,18 @@ def mancompare():
 
 
 def gcoder():
-    file = tk.filedialog.askopenfilename()
+    pathToPLY = filedialog.askopenfilename(title="Облако точек")
+    pathToDxf = filedialog.askopenfilename(title="Файл dxf с заданием")
+    dxf2gcode.dxf2gcode(pathToDxf, pathToPLY)
 
 
 def gcodesetdiag():
 
     def gcodeset():
-        step = stepform.get()
         gcodesettings = open("accur.txt", "w")
         gcodesettings.write(stepform.get())
         gcodesettings.close
+        gcodesetwin.destroy()
 
     gcodesetwin = Toplevel(window)
     gcodesetwin.title("Настройка gcode")
@@ -82,7 +85,7 @@ fullstop = tk.Button(text="СТОП")
 fullstop.grid(row=1, column=8)
 mancompare = tk.Button(text="Сравнить", command=mancompare)
 mancompare.grid(row=1, column=9)
-gcoderb = tk.Button(window, text="Загрузить gcode", command=gcoder)
+gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
 gcoderb.grid(row=1, column=10)
 gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
 gcodesetb.grid(row=1, column=11)
