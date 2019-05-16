@@ -27,41 +27,43 @@ class Unwrap_dxf:
         else:
             self.entities.append(entity)
 
-PATH_TO_DXF = ''
-cloud = '../scanner/cloud.ply'
-dxf = ez.readfile(PATH_TO_DXF)
-# get all entities from dxf
-entities = Unwrap_dxf(dxf).unwrap()
-# read pcd
-pcd, pcd_xy, pcd_z = read_pcd(cloud)
 
-# for easier work with elements define them with elements class
-unproc = []
-for e in entities:
-    if e.dxftype() == 'POLYLINE':
-        unproc.append(Polyine(e))
-    elif e.dxftype() == 'SPLINE':
-        unproc.append(Spline(e))
+def dxf2gcode(pathToDxf):
+    PATH_TO_DXF = pathToDxf
+    cloud = '../scanner/cloud.ply'
+    dxf = ez.readfile(PATH_TO_DXF)
+    # get all entities from dxf
+    entities = Unwrap_dxf(dxf).unwrap()
+    # read pcd
+    pcd, pcd_xy, pcd_z = read_pcd(cloud)
 
-# organize path
-path = []
-unproc.sort(key=lambda x: x.best_distance((0, 0)))
-while len(unproc) != 0:
-    cur = unproc[0]
-    path.append(cur)
-    unproc.pop(0)
-    unproc.sort(key=lambda x: x.best_distance(cur.get_points()[-1]))
+    # for easier work with elements define them with elements class
+    unproc = []
+    for e in entities:
+        if e.dxftype() == 'POLYLINE':
+            unproc.append(Polyine(e))
+        elif e.dxftype() == 'SPLINE':
+            unproc.append(Spline(e))
 
-# slice dxf and add volume to it
-step = 1
-for element in path:
-    element.slice(step)
-    element.add_z(pcd_xy, pcd_z)
+    # organize path
+    path = []
+    unproc.sort(key=lambda x: x.best_distance((0, 0)))
+    while len(unproc) != 0:
+        cur = unproc[0]
+        path.append(cur)
+        unproc.pop(0)
+        unproc.sort(key=lambda x: x.best_distance(cur.get_points()[-1]))
 
-# generate gcode
-gcode = gcode_generator(path)
+    # slice dxf and add volume to it
+    step = 1
+    for element in path:
+        element.slice(step)
+        element.add_z(pcd_xy, pcd_z)
 
-# write gcode
-with open('coockie.gcode', 'w+') as gfile:
-    for line in gcode:
-        gfile.write(line + '\n')
+    # generate gcode
+    gcode = gcode_generator(path)
+
+    # write gcode
+    with open('coockie.gcode', 'w+') as gfile:
+        for line in gcode:
+            gfile.write(line + '\n')
