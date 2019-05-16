@@ -27,9 +27,9 @@ class Unwrap_dxf:
         else:
             self.entities.append(entity)
 
-
+PATH_TO_DXF = ''
 cloud = '../scanner/cloud.ply'
-dxf = ez.readfile('snow_wo_hatch&edge.dxf')
+dxf = ez.readfile(PATH_TO_DXF)
 # get all entities from dxf
 entities = Unwrap_dxf(dxf).unwrap()
 # read pcd
@@ -62,6 +62,6 @@ for element in path:
 gcode = gcode_generator(path)
 
 # write gcode
-with open('gcode.txt', 'w+') as gfile:
+with open('coockie.gcode', 'w+') as gfile:
     for line in gcode:
         gfile.write(line + '\n')
