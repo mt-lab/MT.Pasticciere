@@ -21,8 +21,8 @@ def mancompare():
     os.system('python3 mancompare.py')
 
 
-def gcoder(file):
-    file = filedialog.askopenfilename()
+def gcoder():
+    file = tk.filedialog.askopenfilename()
 
 
 # def scannet():
@@ -60,7 +60,7 @@ fullstop.grid(row=1, column=8)
 mancompare = tk.Button(text="Сравнить", command=mancompare)
 mancompare.grid(row=1, column=9)
 gcoderb = tk.Button(window, text="Загрузить gcode", command=gcoder)
-gcoderb.grid(row=1, column=9)
+gcoderb.grid(row=1, column=10)
 
 
 # Конец блока генератора
