@@ -1,17 +1,14 @@
-import tkinter as tk          # для рисования графики
+import tkinter as tk
 from tkinter import messagebox as mb
 from tkinter import Toplevel
 from tkinter import filedialog
-# import subprocess           # для запуска подпроцессов
-# import sys
 import os
-# import server
-# from ipaddr import IPv4Address, IPNetwork
-# Начало программы
 import dxf2gcode
 import scanner
-window = tk.Tk()
+import logging
 
+window = tk.Tk()
+logging.basicConfig(filename="pasticciere.log", level=logging.INFO)
 # Перечень функций
 
 
@@ -53,7 +50,7 @@ def gcodesetdiag():
 
 
 def pointcloud():
-    pathToVideo = filedialog.askopenfilename(title="Видео для построения рельефа")
+    pathToVideo = filedialog.askopenfilename(title="Видео для рельефа")
     scanner.scan(pathToVideo)
 
 
