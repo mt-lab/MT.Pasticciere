@@ -6,9 +6,12 @@ import os
 import dxf2gcode
 import scanner
 import logging
+import configparser
 
 window = tk.Tk()
+config = configparser.ConfigParser()
 logging.basicConfig(filename="pasticciere.log", level=logging.INFO)
+
 # Перечень функций
 
 
