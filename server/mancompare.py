@@ -11,7 +11,7 @@ print(rows,cols)
 
 threshlevel_read = open('threshlevel.txt', 'r')
 threshlevel = threshlevel_read.read()
-compairing_result = open('compairing_result.txt', 'w')
+compairing_result = open('mancompare.txt', 'w')
 
 gray = cv2.cvtColor(photo, cv2.COLOR_BGR2GRAY)
 ret,thresh = cv2.threshold(gray,int(threshlevel),255,cv2.THRESH_BINARY)
