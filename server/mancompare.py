@@ -12,8 +12,6 @@ def mancompare(threshlevel):
     rows,cols = mask.shape
     print(rows,cols)
 
-#    threshlevel_read = open('threshlevel.txt', 'r')
-#    threshlevel = threshlevel_read.read()
     compairing_result = open('compairing_result.txt', 'w')
 
     photo = cv2.resize(photo,None,fx=0.8, fy=0.8, interpolation =  cv2.INTER_CUBIC)
@@ -40,8 +38,6 @@ def mancompare(threshlevel):
                 photo[i,j] = [0,255,0]
 
 
-
-
     cv2.imshow("photo", photo)
     print(counter)
     print(ret)
@@ -55,7 +51,4 @@ def mancompare(threshlevel):
 
     compairing_result.write(answer)
     cv2.destroyAllWindows()
-#    threshlevel_read.close()
     compairing_result.close()
-
-# mancompare()

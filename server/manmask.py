@@ -1,8 +1,8 @@
 import numpy as np
 import cv2
 import configparser
-path = "settings.ini"
 
+path = "settings.ini"
 
 def get_config(path):
     """
@@ -13,7 +13,6 @@ def get_config(path):
     config.read(path)
     return config
 
-
 def update_setting(path, section, setting, value):
     """
     Обновляем параметр в настройках
@@ -22,7 +21,6 @@ def update_setting(path, section, setting, value):
     config.set(section, setting, value)
     with open(path, "w") as config_file:
         config.write(config_file)
-
 
 def nothing(x):
      pass
@@ -49,7 +47,4 @@ def manmask():
 
     cv2.destroyAllWindows()
     cv2.imwrite("mask.png", median)
-    #threshlevel_save = open('threshlevel.txt', 'w')
     update_setting(path, "OTK", "threshlevel", str(threshlevel))
-    #threshlevel_save.write(str(threshlevel))
-    #threshlevel_save.close()
