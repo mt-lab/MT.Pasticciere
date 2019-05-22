@@ -2,17 +2,19 @@ import tkinter as tk          # для рисования графики
 from tkinter import messagebox as mb
 from tkinter import Toplevel
 from tkinter import filedialog
-# import subprocess           # для запуска подпроцессов
-# import sys
-import os
-# import server
-# from ipaddr import IPv4Address, IPNetwork
-# Начало программы
 import dxf2gcode
 from scanner import scan
 import configparser
-from mancompare import mancompare
-import manmask
+import otk
+import logging
+
+logger = logging.getLogger("pasticciere")
+logger.setLevel(logging.INFO)
+fh = logging.FileHandler("pasticciere.log")
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+logger.info("Запуск программы")
 
 
 def get_config(path):
@@ -58,7 +60,7 @@ window = tk.Tk()
 
 def mancomparing():
     thresh = get_setting(path, "OTK", "threshlevel")
-    mancompare(thresh)
+    otk.mancompare(thresh)
     with open("mancompare.txt", "r") as check:
         checkstr = check.readline()
     if checkstr == "no":
@@ -72,7 +74,9 @@ def gcoder():
     update_setting(path, "GCoder", "dxfpath", pathToDxf)
     dxf = get_setting(path, "GCoder", "dxfpath")
     ply = get_setting(path, "GCoder", "pointcloudpath")
+    logger.info("Начало генерации g-code")
     dxf2gcode.dxf2gcode(dxf, ply)
+    logger.info("Gcode получен")
 
 
 def gcodesetdiag():
@@ -107,36 +111,25 @@ def getstatus():
     statuswin.minsize(width=400, height=400)
     steplabel = tk.Label(statuswin, text="Размер шага:")
     steplabel.grid(row=0, column=0)
-    stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "accuracy"))
+    stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
+                                                     "accuracy"))
     stepvalue.grid(row=1, column=0)
     videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
     videolabel.grid(row=2, column=0)
-    videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "videoforpointcloud"))
+    videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
+                                                      "videoforpointcloud"))
     videovalue.grid(row=3, column=0)
     cloudlabel = tk.Label(statuswin, text="Путь к облаку точек:")
     cloudlabel.grid(row=4, column=0)
-    cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "pointcloudpath"))
+    cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
+                                                      "pointcloudpath"))
     cloudvalue.grid(row=5, column=0)
     dxflabel = tk.Label(statuswin, text="Путь к dxf-файлу:")
     dxflabel.grid(row=6, column=0)
     dxfvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "dxfpath"))
     dxfvalue.grid(row=7, column=0)
-    stepbutton = tk.Button(statuswin, text="Закрыть", command=statuswin.destroy)
+    stepbutton = tk.Button(statuswin, text="Ok", command=statuswin.destroy)
     stepbutton.grid(row=8, column=0)
-
-
-# def scannet():
-#    clients = 0
-#    for a in IPNetwork('192.168.0.0/28').iterhosts():
-#        clients = clients + 1
-
-# Конец перечня функций
-
-# Начало отрисовки интерфейса
-
-# scannet = Button(text="Сканировать сеть", command = scannet)
-# clients = 5
-# Блок генератора интерфейса для одного устройства
 
 
 lname = tk.Label(window, height=1, text="Номер устройства")
@@ -153,7 +146,7 @@ home = tk.Button(text="Домой")
 home.grid(row=1, column=5)
 camshot = tk.Button(text="Снимок")
 camshot.grid(row=1, column=6)
-manmask = tk.Button(text="Маска", command=manmask.manmask)
+manmask = tk.Button(text="Маска", command=otk.manmask)
 manmask.grid(row=1, column=7)
 fullstop = tk.Button(text="СТОП")
 fullstop.grid(row=1, column=8)
