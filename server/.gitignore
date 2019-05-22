@@ -1,6 +1,7 @@
-/*.png
-/*.txt
-/*.gcode
-/*.log
-/*.avi
-/*.dxf
+*.png
+*.txt
+*.gcode
+*.log
+*.avi
+*.dxf
+/__pycache__/*
