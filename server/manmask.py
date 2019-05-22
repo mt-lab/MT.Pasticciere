@@ -1,5 +1,28 @@
 import numpy as np
 import cv2
+import configparser
+path = "settings.ini"
+
+
+def get_config(path):
+    """
+    Выбираем файл настроек
+    """
+
+    config = configparser.ConfigParser()
+    config.read(path)
+    return config
+
+
+def update_setting(path, section, setting, value):
+    """
+    Обновляем параметр в настройках
+    """
+    config = get_config(path)
+    config.set(section, setting, value)
+    with open(path, "w") as config_file:
+        config.write(config_file)
+
 
 def nothing(x):
      pass
@@ -12,7 +35,7 @@ def manmask():
         gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
         blur = cv2.bilateralFilter(gray, 15, 17, 17)
         blur = cv2.medianBlur(blur,3)
-        threshlevel = cv2.getTrackbarPos('Tlevel','threshholding')
+        threshlevel = cv2.getTrackbarPos('Tlevel', 'threshholding')
         ret,thresh = cv2.threshold(gray,threshlevel,255,cv2.THRESH_BINARY)
         kernel1 = np.ones((3,3),np.uint8)
         opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
@@ -26,8 +49,7 @@ def manmask():
 
     cv2.destroyAllWindows()
     cv2.imwrite("mask.png", median)
-    threshlevel_save = open('threshlevel.txt', 'w')
-    threshlevel_save.write(str(threshlevel))
-    threshlevel_save.close()
-
-manmask()
+    #threshlevel_save = open('threshlevel.txt', 'w')
+    update_setting(path, "OTK", "threshlevel", str(threshlevel))
+    #threshlevel_save.write(str(threshlevel))
+    #threshlevel_save.close()

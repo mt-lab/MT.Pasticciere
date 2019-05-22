@@ -11,6 +11,8 @@ import os
 import dxf2gcode
 from scanner import scan
 import configparser
+from mancompare import mancompare
+import manmask
 
 
 def get_config(path):
@@ -54,12 +56,9 @@ window = tk.Tk()
 # Перечень функций
 
 
-def mask():
-    os.system('python3 manmask.py')
-
-
-def mancompare():
-    os.system('python3 mancompare.py')
+def mancomparing():
+    thresh = get_setting(path, "OTK", "threshlevel")
+    mancompare(thresh)
     with open("mancompare.txt", "r") as check:
         checkstr = check.readline()
     if checkstr == "no":
@@ -71,7 +70,9 @@ def gcoder():
     pathToDxf = filedialog.askopenfilename(title="Файл dxf с заданием")
     update_setting(path, "GCoder", "pointcloudpath", pathToPLY)
     update_setting(path, "GCoder", "dxfpath", pathToDxf)
-    dxf2gcode.dxf2gcode(get_setting(path, "GCoder", "dxfpath"), get_setting(path, "GCoder", "pointcloudpath"))
+    dxf = get_setting(path, "GCoder", "dxfpath")
+    ply = get_setting(path, "GCoder", "pointcloudpath")
+    dxf2gcode.dxf2gcode(dxf, ply)
 
 
 def gcodesetdiag():
@@ -108,8 +109,20 @@ def getstatus():
     steplabel.grid(row=0, column=0)
     stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "accuracy"))
     stepvalue.grid(row=1, column=0)
-    stepbutton = tk.Button(statuswin, text="Задать", command=statuswin.destroy)
-    stepbutton.grid(row=2, column=0)
+    videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
+    videolabel.grid(row=2, column=0)
+    videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "videoforpointcloud"))
+    videovalue.grid(row=3, column=0)
+    cloudlabel = tk.Label(statuswin, text="Путь к облаку точек:")
+    cloudlabel.grid(row=4, column=0)
+    cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "pointcloudpath"))
+    cloudvalue.grid(row=5, column=0)
+    dxflabel = tk.Label(statuswin, text="Путь к dxf-файлу:")
+    dxflabel.grid(row=6, column=0)
+    dxfvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "dxfpath"))
+    dxfvalue.grid(row=7, column=0)
+    stepbutton = tk.Button(statuswin, text="Закрыть", command=statuswin.destroy)
+    stepbutton.grid(row=8, column=0)
 
 
 # def scannet():
@@ -140,12 +153,12 @@ home = tk.Button(text="Домой")
 home.grid(row=1, column=5)
 camshot = tk.Button(text="Снимок")
 camshot.grid(row=1, column=6)
-manmask = tk.Button(text="Маска", command=mask)
+manmask = tk.Button(text="Маска", command=manmask.manmask)
 manmask.grid(row=1, column=7)
 fullstop = tk.Button(text="СТОП")
 fullstop.grid(row=1, column=8)
-mancompare = tk.Button(text="Сравнить", command=mancompare)
-mancompare.grid(row=1, column=9)
+mancomparing = tk.Button(text="Сравнить", command=mancomparing)
+mancomparing.grid(row=1, column=9)
 gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
 gcoderb.grid(row=1, column=10)
 gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
