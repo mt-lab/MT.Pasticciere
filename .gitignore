@@ -4,5 +4,5 @@
 *.log
 *.avi
 *.dxf
-/__pycache__/*
+/server/__pycache__/*
 *.ini
