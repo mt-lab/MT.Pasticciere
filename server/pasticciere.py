@@ -2,11 +2,11 @@ import tkinter as tk          # для рисования графики
 from tkinter import messagebox as mb
 from tkinter import Toplevel
 from tkinter import filedialog
-import dxf2gcode
 from scanner import scan
 import configparser
-import otk
 import logging
+import otk
+import dxf2gcode
 
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
