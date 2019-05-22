@@ -9,7 +9,46 @@ import os
 # from ipaddr import IPv4Address, IPNetwork
 # Начало программы
 import dxf2gcode
-import scanner
+from scanner import scan
+import configparser
+
+
+def get_config(path):
+    """
+    Выбираем файл настроек
+    """
+
+    config = configparser.ConfigParser()
+    config.read(path)
+    return config
+
+
+def update_setting(path, section, setting, value):
+    """
+    Обновляем параметр в настройках
+    """
+    config = get_config(path)
+    config.set(section, setting, value)
+    with open(path, "w") as config_file:
+        config.write(config_file)
+
+
+def get_setting(path, section, setting):
+    """
+    Выводим значение из настроек
+    """
+    config = get_config(path)
+    value = config.get(section, setting)
+    msg = "{section} {setting} is {value}".format(
+        section=section, setting=setting, value=value
+    )
+    print(msg)
+    return value
+
+
+path = "settings.ini"
+
+
 window = tk.Tk()
 
 # Перечень функций
@@ -30,7 +69,9 @@ def mancompare():
 def gcoder():
     pathToPLY = filedialog.askopenfilename(title="Облако точек")
     pathToDxf = filedialog.askopenfilename(title="Файл dxf с заданием")
-    dxf2gcode.dxf2gcode(pathToDxf, pathToPLY)
+    update_setting(path, "GCoder", "pointcloudpath", pathToPLY)
+    update_setting(path, "GCoder", "dxfpath", pathToDxf)
+    dxf2gcode.dxf2gcode(get_setting(path, "GCoder", "dxfpath"), get_setting(path, "GCoder", "pointcloudpath"))
 
 
 def gcodesetdiag():
@@ -38,6 +79,7 @@ def gcodesetdiag():
     def gcodeset():
         gcodesettings = open("accur.txt", "w")
         gcodesettings.write(stepform.get())
+        update_setting(path, "GCoder", "accuracy", stepform.get())
         gcodesettings.close
         gcodesetwin.destroy()
 
@@ -53,8 +95,21 @@ def gcodesetdiag():
 
 
 def pointcloud():
-    pathToVideo = filedialog.askopenfilename(title="Видео для построения рельефа")
-    scanner.scan(pathToVideo)
+    pathToVideo = filedialog.askopenfilename(title="Видео для задания рельефа")
+    update_setting(path, "GCoder", "videoforpointcloud", pathToVideo)
+    scan(get_setting(path, "GCoder", "videoforpointcloud"))
+
+
+def getstatus():
+    statuswin = Toplevel(window)
+    statuswin.title("Текущие параметры")
+    statuswin.minsize(width=400, height=400)
+    steplabel = tk.Label(statuswin, text="Размер шага:")
+    steplabel.grid(row=0, column=0)
+    stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "accuracy"))
+    stepvalue.grid(row=1, column=0)
+    stepbutton = tk.Button(statuswin, text="Задать", command=statuswin.destroy)
+    stepbutton.grid(row=2, column=0)
 
 
 # def scannet():
@@ -73,7 +128,7 @@ def pointcloud():
 
 lname = tk.Label(window, height=1, text="Номер устройства")
 lname.grid(row=1, column=0)
-lstat = tk.Label(window, text="Статус")
+lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
 ltask = tk.Label(window, text="Задание")
 ltask.grid(row=1, column=2)

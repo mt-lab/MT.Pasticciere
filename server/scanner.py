@@ -117,7 +117,7 @@ def scan(pathToVideo):
 
 # pcd = read_point_cloud('cloud.ply')
 # draw_geometries([pcd])
-scan(VID_PATH)
+# scan(VID_PATH)
 
 """
 старый кусок кода для работы с картинками
