@@ -5,3 +5,4 @@
 *.avi
 *.dxf
 /__pycache__/*
+*.ini
