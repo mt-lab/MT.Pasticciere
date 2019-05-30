@@ -68,11 +68,11 @@ def read_pcd(path=''):
     return pcd, pcd_xy, pcd_z
 
 
-def find_point_in_Cloud(point, pcd_xy, pcd_z):
+def find_point_in_Cloud(point, pcd_xy, pcd_z, offset = (0, 0)):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
-    point[X] += -50
-    point[Y] += 120
+    # point[X] += offset[X] #-50
+    # point[Y] += offset[Y] #120
     z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
-    point.append(z if z else 0)
+    # point.append(z if z else 0)
     return z if z else 0
