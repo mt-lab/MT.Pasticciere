@@ -28,7 +28,7 @@ class Unwrap_dxf:
             self.entities.append(entity)
 
 
-def dxf2gcode(pathToDxf, pathToPLY):
+def dxf2gcode(pathToDxf, pathToPLY, offset=(0,0)):
     PATH_TO_DXF = pathToDxf
     cloud = pathToPLY
     dxf = ez.readfile(PATH_TO_DXF)
@@ -54,10 +54,11 @@ def dxf2gcode(pathToDxf, pathToPLY):
         unproc.pop(0)
         unproc.sort(key=lambda x: x.best_distance(cur.get_points()[-1]))
 
-    # slice dxf and add volume to it
+    # slice dxf and add volume to it, also add offset
     step = 1
     for element in path:
         element.slice(step)
+        element.set_offset(offset)
         element.add_z(pcd_xy, pcd_z)
 
     # generate gcode
