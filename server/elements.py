@@ -13,6 +13,19 @@ class Element:
         self.last = last
         self.sliced = []
         self.backwards = False
+        self.offset = (0, 0)
+
+    def set_offset(self, offset=(0,0)):
+        if len(self.sliced) != 0:
+            for point in self.sliced:
+                point[X] -= self.offset[X]
+                point[X] += offset[X]
+                point[Y] -= self.offset[Y]
+                point[Y] += offset[Y]
+            self.offset = offset
+        else:
+            print('nothing to offset')
+
 
     def best_distance(self, point):
         dist_to_first = sqrt(abs(self.first[X] - point[X]) ** 2 + abs(self.first[Y] - point[Y]) ** 2)
@@ -30,16 +43,17 @@ class Element:
         for start, end in pairwise(self.points):
             for p in diap(start, end, step):
                 p = list(p)
-                p.append(0)
+                if len(p) !=3:
+                    p.append(0)
                 self.sliced.append(p)
 
     def add_z(self, pcd_xy, pcd_z):
         if len(self.sliced) != 0:
             for p in self.sliced:
-                p[Z] = find_point_in_Cloud(p, pcd_xy, pcd_z)
+                p[Z] = find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset)
         elif len(self.points) != 0:
             for p in self.points:
-                p.append(find_point_in_Cloud(p, pcd_xy, pcd_z))
+                p.append(find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset))
 
 
 class Polyine(Element):
@@ -54,7 +68,7 @@ class Polyine(Element):
 class Spline(Element):
     def __init__(self, spline):
         super().__init__(spline)
-        self.points = spline.control_points
+        self.points = [point for point in spline.control_points]
         self.first = spline.control_points[0]
         self.last = spline.control_points[-1]
         self.sliced = []
