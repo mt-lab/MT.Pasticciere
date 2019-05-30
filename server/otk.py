@@ -147,6 +147,7 @@ def manmask():
 
 def mancompare(threshlevel):
     compairing_result = open('mancompare.txt', 'w')
+    counter_of_mistakes = 0
     original = cv2.imread("photo_4.jpg",1)
     mask = cv2.imread("mask.png", 0)
     n_white_pix_inmask = np.sum(mask == 255)
@@ -195,67 +196,68 @@ def mancompare(threshlevel):
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:1]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:3]
+    original_table = table
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
-
     for cnt in contours:
+        #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
 
-            #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        #cv2.drawContours(table,[box],0,(0,0,255),2)
+        mult = 1
+        W = rect[1][0]
+        H = rect[1][1]
+        Xs = [i[0] for i in box]
+        Ys = [i[1] for i in box]
+        x1 = min(Xs)
+        x2 = max(Xs)
+        y1 = min(Ys)
+        y2 = max(Ys)
+        rotated = False
+        angle = rect[2]
+        if angle < -45:
+            angle+=90
+            rotated = True
 
-            rect = cv2.minAreaRect(cnt)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            #cv2.drawContours(table,[box],0,(0,0,255),2)
-            mult = 1
+        center = (int((x1+x2)/2), int((y1+y2)/2))
+        size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
+        #cv2.circle(table, center, 10, (0,255,0), -1) #again this was mostly for debugging purposes
 
-            W = rect[1][0]
-            H = rect[1][1]
+        M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
 
-            Xs = [i[0] for i in box]
-            Ys = [i[1] for i in box]
-            x1 = min(Xs)
-            x2 = max(Xs)
-            y1 = min(Ys)
-            y2 = max(Ys)
+        cropped = cv2.getRectSubPix(table, size, center)
+        cropped = cv2.warpAffine(cropped, M, size)
 
-            rotated = False
-            angle = rect[2]
+        croppedW = W if not rotated else H
+        croppedH = H if not rotated else W
 
-            if angle < -45:
-                angle+=90
-                rotated = True
+        croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
 
-            center = (int((x1+x2)/2), int((y1+y2)/2))
-            size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
-            #cv2.circle(table, center, 10, (0,255,0), -1) #again this was mostly for debugging purposes
+        #получение маски с каждой печеньки
+        gray_mask = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
+        #blur = cv2.bilateralFilter(gray_mask, 15, 17, 17)
+        #blur = cv2.medianBlur(blur, 3)
+        ret, thresh = cv2.threshold(gray_mask, 132, 255, cv2.THRESH_BINARY)
+        kernel1 = np.ones((3, 3), np.uint8)
+        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
+        median = cv2.medianBlur(opening, 9)
+        n_white_pix = np.sum(median == 255)
+        print('Number of white pixels from photo:', n_white_pix)
 
-            M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
-
-            cropped = cv2.getRectSubPix(table, size, center)
-            cropped = cv2.warpAffine(cropped, M, size)
-
-            croppedW = W if not rotated else H
-            croppedH = H if not rotated else W
-
-            croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
-
-            #получение маски с каждой печеньки
-            gray_mask = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
-            #blur = cv2.bilateralFilter(gray_mask, 15, 17, 17)
-            #blur = cv2.medianBlur(blur, 3)
-            ret, thresh = cv2.threshold(gray_mask, 132, 255, cv2.THRESH_BINARY)
-            kernel1 = np.ones((3, 3), np.uint8)
-            opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
-            median = cv2.medianBlur(opening, 9)
-            n_white_pix = np.sum(median == 255)
-            print('Number of white pixels from photo:', n_white_pix)
-
-            if abs(n_white_pix_inmask - n_white_pix)<500:
-                answer = "yes"
-            else:
-                answer = "no"
-
+        if abs(n_white_pix_inmask - n_white_pix)>500:
+            counter_of_mistakes +=1
+            cv2.drawContours(original_table,[box],0,(0,0,255),2)
+        else:
+            cv2.drawContours(original_table,[box],0,(0,255,0),2)
+            
+    if counter_of_mistakes == 0:
+        answer = "yes"
+    else:
+        answer = "no"
+        cv2.imshow("eror",original_table)
 
     print(answer)
     cv2.waitKey(0)
