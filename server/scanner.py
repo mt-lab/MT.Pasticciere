@@ -4,9 +4,11 @@ import cv2
 import time
 import os
 
-X_0 = -11.6
-Y_0 = -56.1
-Z_0 = 18.6
+X_0 = 0
+Y_0 = 0
+Z_0 = 0
+error = 0.5
+Z_MAX = 30
 
 IMG_PATH = './img/'
 VID_PATH = 'project.avi'
@@ -15,8 +17,8 @@ Kz = 0.45
 Kx = 0.303
 Ky = 0.725
 
-Xnull = 447
-Xend = 880
+Xnull = 0
+Xend = 640
 
 X, Y, Z = 0, 1, 2
 
@@ -24,21 +26,26 @@ X, Y, Z = 0, 1, 2
 def generate_PLY(arr):
     print('Generating point cloud...')
     start = time.time()
+    ply = []
+    for row in arr:
+        s = ''
+        coord = row.tolist()
+        if coord[Z] < Z_0 + error or coord[Z] > Z_MAX:
+            continue
+        for element in coord:
+            s = s + str(round(element, 3)) + ' '
+        s += '\n'
+        ply.append(s)
     f = open("cloud.ply", "w+")
     f.write("ply\n")
     f.write("format ascii 1.0\n")
-    f.write("element vertex %d\n" % arr.shape[0])
+    f.write("element vertex %d\n" % len(ply))
     f.write("property float x\n")
     f.write("property float y\n")
     f.write("property float z\n")
     f.write("end_header\n")
-    for row in arr:
-        s = ''
-        coord = row.tolist()
-        for element in coord:
-            s = s + str(element) + ' '
-        s += '\n'
-        f.write(s)
+    for point in ply:
+        f.write(point)
     f.close()
     time_passed = time.time() - start
     print('Done for %03d sec\n' % time_passed)
@@ -63,6 +70,7 @@ def get_img(path):
 
 
 def get_mask(img):
+    img = img[200:,:]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     low_bound = np.array([0, 0, 240])
     up_bound = np.array([255, 30, 255])
@@ -113,6 +121,18 @@ def scan(pathToVideo):
             break
     cap.release()
     generate_PLY(ply)
+    # xmax = max([_[X] for _ in ply])
+    # xmin = min([_[X] for _ in ply])
+    # ymax = max([_[Y] for _ in ply])
+    # ymin = min([_[Y] for _ in ply])
+    #
+    # X_C = (xmax+xmin)/2
+    # Y_C = (ymax+ymin)/2
+    # width = abs(xmax - xmin)
+    # height = abs(ymax-ymin)
+    # print(X_C, Y_C)
+    # print(width, height)
+
 
 
 # pcd = read_point_cloud('cloud.ply')
