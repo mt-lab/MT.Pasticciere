@@ -1,0 +1,8 @@
+*.png
+*.txt
+*.gcode
+*.log
+*.avi
+*.dxf
+*.ply
+/server/__pycache__/*

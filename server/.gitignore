@@ -1,8 +1,0 @@
-*.png
-*.txt
-*.gcode
-*.log
-*.avi
-*.dxf
-/__pycache__/*
-*.ini
