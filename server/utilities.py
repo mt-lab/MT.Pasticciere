@@ -1,5 +1,5 @@
 from itertools import tee
-import math as m
+from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
@@ -16,38 +16,33 @@ def pairwise(iterable):
 
 def diap(start, end, step=1):
     """ (s, e) -> (s, m1), (m1, m2) .. (m_n, e) """
-    # PROBABLY TO BE REWRITTEN
-    x, y = start[X], start[Y]
+    x, y = round(start[X], 3), round(start[Y], 3)
+    yield (x, y)
     step_x, step_y = 0, 0
-    # if line is horizontal
-    if end[Y] - start[Y] == 0:
-        try:
-            step_x = step * (end[X] - start[X]) / abs(end[X] - start[X])
-            while m.sqrt((end[X] - x) ** 2 + (end[Y] - y) ** 2) > step:
-                yield (x, y)
-                x += step_x
-                y += step_y
-            yield (x, y)
-        except ZeroDivisionError:  # ZeroDivision only occurs when line is vertical or start point matches end point
-            yield start  # return start point if start matches end
-    else:
-        try:
-            # step_[x, y] = step * (sign determiner) * abs(share of step)
-            step_x = step * (end[X] - start[X]) / abs(end[X] - start[X]) * abs(m.cos(
-                m.atan((end[Y] - start[Y]) / (end[X] - start[X]))))
-            step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y]) * abs(
-                m.sin(m.atan((end[Y] - start[Y]) / (end[X] - start[X]))))
-        except ZeroDivisionError:
-            step_x = 0
-            step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y])
-        # while distance between current point and end bigger then step
-        while m.sqrt((end[X] - x) ** 2 + (end[Y] - y) ** 2) > step:
-            yield (x, y)
-            x += step_x
-            y += step_y
+    if end[X] - start[X] == 0 and end[Y] - start[Y] == 0:  # если на вход пришла точка
+        yield (x, y) # вернуть начальную точку (она же конечная)
+    elif end[X] - start[X] == 0:  # если линия вертикальная
+        step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y])
+    elif end[Y] - start[Y] == 0:  # если линия горизонтальная
+        step_x = step * (end[X] - start[X]) / abs(end[X] - start[X])
+    else:  # любая другая линия
+        # step_[x, y] = step * (sign determiner) * abs(share of step)
+        step_x = step * (end[X] - start[X]) / abs(end[X] - start[X]) * abs(cos(
+            atan((end[Y] - start[Y]) / (end[X] - start[X]))))
+        step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y]) * abs(
+            sin(atan((end[Y] - start[Y]) / (end[X] - start[X]))))
+        step_x = round(step_x, 3)
+        step_y = round(step_y, 3)
+    d = distance(start, end)
+    number_of_slices = floor(d / step)
+    for i in range(number_of_slices):
+        x += step_x
+        y += step_y
         yield (x, y)
-    # always return end point in the end of sequence
-    yield end
+    if round(d, 3) > number_of_slices * step:
+        # вернуть конечную точку, если мы в неё не попали при нарезке
+        x, y = round(end[X], 3), round(end[Y], 3)
+        yield (x, y)
 
 
 def distance(p1, p2):
@@ -58,7 +53,7 @@ def distance(p1, p2):
         p1.append(0)
     if len(p2) < 3:
         p2.append(0)
-    return m.sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
+    return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
 
 
 def read_pcd(path=''):
