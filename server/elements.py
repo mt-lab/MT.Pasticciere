@@ -1,12 +1,13 @@
 import ezdxf as ez
+import numpy as np
 from utilities import *
-from math import sqrt
+from math import sqrt, cos, sin, pi
 
 X, Y, Z = 0, 1, 2
 
 
 class Element:
-    def __init__(self, entity, first=(), last=()):
+    def __init__(self, entity, first=(0, 0), last=(0, 0)):
         self.entity = entity
         self.points = []
         self.first = first
@@ -15,7 +16,7 @@ class Element:
         self.backwards = False
         self.offset = (0, 0)
 
-    def set_offset(self, offset=(0,0)):
+    def set_offset(self, offset=(0, 0)):
         if len(self.sliced) != 0:
             for point in self.sliced:
                 point[X] -= self.offset[X]
@@ -25,7 +26,6 @@ class Element:
             self.offset = offset
         else:
             print('nothing to offset')
-
 
     def best_distance(self, point):
         dist_to_first = sqrt(abs(self.first[X] - point[X]) ** 2 + abs(self.first[Y] - point[Y]) ** 2)
@@ -43,8 +43,10 @@ class Element:
         for start, end in pairwise(self.points):
             for p in diap(start, end, step):
                 p = list(p)
-                if len(p) !=3:
+                if len(p) != 3:
                     p.append(0)
+                elif len(p) > 3:
+                    p = p[:3]
                 self.sliced.append(p)
 
     def add_z(self, pcd_xy, pcd_z):
@@ -56,7 +58,7 @@ class Element:
                 p.append(find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset))
 
 
-class Polyine(Element):
+class Polyline(Element):
     def __init__(self, polyline):
         super().__init__(polyline)
         self.points = [point for point in polyline.points()]
@@ -75,12 +77,52 @@ class Spline(Element):
 
 
 class Line(Element):
-    pass
-
-
-class Arc(Element):
-    pass
+    def __init__(self, line):
+        super().__init__(line)
+        self.points = [line.dxf.start, line.dxf.end]
+        self.first = self.points[0]
+        self.last = self.points[-1]
+        self.sliced = []
 
 
 class Circle(Element):
-    pass
+    def __init__(self, circle):
+        super().__init__(circle)
+        self.center = circle.dxf.center
+        self.radius = circle.dxf.radius
+        self.start_angle = 0
+        self.end_angle = 2 * pi
+        self.first = (
+            self.center[X] + self.radius * cos(self.start_angle), self.center[Y] + self.radius * sin(self.start_angle))
+        self.last = (
+            self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
+        self.points = [self.first, self.last]
+        self.sliced = []
+
+    def slice(self, step=1):
+        angle_step = step / self.radius * (self.end_angle - self.start_angle) / abs(
+            self.end_angle - self.start_angle)  # в радианах с учетом знака
+        for angle in np.arange(self.start_angle, self.end_angle, angle_step):
+            p = [self.radius * cos(angle) + self.center[X], self.radius * sin(angle) + self.center[Y], 0]
+            self.sliced.append(p)
+        last = list(self.last)
+        if len(last) < 3:
+            last.append(0)
+        else:
+            last = last[:2]
+        self.sliced.append(last)  # дбавление конечной точки в массив нарезанных точек
+
+
+class Arc(Circle):
+    def __init__(self, arc):
+        super().__init__(arc)
+        self.start_angle = arc.dxf.start_angle * pi / 180  # в радианах
+        self.end_angle = arc.dxf.end_angle * pi / 180  # в радианах
+        if self.start_angle > self.end_angle:
+            self.end_angle += 2 * pi
+        self.first = (
+            self.center[X] + self.radius * cos(self.start_angle), self.center[Y] + self.radius * sin(self.start_angle))
+        self.last = (
+            self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
+        self.points = [self.first, self.last]
+        self.sliced = []

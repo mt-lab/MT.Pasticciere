@@ -28,7 +28,7 @@ class Unwrap_dxf:
             self.entities.append(entity)
 
 
-def dxf2gcode(pathToDxf, pathToPLY, offset=(0,0)):
+def dxf2gcode(pathToDxf, pathToPLY, offset=(0, 0)):
     PATH_TO_DXF = pathToDxf
     cloud = pathToPLY
     dxf = ez.readfile(PATH_TO_DXF)
@@ -41,9 +41,15 @@ def dxf2gcode(pathToDxf, pathToPLY, offset=(0,0)):
     unproc = []
     for e in entities:
         if e.dxftype() == 'POLYLINE':
-            unproc.append(Polyine(e))
+            unproc.append(Polyline(e))
         elif e.dxftype() == 'SPLINE':
             unproc.append(Spline(e))
+        elif e.dxftype() == 'LINE':
+            unproc.append(Line(e))
+        elif e.dxftype() == 'CIRCLE':
+            unproc.append(Circle(e))
+        elif e.dxftype() == 'ARC':
+            unproc.append(Arc(e))
 
     # organize path
     path = []

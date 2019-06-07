@@ -18,10 +18,16 @@ def diap(start, end, step=1):
     """ (s, e) -> (s, m1), (m1, m2) .. (m_n, e) """
     # PROBABLY TO BE REWRITTEN
     x, y = start[X], start[Y]
+    step_x, step_y = 0, 0
     # if line is horizontal
     if end[Y] - start[Y] == 0:
         try:
             step_x = step * (end[X] - start[X]) / abs(end[X] - start[X])
+            while m.sqrt((end[X] - x) ** 2 + (end[Y] - y) ** 2) > step:
+                yield (x, y)
+                x += step_x
+                y += step_y
+            yield (x, y)
         except ZeroDivisionError:  # ZeroDivision only occurs when line is vertical or start point matches end point
             yield start  # return start point if start matches end
     else:
@@ -68,7 +74,7 @@ def read_pcd(path=''):
     return pcd, pcd_xy, pcd_z
 
 
-def find_point_in_Cloud(point, pcd_xy, pcd_z, offset = (0, 0)):
+def find_point_in_Cloud(point, pcd_xy, pcd_z, offset=(0, 0)):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
     # point[X] += offset[X] #-50
