@@ -41,11 +41,12 @@ def gcode_generator(path):
     last_point = (0, 0, 0)
     for count, element in enumerate(path):
         way = element.get_sliced_points()
+        gcode.append('; %03d element' % (count + 1))
         if distance(last_point, way[0]) > error:
             gcode.append(str(GCodeRapidMove(Z=Z_up)))
             gcode.append(str(GCodeRapidMove(X=way[0][X], Y=way[0][Y])))
             gcode.append(str(GCodeRapidMove(Z=way[0][Z])))
-        for point in way:
+        for point in way[1:]:
             gcode.append(str(GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])))
         last_point = way[-1]
     return gcode
