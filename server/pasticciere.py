@@ -33,7 +33,7 @@ def getOtk():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('bash otk.sh')
+    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 -vframes 1 -f image2 otk.jpg')
     channel.close()
     client.close()
     time.sleep(2)
