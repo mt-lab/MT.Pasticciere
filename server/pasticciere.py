@@ -7,6 +7,8 @@ import configparser
 import logging
 import otk
 import dxf2gcode
+import paramiko
+import time
 
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
@@ -17,11 +19,39 @@ logger.addHandler(fh)
 logger.info("Запуск программы")
 
 
+host = '169.254.204.24'
+port = 22
+sshUsername = 'pi'
+sshPassword = 'raspberry'
+
+
+def getOtk():
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername, password=sshPassword,
+                   port=port)
+    channel = client.get_transport().open_session()
+    channel.get_pty()
+    channel.settimeout(5)
+    client.exec_command('bash otk.sh')
+    channel.close()
+    client.close()
+    time.sleep(2)
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=sshUsername, password=sshPassword)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = 'otk.jpg'
+    localpath = 'otk.jpg'
+    sftp.get(remotepath, localpath)
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
+
+
 def get_config(path):
     """
     Выбираем файл настроек
     """
-
     config = configparser.ConfigParser()
     config.read(path)
     return config
@@ -65,6 +95,7 @@ def mancomparing():
         checkstr = check.readline()
     if checkstr == "no":
         mb.showerror("Внимание!", "Печать с браком!")
+        logger.info("Печать с браком!")
 
 
 def gcoder():
@@ -144,7 +175,7 @@ cl_v = tk.Label(window, text="Версия клиента")
 cl_v.grid(row=1, column=4)
 home = tk.Button(text="Домой")
 home.grid(row=1, column=5)
-camshot = tk.Button(text="Снимок")
+camshot = tk.Button(text="Снимок", command=getOtk)
 camshot.grid(row=1, column=6)
 manmask = tk.Button(text="Маска", command=otk.manmask)
 manmask.grid(row=1, column=7)
