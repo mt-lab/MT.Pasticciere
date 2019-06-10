@@ -8,3 +8,4 @@
 *.mkv
 *.jpg
 /server/__pycache__/*
+/server/settings.ini
