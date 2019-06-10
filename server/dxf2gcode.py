@@ -4,36 +4,23 @@ from utilities import *
 from gcode_gen import *
 
 
-class Unwrap_dxf:
-    """ Class to get elements from dxf """
-
-    def __init__(self, dxf):
-        self.dxf = dxf
-        self.msp = dxf.modelspace()
-        self.entities = []
-
-    def unwrap(self):
-        """ Returns set of all elements in dxf """
-        for e in self.msp:
-            self.block_unwrap(e)
-        return self.entities
-
-    def block_unwrap(self, entity):
-        """ Process nested blocks """
-        if entity.dxftype() == 'INSERT':
-            block = self.dxf.blocks[entity.dxf.name]
-            for e in block:
-                self.block_unwrap(e)
+def dxf_reader(dxf, modelspace, elements_heap=[]):  # at first input is modelspace
+    for element in modelspace:
+        if element.dxftype() == 'INSERT':
+            block = dxf.blocks[element.dxf.name]
+            dxf_reader(dxf, block, elements_heap)
         else:
-            self.entities.append(entity)
+            elements_heap.append(element)
+    return elements_heap
 
 
 def dxf2gcode(pathToDxf, pathToPLY, offset=(0, 0)):
     PATH_TO_DXF = pathToDxf
     cloud = pathToPLY
     dxf = ez.readfile(PATH_TO_DXF)
+    msp = dxf.modelspace()
     # get all entities from dxf
-    entities = Unwrap_dxf(dxf).unwrap()
+    entities = dxf_reader(dxf, msp)
     # read pcd
     pcd, pcd_xy, pcd_z = read_pcd(cloud)
 
