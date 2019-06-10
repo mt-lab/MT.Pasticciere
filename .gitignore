@@ -6,4 +6,5 @@
 *.dxf
 *.ply
 *.mkv
+*.jpg
 /server/__pycache__/*
