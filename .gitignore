@@ -9,4 +9,5 @@
 *.mkv
 *.jpg
 *.pyc
-/server/settings.ini
+settings.ini
+/__pycache__/*.pyc
