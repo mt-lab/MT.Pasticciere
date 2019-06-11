@@ -31,7 +31,7 @@ def nothing(x):
 
 
 def manmask():
-    original = cv2.imread("photo_4.jpg",1)
+    original = cv2.imread("photo_1.jpg",1)
     #вырезаю область со столом
     table = original[13:700, 260:1000]
     #вырезаю область со столом
@@ -143,16 +143,18 @@ def manmask():
     cv2.imwrite("mask.png", median)
     update_setting(path, "OTK", "threshlevel", str(threshlevel))
     n_white_pix = np.sum(median == 255)
-    print('Number of white pixels from photo:', n_white_pix)
 
 def mancompare(threshlevel):
     compairing_result = open('mancompare.txt', 'w')
     counter_of_mistakes = 0
-    original = cv2.imread("photo_4.jpg",1)
+    original = cv2.imread("photo_5.jpg",1)
     mask = cv2.imread("mask.png", 0)
+    cnt1,hierarchy = cv2.findContours(mask,2,1)
+    cnt1 = cnt1[0]
     n_white_pix_inmask = np.sum(mask == 255)
+    print("ideal",n_white_pix_inmask)
     #
-    table = original[13:700, 260:1000]
+    table = original[10:720, 250:1050]
     #вырезаю область со столом
     gray_table = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
     #выделяю персиковый цвет стола по хуевилу
@@ -196,7 +198,7 @@ def mancompare(threshlevel):
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:3]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:4]
     original_table = table
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
@@ -240,25 +242,28 @@ def mancompare(threshlevel):
         gray_mask = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         #blur = cv2.bilateralFilter(gray_mask, 15, 17, 17)
         #blur = cv2.medianBlur(blur, 3)
-        ret, thresh = cv2.threshold(gray_mask, 132, 255, cv2.THRESH_BINARY)
+        ret, thresh = cv2.threshold(gray_mask, int(threshlevel), 255, cv2.THRESH_BINARY)
         kernel1 = np.ones((3, 3), np.uint8)
         opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
         median = cv2.medianBlur(opening, 9)
+        cnt2,hierarchy = cv2.findContours(median,2,1)
+        cnt2 = cnt2[0]
+        match_shapes_result = cv2.matchShapes(cnt1,cnt2,1,0.0)
         n_white_pix = np.sum(median == 255)
-        print('Number of white pixels from photo:', n_white_pix)
-
-        if abs(n_white_pix_inmask - n_white_pix)>500:
+        print("number of white pixels:",n_white_pix)
+        print("match_shapes_result:",match_shapes_result)
+        if (abs(n_white_pix_inmask - n_white_pix)>1500) | (match_shapes_result > 0.01) :
             counter_of_mistakes +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
             cv2.drawContours(original_table,[box],0,(0,255,0),2)
-            
+
     if counter_of_mistakes == 0:
         answer = "yes"
     else:
         answer = "no"
         cv2.imshow("eror",original_table)
-
+        #cv2.imshow("table",table)
     print(answer)
     cv2.waitKey(0)
     compairing_result.write(answer)
