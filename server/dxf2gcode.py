@@ -1,4 +1,5 @@
 import ezdxf as ez
+from global_variables import *
 from elements import *
 from utilities import *
 from gcode_gen import *
@@ -48,7 +49,6 @@ def dxf2gcode(pathToDxf, pathToPLY, offset=(0, 0)):
         unproc.sort(key=lambda x: x.best_distance(cur.get_points()[-1]))
 
     # slice dxf and add volume to it, also add offset
-    step = 1
     for element in path:
         element.slice(step)
         element.set_offset(offset)

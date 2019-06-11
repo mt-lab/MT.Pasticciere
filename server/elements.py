@@ -1,9 +1,9 @@
 import ezdxf as ez
 import numpy as np
 from utilities import *
+from global_variables import *
 from math import sqrt, cos, sin, pi
 
-X, Y, Z = 0, 1, 2
 
 
 class Element:
@@ -69,6 +69,13 @@ class Polyline(Element):
         self.first = self.points[0]
         self.last = self.points[-1]
         self.sliced = []
+        self.length = self.get_length()
+
+    def get_length(self):
+        length = 0
+        for p1, p2 in pairwise():
+            length += distance(p1, p2)
+        return length
 
 
 class Spline(Element):
@@ -138,3 +145,4 @@ class Arc(Circle):
             self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
         self.points = [self.first, self.last]
         self.sliced = []
+        self.length = self.get_length()
