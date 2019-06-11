@@ -57,14 +57,11 @@ path = "settings.ini"
 window = tk.Tk()
 
 # Перечень функций
-
-host = get_setting(path, "network", "ip1")
-port = 22
-sshUsername1 = get_setting(path, "network", "user1")
-sshPassword1 = get_setting(path, "network", "pass1")
-
-
 def getOtk():
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
@@ -73,9 +70,9 @@ def getOtk():
     channel.get_pty()
     channel.settimeout(5)
     client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 -vframes 1 -f image2 otk.jpg')
+    time.sleep(2)
     channel.close()
     client.close()
-    time.sleep(2)
     transport = paramiko.Transport((host, port))
     transport.connect(username=sshUsername1, password=sshPassword1)
     sftp = paramiko.SFTPClient.from_transport(transport)
