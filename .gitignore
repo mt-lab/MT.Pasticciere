@@ -4,6 +4,9 @@
 *.log
 *.avi
 *.dxf
+*.DXF
 *.ply
 *.mkv
+*.jpg
 /server/__pycache__/*
+/server/settings.ini

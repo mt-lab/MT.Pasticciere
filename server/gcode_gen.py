@@ -1,16 +1,14 @@
 import math as m
 import ezdxf as ez
 from pygcode import *
+from global_variables import *
 from utilities import *
 import random
 import numpy as np
 from elements import *
 
-X, Y, Z = 0, 1, 2
-error = 0.2
-
-Z_up = 33  # later should be cloud Z max + few mm
-
+Z_up = Z_max + 3 # later should be cloud Z max + few mm
+                 # сейчас это глобальный максимум печати принтера по Z
 
 # when path is a set of LINES
 # DO NOT USE! TO BE DELETED

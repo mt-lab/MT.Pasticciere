@@ -7,6 +7,8 @@ import configparser
 import logging
 import otk
 import dxf2gcode
+import paramiko
+import time
 
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
@@ -21,7 +23,6 @@ def get_config(path):
     """
     Выбираем файл настроек
     """
-
     config = configparser.ConfigParser()
     config.read(path)
     return config
@@ -57,6 +58,34 @@ window = tk.Tk()
 
 # Перечень функций
 
+host = get_setting(path, "network", "ip1")
+port = 22
+sshUsername1 = get_setting(path, "network", "user1")
+sshPassword1 = get_setting(path, "network", "pass1")
+
+
+def getOtk():
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    channel = client.get_transport().open_session()
+    channel.get_pty()
+    channel.settimeout(5)
+    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 -vframes 1 -f image2 otk.jpg')
+    channel.close()
+    client.close()
+    time.sleep(2)
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=sshUsername1, password=sshPassword1)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = 'otk.jpg'
+    localpath = 'otk.jpg'
+    sftp.get(remotepath, localpath)
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
+
 
 def mancomparing():
     thresh = get_setting(path, "OTK", "threshlevel")
@@ -65,6 +94,7 @@ def mancomparing():
         checkstr = check.readline()
     if checkstr == "no":
         mb.showerror("Внимание!", "Печать с браком!")
+        logger.info("Печать с браком!")
 
 
 def gcoder():
@@ -144,7 +174,7 @@ cl_v = tk.Label(window, text="Версия клиента")
 cl_v.grid(row=1, column=4)
 home = tk.Button(text="Домой")
 home.grid(row=1, column=5)
-camshot = tk.Button(text="Снимок")
+camshot = tk.Button(text="Снимок", command=getOtk)
 camshot.grid(row=1, column=6)
 manmask = tk.Button(text="Маска", command=otk.manmask)
 manmask.grid(row=1, column=7)
@@ -173,3 +203,8 @@ menu = tk.Menu(window)
 menu.add_command(label='Обновить')
 window.config(menu=menu)
 window.mainloop()
+
+host = get_setting(path, "network", "ip1")
+port = 22
+sshUsername1 = get_setting(path, "network", "user1")
+sshPassword1 = get_setting(path, "network", "pass1")

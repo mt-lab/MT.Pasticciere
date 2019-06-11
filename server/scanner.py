@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from global_variables import *
 # from open3d import *  # only for visuals
 import time
 import os
@@ -20,7 +21,6 @@ Ky = 0.725
 Xnull = 0
 Xend = 640
 
-X, Y, Z = 0, 1, 2
 
 
 def generate_PLY(arr):
@@ -69,8 +69,8 @@ def get_img(path):
     return mask
 
 
-def get_mask(img):
-    img = img[200:,:]
+def get_mask(img, zero_level = 0):
+    img = img[zero_level:,:]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     low_bound = np.array([0, 0, 240])
     up_bound = np.array([255, 30, 255])
@@ -94,7 +94,7 @@ def scan(pathToVideo):
     while (cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            img = get_mask(frame)
+            img = get_mask(frame, zero_lvl)
             if Y1 == 0:
                 zero_lvl = find_z_zero_lvl(img)
             for x in range(Xnull, Xend):

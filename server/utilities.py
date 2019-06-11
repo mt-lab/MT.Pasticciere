@@ -1,10 +1,9 @@
 from itertools import tee
+from global_variables import *
 from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
-
-X, Y, Z = 0, 1, 2
 
 
 def pairwise(iterable):
@@ -20,7 +19,7 @@ def diap(start, end, step=1):
     yield (x, y)
     step_x, step_y = 0, 0
     if end[X] - start[X] == 0 and end[Y] - start[Y] == 0:  # если на вход пришла точка
-        yield (x, y) # вернуть начальную точку (она же конечная)
+        yield (x, y)  # вернуть начальную точку (она же конечная)
     elif end[X] - start[X] == 0:  # если линия вертикальная
         step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y])
     elif end[Y] - start[Y] == 0:  # если линия горизонтальная

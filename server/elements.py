@@ -1,9 +1,9 @@
 import ezdxf as ez
 import numpy as np
 from utilities import *
+from global_variables import *
 from math import sqrt, cos, sin, pi
 
-X, Y, Z = 0, 1, 2
 
 
 class Element:
@@ -15,6 +15,7 @@ class Element:
         self.sliced = []
         self.backwards = False
         self.offset = (0, 0)
+        self.length = 0
 
     def set_offset(self, offset=(0, 0)):
         if len(self.sliced) != 0:
@@ -38,6 +39,9 @@ class Element:
 
     def get_sliced_points(self):
         return self.sliced if not self.backwards else self.sliced[::-1]
+
+    def get_length(self):
+        pass
 
     def slice(self, step=1):
         for start, end in pairwise(self.points):
@@ -65,6 +69,13 @@ class Polyline(Element):
         self.first = self.points[0]
         self.last = self.points[-1]
         self.sliced = []
+        self.length = self.get_length()
+
+    def get_length(self):
+        length = 0
+        for p1, p2 in pairwise():
+            length += distance(p1, p2)
+        return length
 
 
 class Spline(Element):
@@ -83,6 +94,10 @@ class Line(Element):
         self.first = self.points[0]
         self.last = self.points[-1]
         self.sliced = []
+        self.length = self.get_length()
+
+    def get_length(self):
+        return distance(self.first, self.last)
 
 
 class Circle(Element):
@@ -98,6 +113,10 @@ class Circle(Element):
             self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
         self.points = [self.first, self.last]
         self.sliced = []
+        self.length = self.get_length()
+
+    def get_length(self):
+        return (self.end_angle - self.start_angle) * self.radius
 
     def slice(self, step=1):
         angle_step = step / self.radius * (self.end_angle - self.start_angle) / abs(
@@ -126,3 +145,4 @@ class Arc(Circle):
             self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
         self.points = [self.first, self.last]
         self.sliced = []
+        self.length = self.get_length()
