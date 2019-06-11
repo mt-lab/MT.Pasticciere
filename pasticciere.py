@@ -57,6 +57,8 @@ path = "settings.ini"
 window = tk.Tk()
 
 # Перечень функций
+
+
 def getOtk():
     host = get_setting(path, "network", "ip1")
     port = 22
@@ -69,7 +71,8 @@ def getOtk():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 -vframes 1 -f image2 otk.jpg')
+    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 \
+                        -vframes 1 -f image2 otk.jpg')
     time.sleep(2)
     channel.close()
     client.close()
@@ -200,8 +203,3 @@ menu = tk.Menu(window)
 menu.add_command(label='Обновить')
 window.config(menu=menu)
 window.mainloop()
-
-host = get_setting(path, "network", "ip1")
-port = 22
-sshUsername1 = get_setting(path, "network", "user1")
-sshPassword1 = get_setting(path, "network", "pass1")
