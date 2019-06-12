@@ -8,5 +8,6 @@
 *.ply
 *.mkv
 *.jpg
-/server/__pycache__/*
-/server/settings.ini
+*.pyc
+settings.ini
+/__pycache__/*.pyc

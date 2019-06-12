@@ -19,35 +19,6 @@ logger.addHandler(fh)
 logger.info("Запуск программы")
 
 
-host = '169.254.204.24'
-port = 22
-sshUsername = 'pi'
-sshPassword = 'raspberry'
-
-
-def getOtk():
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, username=sshUsername, password=sshPassword,
-                   port=port)
-    channel = client.get_transport().open_session()
-    channel.get_pty()
-    channel.settimeout(5)
-    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 -vframes 1 -f image2 otk.jpg')
-    channel.close()
-    client.close()
-    time.sleep(2)
-    transport = paramiko.Transport((host, port))
-    transport.connect(username=sshUsername, password=sshPassword)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    remotepath = 'otk.jpg'
-    localpath = 'otk.jpg'
-    sftp.get(remotepath, localpath)
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    transport.close()
-
-
 def get_config(path):
     """
     Выбираем файл настроек
@@ -86,6 +57,34 @@ path = "settings.ini"
 window = tk.Tk()
 
 # Перечень функций
+
+
+def getOtk():
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    channel = client.get_transport().open_session()
+    channel.get_pty()
+    channel.settimeout(5)
+    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 \
+                        -vframes 1 -f image2 otk.jpg')
+    time.sleep(2)
+    channel.close()
+    client.close()
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=sshUsername1, password=sshPassword1)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = 'otk.jpg'
+    localpath = 'otk.jpg'
+    sftp.get(remotepath, localpath)
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
 
 
 def mancomparing():
