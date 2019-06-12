@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import configparser
 import imutils
+from matplotlib import pyplot as plt
 
 path = "settings.ini"
 
@@ -31,21 +32,21 @@ def nothing(x):
 
 
 def manmask():
-    original = cv2.imread("photo_1.jpg",1)
+    original = cv2.imread("origin.jpg",1)
     #вырезаю область со столом
-    table = original[13:700, 260:1000]
+    table = original[2:716, 275:1100]
     #вырезаю область со столом
     gray_table = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
     #выделяю персиковый цвет стола по хуевилу
-    lower_color = np.array([133,20,0])
-    upper_color = np.array([215,155,255])
+    lower_color = np.array([0,79,150])
+    upper_color = np.array([189,218,255])
     hsv = cv2.cvtColor(table, cv2.COLOR_BGR2HSV)
     only_table = cv2.inRange(hsv,lower_color,upper_color)
     only_table = cv2.bitwise_not(only_table)
     # убираем шумы
     blur = cv2.medianBlur(only_table, 7)
     kernel = np.ones((5,5),np.uint8)
-    opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 4)
+    opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 2)
     only_table = opening
     # выделяем область, которая точно является задним фоном
     sure_bg = cv2.dilate(opening,kernel,iterations=3)
@@ -134,7 +135,7 @@ def manmask():
         ret, thresh = cv2.threshold(gray, threshlevel, 255, cv2.THRESH_BINARY)
         kernel1 = np.ones((3, 3), np.uint8)
         opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
-        median = cv2.medianBlur(opening, 9)
+        median = cv2.medianBlur(opening, 5)
         cv2.imshow("threshholding", median)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -145,28 +146,40 @@ def manmask():
     n_white_pix = np.sum(median == 255)
 
 def mancompare(threshlevel):
+    #создаем окно для отображения каждой печеньки
+    fig=plt.figure(figsize=(10,5))
+    columns = 3
+    rows = 2
+    subplot_counter = 1
+    #----------------------------------------------
+
     compairing_result = open('mancompare.txt', 'w')
     counter_of_mistakes = 0
-    original = cv2.imread("photo_5.jpg",1)
+    original = cv2.imread("12.jpg",1)
     mask = cv2.imread("mask.png", 0)
     cnt1,hierarchy = cv2.findContours(mask,2,1)
     cnt1 = cnt1[0]
     n_white_pix_inmask = np.sum(mask == 255)
+    ax = fig.add_subplot(rows, columns, subplot_counter)
+    ax.set_title(n_white_pix_inmask)
+    plt.axis("off")
+    plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
+    subplot_counter+=1
     print("ideal",n_white_pix_inmask)
     #
-    table = original[10:720, 250:1050]
+    table = original[2:716, 275:1100]
     #вырезаю область со столом
     gray_table = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
     #выделяю персиковый цвет стола по хуевилу
-    lower_color = np.array([133,20,0])
-    upper_color = np.array([215,155,255])
+    lower_color = np.array([0,79,150])
+    upper_color = np.array([189,218,255])
     hsv = cv2.cvtColor(table, cv2.COLOR_BGR2HSV)
     only_table = cv2.inRange(hsv,lower_color,upper_color)
     only_table = cv2.bitwise_not(only_table)
     # убираем шумы
     blur = cv2.medianBlur(only_table, 7)
     kernel = np.ones((5,5),np.uint8)
-    opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 4)
+    opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 2)
     only_table = opening
     # выделяем область, которая точно является задним фоном
     sure_bg = cv2.dilate(opening,kernel,iterations=3)
@@ -245,14 +258,19 @@ def mancompare(threshlevel):
         ret, thresh = cv2.threshold(gray_mask, int(threshlevel), 255, cv2.THRESH_BINARY)
         kernel1 = np.ones((3, 3), np.uint8)
         opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
-        median = cv2.medianBlur(opening, 9)
+        median = cv2.medianBlur(opening, 5)
         cnt2,hierarchy = cv2.findContours(median,2,1)
         cnt2 = cnt2[0]
         match_shapes_result = cv2.matchShapes(cnt1,cnt2,1,0.0)
         n_white_pix = np.sum(median == 255)
         print("number of white pixels:",n_white_pix)
+        ax = fig.add_subplot(rows, columns, subplot_counter)
+        ax.set_title(n_white_pix)
+        plt.axis("off")
+        plt.imshow(cv2.cvtColor(median, cv2.COLOR_GRAY2RGB))
+        subplot_counter+=1
         print("match_shapes_result:",match_shapes_result)
-        if (abs(n_white_pix_inmask - n_white_pix)>1500) | (match_shapes_result > 0.01) :
+        if (abs(n_white_pix_inmask - n_white_pix)>500):
             counter_of_mistakes +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
@@ -265,6 +283,7 @@ def mancompare(threshlevel):
         cv2.imshow("eror",original_table)
         #cv2.imshow("table",table)
     print(answer)
+    plt.show()
     cv2.waitKey(0)
     compairing_result.write(answer)
     cv2.destroyAllWindows()
