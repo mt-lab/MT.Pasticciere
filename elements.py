@@ -73,7 +73,7 @@ class Polyline(Element):
 
     def get_length(self):
         length = 0
-        for p1, p2 in pairwise():
+        for p1, p2 in pairwise(self.points):
             length += distance(p1, p2)
         return length
 
