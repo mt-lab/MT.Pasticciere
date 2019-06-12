@@ -73,7 +73,7 @@ def getOtk():
     channel.settimeout(5)
     client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 \
                         -vframes 1 -f image2 otk.jpg')
-    time.sleep(2)
+    time.sleep(1)
     channel.close()
     client.close()
     transport = paramiko.Transport((host, port))
@@ -85,6 +85,25 @@ def getOtk():
     sftp.put(localpath, remotepath)
     sftp.close()
     transport.close()
+
+
+def getScan():
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    channel = client.get_transport().open_session()
+    channel.get_pty()
+    channel.settimeout(5)
+    client.exec_command('ffmpeg -y -f video4linux2 -r 10 -s 640x480 \
+                        -i /dev/video1 -t 00:00:30 -vcodec mpeg4 \
+                        -y scanner.mp4')
+    client.exec_command('pronsole')
+    client.exec_command('')
 
 
 def mancomparing():
