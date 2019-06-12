@@ -55,7 +55,7 @@ def distance(p1, p2):
     return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
 
 
-def read_pcd(path=''):
+def read_pcd(path=PCD_PATH):
     """ Read PLY point cloud into numpy array, also split it for xy and z coordinates """
     pcd = []
     with open(path) as cld:

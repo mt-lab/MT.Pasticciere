@@ -32,9 +32,12 @@ def get_setting(path, section, setting):
     print(msg)
     return value
 
+
 config_path = 'settings.ini'
 X, Y, Z = 0, 1, 2
 accuracy = float(get_setting(config_path, 'GCoder', 'accuracy'))
 step = float(get_setting(config_path, 'GCoder', 'slice_step'))
+DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')
+PCD_PATH = get_setting(config_path, 'GCoder', 'pointcloudpath')
+VID_PATH = get_setting(config_path, 'GCoder', 'videoforpointcloud')
 Z_max = 30
-
