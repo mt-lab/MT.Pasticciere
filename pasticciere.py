@@ -104,6 +104,18 @@ def getScan():
                         -y scanner.mp4')
     client.exec_command('pronsole')
     client.exec_command('')
+    time.sleep(3)
+    channel.close()
+    client.close()
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=sshUsername1, password=sshPassword1)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = 'scanner.mp4'
+    localpath = 'scanner.mp4'
+    sftp.get(remotepath, localpath)
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
 
 
 def mancomparing():
@@ -207,8 +219,6 @@ gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetd
 gcodesetb.grid(row=1, column=11)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
 pointcloudb.grid(row=1, column=12)
-
-# Конец блока генератора
 
 # Конец отрисовки интерфейса
 

@@ -30,7 +30,7 @@ def generate_PLY(arr):
     for row in arr:
         s = ''
         coord = row.tolist()
-        if coord[Z] < Z_0 + error or coord[Z] > Z_MAX:
+        if coord[Z] < Z_0 + accuracy or coord[Z] > Z_MAX:
             continue
         for element in coord:
             s = s + str(round(element, 3)) + ' '
