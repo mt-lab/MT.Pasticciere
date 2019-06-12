@@ -155,7 +155,7 @@ def mancompare(threshlevel):
 
     compairing_result = open('mancompare.txt', 'w')
     counter_of_mistakes = 0
-    original = cv2.imread("12.jpg",1)
+    original = cv2.imread("otk.jpg",1)
     mask = cv2.imread("mask.png", 0)
     cnt1,hierarchy = cv2.findContours(mask,2,1)
     cnt1 = cnt1[0]
@@ -211,13 +211,24 @@ def mancompare(threshlevel):
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:4]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:3]
     original_table = table
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
-    for cnt in contours:
-        #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
 
+
+
+
+    for cnt in contours:
+        table_hui = table.copy();
+        width_hui = table_hui.shape[0]
+        height_hui = table_hui.shape[1]
+        for i in range (width_hui):
+            for j in range(height_hui):
+                dist_hui = cv2.pointPolygonTest(cnt, (j, i), True)
+                if dist_hui<0:
+                    table_hui[i,j] = 0;
+        #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
@@ -243,7 +254,7 @@ def mancompare(threshlevel):
 
         M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
 
-        cropped = cv2.getRectSubPix(table, size, center)
+        cropped = cv2.getRectSubPix(table_hui, size, center)
         cropped = cv2.warpAffine(cropped, M, size)
 
         croppedW = W if not rotated else H
@@ -251,6 +262,7 @@ def mancompare(threshlevel):
 
         croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
 
+        cv2.imshow("croppedRotated ",croppedRotated )
         #получение маски с каждой печеньки
         gray_mask = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         #blur = cv2.bilateralFilter(gray_mask, 15, 17, 17)
