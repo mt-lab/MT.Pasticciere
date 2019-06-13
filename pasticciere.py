@@ -99,12 +99,30 @@ def getScan():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('ffmpeg -y -f video4linux2 -r 10 -s 640x480 \
-                        -i /dev/video1 -t 00:00:30 -vcodec mpeg4 \
+    client.exec_command('ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
+                        -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
                         -y scanner.mp4')
-    client.exec_command('pronsole')
-    client.exec_command('')
-    time.sleep(3)
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    console = client.invoke_shell()
+    print(console)
+    console.keep_this = client
+
+    console.send('pronsole\n')
+    time.sleep(1)
+    console.send('connect\n')
+    time.sleep(2)
+    console.send('home\n')
+    time.sleep(2)
+    console.send('load scanner.gcode\n')
+    time.sleep(1)
+    console.send('print\n')
+    time.sleep(7)
+    console.send('exit\n')
+    time.sleep(17)
     channel.close()
     client.close()
     transport = paramiko.Transport((host, port))
@@ -207,18 +225,21 @@ home = tk.Button(text="Домой")
 home.grid(row=1, column=5)
 camshot = tk.Button(text="Снимок", command=getOtk)
 camshot.grid(row=1, column=6)
+camshot = tk.Button(text="Скан", command=getScan)
+camshot.grid(row=1, column=7)
 manmask = tk.Button(text="Маска", command=otk.manmask)
-manmask.grid(row=1, column=7)
+manmask.grid(row=1, column=8)
 fullstop = tk.Button(text="СТОП")
-fullstop.grid(row=1, column=8)
+fullstop.grid(row=1, column=9)
 mancomparing = tk.Button(text="Сравнить", command=mancomparing)
-mancomparing.grid(row=1, column=9)
+mancomparing.grid(row=1, column=10)
 gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
-gcoderb.grid(row=1, column=10)
+gcoderb.grid(row=1, column=11)
 gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
-gcodesetb.grid(row=1, column=11)
+gcodesetb.grid(row=1, column=12)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
-pointcloudb.grid(row=1, column=12)
+pointcloudb.grid(row=1, column=13)
+
 
 # Конец отрисовки интерфейса
 
@@ -226,7 +247,7 @@ pointcloudb.grid(row=1, column=12)
 window['bg'] = 'gray22'
 icon = tk.Image("photo", file="icon.gif")
 window.tk.call('wm', 'iconphoto', window._w, icon)
-window.title('MT.Pasticciere 0.1 (Black Badger)')
+window.title('MT.Pasticciere v.0.2 (Cool Cactus)')
 window.geometry("1280x400+10+10")
 menu = tk.Menu(window)
 menu.add_command(label='Обновить')
