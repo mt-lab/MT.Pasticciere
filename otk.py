@@ -32,7 +32,7 @@ def nothing(x):
 
 
 def manmask():
-    original = cv2.imread("origin.jpg",1)
+    original = cv2.imread("1.jpg",1)
     #вырезаю область со столом
     table = original[2:716, 275:1100]
     #вырезаю область со столом
@@ -78,7 +78,7 @@ def manmask():
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:1]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:2]
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
 
@@ -155,13 +155,13 @@ def mancompare(threshlevel):
 
     compairing_result = open('mancompare.txt', 'w')
     counter_of_mistakes = 0
-    original = cv2.imread("7.jpg",1)
+    original = cv2.imread("3.jpg",1)
     mask = cv2.imread("mask.png", 0)
     cnt1 = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     cnt1 = imutils.grab_contours(cnt1)
     cnt1 = sorted(cnt1, key = cv2.contourArea, reverse = True)[:1]
     cnt1 = cnt1[0]
-    main_contour_legth = cv2.arcLength(cnt1,True)
+    main_contour_legth_original = cv2.arcLength(cnt1,True)
     n_white_pix_inmask = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
     ax.set_title(n_white_pix_inmask)
@@ -169,7 +169,7 @@ def mancompare(threshlevel):
     plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
     subplot_counter+=1
     print("ideal number of white pixels",n_white_pix_inmask)
-    print("ideal length",main_contour_legth)
+    print("ideal length",main_contour_legth_original)
     #
     table = original[2:716, 275:1100]
     #вырезаю область со столом
@@ -215,7 +215,7 @@ def mancompare(threshlevel):
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:4]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:7]
     original_table = table
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
@@ -293,7 +293,7 @@ def mancompare(threshlevel):
         subplot_counter+=1
         print("match_shapes_result:",match_shapes_result)
         print("main_contour_legth:",main_contour_legth)
-        if (abs(n_white_pix_inmask - n_white_pix)>500):
+        if ((abs(n_white_pix_inmask - n_white_pix)>1100) | (match_shapes_result > 0.05) | (abs(main_contour_legth_original - main_contour_legth)>150)):
             counter_of_mistakes +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
