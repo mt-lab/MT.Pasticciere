@@ -5,7 +5,6 @@ from global_variables import *
 from math import sqrt, cos, sin, pi
 
 
-
 class Element:
     def __init__(self, entity, first=(0, 0), last=(0, 0)):
         self.entity = entity

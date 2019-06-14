@@ -10,6 +10,7 @@ from elements import *
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 extr_coef = 0.41
 
+
 # when path is a set of elements
 def gcode_generator(path):
     gcode = []
@@ -25,7 +26,7 @@ def gcode_generator(path):
             last_point = way[0]
         for point in way[1:]:
             E += round(extr_coef * distance(last_point, point), 3)
-            gcode.append(str(GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + ' E%03f' % E)
+            gcode.append(str(GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + ' E%03.3f' % E)
             last_point = point
         last_point = way[-1]
     return gcode
