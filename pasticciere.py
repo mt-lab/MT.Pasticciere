@@ -112,9 +112,9 @@ def getScan():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('v4l2-ctl -d /dev/video0 --set-ctrl=focus_auto=0')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
-                        -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
+                        -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
@@ -125,12 +125,10 @@ def getScan():
     time.sleep(1)
     console.send('connect\n')
     time.sleep(2)
-    console.send('home\n')
-    time.sleep(2)
     console.send('load scanner.gcode\n')
     time.sleep(1)
     console.send('print\n')
-    time.sleep(7)
+    time.sleep(9)
     console.send('exit\n')
     time.sleep(17)
     channel.close()
