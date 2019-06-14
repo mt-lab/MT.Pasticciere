@@ -155,17 +155,21 @@ def mancompare(threshlevel):
 
     compairing_result = open('mancompare.txt', 'w')
     counter_of_mistakes = 0
-    original = cv2.imread("otk.jpg",1)
+    original = cv2.imread("7.jpg",1)
     mask = cv2.imread("mask.png", 0)
-    cnt1,hierarchy = cv2.findContours(mask,2,1)
+    cnt1 = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    cnt1 = imutils.grab_contours(cnt1)
+    cnt1 = sorted(cnt1, key = cv2.contourArea, reverse = True)[:1]
     cnt1 = cnt1[0]
+    main_contour_legth = cv2.arcLength(cnt1,True)
     n_white_pix_inmask = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
     ax.set_title(n_white_pix_inmask)
     plt.axis("off")
     plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
     subplot_counter+=1
-    print("ideal",n_white_pix_inmask)
+    print("ideal number of white pixels",n_white_pix_inmask)
+    print("ideal length",main_contour_legth)
     #
     table = original[2:716, 275:1100]
     #вырезаю область со столом
@@ -211,7 +215,7 @@ def mancompare(threshlevel):
 
     contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:3]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:4]
     original_table = table
     table = cv2.bitwise_and(table,table,mask = blank_space)
     table = cv2.bitwise_and(table,table,mask = sure_bg)
@@ -228,7 +232,7 @@ def mancompare(threshlevel):
                 dist_hui = cv2.pointPolygonTest(cnt, (j, i), True)
                 if dist_hui<0:
                     table_hui[i,j] = 0;
-        #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
+        cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
@@ -271,17 +275,24 @@ def mancompare(threshlevel):
         kernel1 = np.ones((3, 3), np.uint8)
         opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
         median = cv2.medianBlur(opening, 5)
-        cnt2,hierarchy = cv2.findContours(median,2,1)
+        cnt2 = cv2.findContours(median.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        cnt2 = imutils.grab_contours(cnt2)
+        cnt2 = sorted(cnt2, key = cv2.contourArea, reverse = True)[:1]
         cnt2 = cnt2[0]
+        main_contour_legth = cv2.arcLength(cnt2,True)
+        mask_HUI=cv2.cvtColor(median, cv2.COLOR_GRAY2RGB)
+        cv2.drawContours(mask_HUI,[cnt2],0,(0,0,255),2)
         match_shapes_result = cv2.matchShapes(cnt1,cnt2,1,0.0)
         n_white_pix = np.sum(median == 255)
         print("number of white pixels:",n_white_pix)
         ax = fig.add_subplot(rows, columns, subplot_counter)
         ax.set_title(n_white_pix)
         plt.axis("off")
-        plt.imshow(cv2.cvtColor(median, cv2.COLOR_GRAY2RGB))
+        #plt.imshow(cv2.cvtColor(median, cv2.COLOR_GRAY2RGB))
+        plt.imshow(mask_HUI)
         subplot_counter+=1
         print("match_shapes_result:",match_shapes_result)
+        print("main_contour_legth:",main_contour_legth)
         if (abs(n_white_pix_inmask - n_white_pix)>500):
             counter_of_mistakes +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
