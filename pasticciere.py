@@ -51,10 +51,23 @@ def get_setting(path, section, setting):
     return value
 
 
+def getFile(host, port, name, password, file):
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=name, password=password)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = file
+    localpath = file
+    sftp.get(remotepath, localpath)
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
+
+
 path = "settings.ini"
 
 
 window = tk.Tk()
+
 
 # Перечень функций
 
@@ -99,41 +112,28 @@ def getScan():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
-                        -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
+                        -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
-
-    client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
                    port=port)
     console = client.invoke_shell()
-    print(console)
     console.keep_this = client
-
     console.send('pronsole\n')
     time.sleep(1)
     console.send('connect\n')
     time.sleep(2)
-    console.send('home\n')
-    time.sleep(2)
     console.send('load scanner.gcode\n')
     time.sleep(1)
     console.send('print\n')
-    time.sleep(7)
+    time.sleep(9)
     console.send('exit\n')
     time.sleep(17)
     channel.close()
     client.close()
-    transport = paramiko.Transport((host, port))
-    transport.connect(username=sshUsername1, password=sshPassword1)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    remotepath = 'scanner.mp4'
-    localpath = 'scanner.mp4'
-    sftp.get(remotepath, localpath)
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    transport.close()
+    getFile(host, port, sshUsername1, sshPassword1, 'scanner.mp4')
 
 
 def mancomparing():
