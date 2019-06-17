@@ -29,7 +29,9 @@ logger.info("Запуск программы")
 
 def get_config(path):
     """
-    Выбираем файл настроек
+    Выбор файла настроек
+
+    path - путь к файлу
     """
     config = configparser.ConfigParser()
     config.read(path)
@@ -38,7 +40,12 @@ def get_config(path):
 
 def update_setting(path, section, setting, value):
     """
-    Обновляем параметр в настройках
+    Обновление параметра в файле настроек
+
+    path - путь к файлу настроек
+    section - название секции
+    setting - название параметра в секции
+    value - значение параметра
     """
     config = get_config(path)
     config.set(section, setting, value)
@@ -49,6 +56,10 @@ def update_setting(path, section, setting, value):
 def get_setting(path, section, setting):
     """
     Выводим значение из настроек
+
+    path - путь к файлу настроек
+    section - название секции
+    setting - название параметра в секции
     """
     config = get_config(path)
     value = config.get(section, setting)
@@ -62,6 +73,7 @@ def get_setting(path, section, setting):
 def getFile(host, port, name, password, file):
     """
     Забирает файл с удалённого устройства не меняя имени файла
+
     host - ip-адрес устройства
     port - порт для соединения с устройством
     name - имя пользователя ssh
@@ -89,6 +101,9 @@ window = tk.Tk()
 
 
 def getOtk():
+    """
+    Фотографирование и получение файла для проведения контроля качества
+    """
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
@@ -100,7 +115,7 @@ def getOtk():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 \
+    client.exec_command(r'ffmpeg -y -f video4linux2 -s hd720 -i /dev/video0 \
                         -vframes 1 -f image2 otk.jpg')
     time.sleep(1)
     channel.close()
@@ -117,6 +132,9 @@ def getOtk():
 
 
 def getScan():
+    """
+    Проведение сканирования на удалённом устройстве и получение видеофайла
+    """
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
@@ -128,11 +146,11 @@ def getScan():
     channel = client.get_transport().open_session()
     channel.get_pty()
     channel.settimeout(5)
-    client.exec_command('v4l2-ctl -d /dev/video2 \
+    client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=17')
-    client.exec_command('ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
+    client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
                         -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -156,6 +174,9 @@ def getScan():
 
 
 def mancomparing():
+    """
+    Сравнение изображения печенья с эталоном (плохая функция надо переписать)
+    """
     thresh = get_setting(path, "OTK", "threshlevel")
     otk.mancompare(thresh)
     with open("mancompare.txt", "r") as check:
@@ -166,6 +187,10 @@ def mancomparing():
 
 
 def gcoder():
+    """
+    Функция генерации gcode из заданных файлов облака точек и dxf
+    Вызывает два диалоговых окна для задания путей к этим файлам
+    """
     pathToPLY = filedialog.askopenfilename(title="Облако точек")
     pathToDxf = filedialog.askopenfilename(title="Файл dxf с заданием")
     update_setting(path, "GCoder", "pointcloudpath", pathToPLY)
@@ -178,18 +203,18 @@ def gcoder():
 
 
 def gcodesetdiag():
-
+    """
+    Задание точности построения gcode (минимальной длины линии)
+    Содержит вложенную функцию записи значения в конфигурационный файл
+    """
     def gcodeset():
-        gcodesettings = open("accur.txt", "w")
-        gcodesettings.write(stepform.get())
         update_setting(path, "GCoder", "accuracy", stepform.get())
-        gcodesettings.close
         gcodesetwin.destroy()
 
     gcodesetwin = Toplevel(window)
     gcodesetwin.title("Настройка gcode")
     gcodesetwin.minsize(width=180, height=100)
-    steplabel = tk.Label(gcodesetwin, text="Размер шага")
+    steplabel = tk.Label(gcodesetwin, text="Размер шага (мм)")
     steplabel.grid(row=0, column=0)
     stepform = tk.Entry(gcodesetwin)
     stepform.grid(row=1, column=0)
@@ -198,12 +223,18 @@ def gcodesetdiag():
 
 
 def pointcloud():
+    """
+    Вызывается диалоговое окно с указанием пути к видео для генерации облака
+    """
     pathToVideo = filedialog.askopenfilename(title="Видео для задания рельефа")
     update_setting(path, "GCoder", "videoforpointcloud", pathToVideo)
     scan(get_setting(path, "GCoder", "videoforpointcloud"))
 
 
 def getstatus():
+    """
+    Отрисовка окна статуса, где выводятся параметры из файла настроек
+    """
     statuswin = Toplevel(window)
     statuswin.title("Текущие параметры")
     statuswin.minsize(width=400, height=400)
