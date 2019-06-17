@@ -52,6 +52,14 @@ def get_setting(path, section, setting):
 
 
 def getFile(host, port, name, password, file):
+    """
+    Забирает файл с удалённого устройства не меняя имени файла
+    host - ip-адрес устройства
+    port - порт для соединения с устройством
+    name - имя пользователя ssh
+    password - пароль пользователя ssh
+    file - имя файла на удалённом устройстве
+    """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
     sftp = paramiko.SFTPClient.from_transport(transport)
