@@ -30,16 +30,16 @@
     * В начале функции содержится комментарий о её назначении и вводимых в неё параметрах
         * Пример:
             ```python
-def getFile(host, port, name, password, file):
-    """
-    Забирает файл с удалённого устройства не меняя имени файла
+            def getFile(host, port, name, password, file):
+              """
+              Забирает файл с удалённого устройства не меняя имени файла
 
-    host - ip-адрес устройства
-    port - порт для соединения с устройством
-    name - имя пользователя ssh
-    password - пароль пользователя ssh
-    file - имя файла на удалённом устройстве
-    """
+              host - ip-адрес устройства
+              port - порт для соединения с устройством
+              name - имя пользователя ssh
+              password - пароль пользователя ssh
+              file - имя файла на удалённом устройстве
+              """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
     sftp = paramiko.SFTPClient.from_transport(transport)
