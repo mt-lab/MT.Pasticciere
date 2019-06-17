@@ -49,7 +49,7 @@ def getFile(host, port, name, password, file):
     sftp.put(localpath, remotepath)
     sftp.close()
     transport.close()
-          ```
+            ```
 
 
 * Логгинг функций:
