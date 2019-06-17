@@ -1,3 +1,11 @@
+"""
+pasticcere.py
+Author: Dmitry K of MT.lab
+
+Главный файл программы, отвечает за отрисовку интерфейса программы и содержит
+функции для передачи данных и команд по сети.
+"""
+
 import tkinter as tk          # для рисования графики
 from tkinter import messagebox as mb
 from tkinter import Toplevel
