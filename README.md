@@ -34,11 +34,11 @@
               """
               Забирает файл с удалённого устройства не меняя имени файла
 
-              host - ip-адрес устройства (string)
-              port - порт для соединения с устройством (int)
-              name - имя пользователя ssh (string)
-              password - пароль пользователя ssh  (string)
-              file - имя файла на удалённом устройстве  (string)
+              host (str) - ip-адрес устройства
+              port (int) - порт для соединения с устройством
+              name (str)- имя пользователя ssh
+              password (str) - пароль пользователя ssh
+              file (str) - имя файла на удалённом устройстве
               """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
