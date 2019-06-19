@@ -40,15 +40,15 @@
               password (str) - пароль пользователя ssh
               file (str) - имя файла на удалённом устройстве
               """
-    transport = paramiko.Transport((host, port))
-    transport.connect(username=name, password=password)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    remotepath = file
-    localpath = file
-    sftp.get(remotepath, localpath)
-    sftp.put(localpath, remotepath)
-    sftp.close()
-    transport.close()
+              transport = paramiko.Transport((host, port))
+              transport.connect(username=name, password=password)
+              sftp = paramiko.SFTPClient.from_transport(transport)
+              remotepath = file
+              localpath = file
+              sftp.get(remotepath, localpath)
+              sftp.put(localpath, remotepath)
+              sftp.close()
+              transport.close()
             ```
 
 
