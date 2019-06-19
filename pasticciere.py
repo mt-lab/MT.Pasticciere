@@ -99,6 +99,29 @@ window = tk.Tk()
 
 # Перечень функций
 
+def getHome():
+    """
+    Отправка бункера в дом
+    """
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    console = client.invoke_shell()
+    console.keep_this = client
+    console.send('pronsole\n')
+    time.sleep(1)
+    console.send('connect\n')
+    time.sleep(2)
+    console.send('home\n')
+    time.sleep(1)
+    console.send('exit\n')
+    client.close()
+
 
 def getOtk():
     """
@@ -129,6 +152,31 @@ def getOtk():
     sftp.put(localpath, remotepath)
     sftp.close()
     transport.close()
+
+
+def stop():
+    """
+    Аварийная остановка устройства (тестовый функционал, скорей всего работать
+    не будет)
+    """
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    console = client.invoke_shell()
+    console.keep_this = client
+    console.send('pronsole\n')
+    time.sleep(1)
+    console.send('connect\n')
+    time.sleep(2)
+    console.send('M112\n')
+    time.sleep(1)
+    console.send('exit\n')
+    client.close()
 
 
 def getScan():
@@ -261,34 +309,30 @@ def getstatus():
     stepbutton.grid(row=8, column=0)
 
 
-lname = tk.Label(window, height=1, text="Номер устройства")
+lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
-ltask = tk.Label(window, text="Задание")
+ltask = tk.Label(window, text=get_setting(path, "GCoder", "dxfpath"))
 ltask.grid(row=1, column=2)
-ref = tk.Button(text="Обновить")
-ref.grid(row=1, column=3)
-cl_v = tk.Label(window, text="Версия клиента")
-cl_v.grid(row=1, column=4)
-home = tk.Button(text="Домой")
-home.grid(row=1, column=5)
+home = tk.Button(text="Домой", command=getHome)
+home.grid(row=1, column=3)
 camshot = tk.Button(text="Снимок", command=getOtk)
-camshot.grid(row=1, column=6)
+camshot.grid(row=1, column=4)
 camshot = tk.Button(text="Скан", command=getScan)
-camshot.grid(row=1, column=7)
+camshot.grid(row=1, column=5)
 manmask = tk.Button(text="Маска", command=otk.manmask)
-manmask.grid(row=1, column=8)
-fullstop = tk.Button(text="СТОП")
-fullstop.grid(row=1, column=9)
+manmask.grid(row=1, column=6)
+fullstop = tk.Button(text="СТОП", command=stop)
+fullstop.grid(row=1, column=7)
 mancomparing = tk.Button(text="Сравнить", command=mancomparing)
-mancomparing.grid(row=1, column=10)
+mancomparing.grid(row=1, column=8)
 gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
-gcoderb.grid(row=1, column=11)
+gcoderb.grid(row=1, column=9)
 gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetdiag)
-gcodesetb.grid(row=1, column=12)
+gcodesetb.grid(row=1, column=10)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
-pointcloudb.grid(row=1, column=13)
+pointcloudb.grid(row=1, column=11)
 
 
 # Конец отрисовки интерфейса
