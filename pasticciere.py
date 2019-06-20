@@ -272,10 +272,8 @@ def mancomparing():
     Сравнение изображения печенья с эталоном (плохая функция надо переписать)
     """
     thresh = get_setting(path, "OTK", "threshlevel")
-    otk.mancompare(thresh)
-    with open("mancompare.txt", "r") as check:
-        checkstr = check.readline()
-    if checkstr == "no":
+    check = otk.mancompare(thresh)
+    if check == "no":
         mb.showerror("Внимание!", "Печать с браком!")
         logger.info("Печать с браком!")
 
