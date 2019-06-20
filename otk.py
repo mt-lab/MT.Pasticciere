@@ -1,3 +1,17 @@
+"""
+otk.py
+Author: Anton Mayorov of MT.lab
+
+Файл otk.py отвечает за автоматическую систему технического контроля.
+
+содержит 2 основные функции:
+    getMask - возвращает маску рисунка в формате png снятую с печенья "оригинала".
+Значение фильтра, для выделения маски задается вручную, после завершения программы
+оно записывается в файл settings.ini
+    mancompare - сравнивает маску, полученную функцией getMask со всеми печеньями
+находящимися на столе.
+"""
+
 import numpy as np
 import cv2
 import configparser
@@ -30,112 +44,131 @@ def update_setting(path, section, setting, value):
 def nothing(x):
     pass
 
+def segmentation(image,contoursNumber):
 
-def manmask():
-    original = cv2.imread("1.jpg",1)
-    #вырезаю область со столом
-    table = original[2:716, 275:1100]
-    #вырезаю область со столом
-    gray_table = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
-    #выделяю персиковый цвет стола по хуевилу
-    lower_color = np.array([0,79,150])
-    upper_color = np.array([189,218,255])
+    """
+    Выделяет с изображения область со столом. Находит контуры всех печенек на столе.
+    Возвращает массив с контурами и изображение печенек на черном фоне. Второй аргумент - количество печенек.
+    """
+
+    table = image[2:716, 275:1100]
+    #перевожу область со столом в gtayscale
+    grayTable = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
+    #выделяю поверхность стола по цвету
+    lowerColor = np.array([0,79,150])
+    upperColor = np.array([189,218,255])
     hsv = cv2.cvtColor(table, cv2.COLOR_BGR2HSV)
-    only_table = cv2.inRange(hsv,lower_color,upper_color)
-    only_table = cv2.bitwise_not(only_table)
-    # убираем шумы
-    blur = cv2.medianBlur(only_table, 7)
+    onlyTable = cv2.inRange(hsv,lowerColor,upperColor)
+    onlyTable = cv2.bitwise_not(onlyTable)
+    # убираем шумы, чтобы добиться полного выделения поверхности стола
+    blur = cv2.medianBlur(onlyTable, 7)
     kernel = np.ones((5,5),np.uint8)
     opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 2)
-    only_table = opening
+    onlyTable = opening
     # выделяем область, которая точно является задним фоном
-    sure_bg = cv2.dilate(opening,kernel,iterations=3)
+    sureBg = cv2.dilate(opening,kernel,iterations=3)
     # находим область, которая точно является печеньками
-    dist_transform = cv2.distanceTransform(only_table,cv2.DIST_L2,3)
-    ret, sure_fg = cv2.threshold(dist_transform,0.1*dist_transform.max(),255,0)
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv2.subtract(sure_bg,sure_fg)
+    distTransform = cv2.distanceTransform(onlyTable,cv2.DIST_L2,3)
+    ret, sureFg = cv2.threshold(distTransform,0.1*distTransform.max(),255,0)
+    # Находим область в которой находятся края печенек.
+    sureFg = np.uint8(sureFg)
+    unknown = cv2.subtract(sureBg,sureFg)
 
     # Marker labelling
-    ret, markers = cv2.connectedComponents(sure_fg)
+    ret, markers = cv2.connectedComponents(sureFg)
     # Add one to all labels so that sure background is not 0, but 1
     markers = markers+1
     # Now, mark the region of unknown with zero
     markers[unknown==255] = 0
     markers = cv2.watershed(table,markers)
 
+    blankSpace = np.zeros(grayTable.shape, dtype="uint8")
+    blankSpace[markers == 1] = 255
+    blankSpace = cv2.bitwise_not(blankSpace)
 
+    height, width = blankSpace.shape
+    blankSpaceCropped = blankSpace[2:height-2, 2:width-2]
 
-    blank_space = np.zeros(gray_table.shape, dtype="uint8")
-    #blank_space[markers == -1] = 255
-    blank_space[markers == 1] = 255
-    blank_space = cv2.bitwise_not(blank_space)
-
-
-    height, width = blank_space.shape
-    blank_space_cropped = blank_space[2:height-2, 2:width-2]
-
-    contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:2]
-    table = cv2.bitwise_and(table,table,mask = blank_space)
-    table = cv2.bitwise_and(table,table,mask = sure_bg)
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:contoursNumber]
+    table = cv2.bitwise_and(table,table,mask = blankSpace)
+    table = cv2.bitwise_and(table,table,mask = sureBg)
+    return contours, table
+
+
+def getPattern(image,threshlevel):
+    """
+    Выделяет рисунок нанесенный белой глазурью.
+    """
+    ret, thresh = cv2.threshold(image, int(threshlevel), 255, cv2.THRESH_BINARY)
+    kernel = np.ones((3, 3), np.uint8)
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    median = cv2.medianBlur(opening, 5)
+    return median
+
+def getMainContour(mask):
+    """
+    Находит самый большой замкнутый контур.
+    """
+    cnt = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    cnt = imutils.grab_contours(cnt)
+    cnt = sorted(cnt, key = cv2.contourArea, reverse = True)[:1]
+    mainCnt = cnt[0]
+    return mainCnt
+
+def cropAndRotation(cnt,table):
+    """
+    Вырезает печенье со стола и поворачивает его.
+    """
+    rect = cv2.minAreaRect(cnt)
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+    mult = 1
+    W = rect[1][0]
+    H = rect[1][1]
+    Xs = [i[0] for i in box]
+    Ys = [i[1] for i in box]
+    x1 = min(Xs)
+    x2 = max(Xs)
+    y1 = min(Ys)
+    y2 = max(Ys)
+    rotated = False
+    angle = rect[2]
+    if angle < -45:
+        angle+=90
+        rotated = True
+    center = (int((x1+x2)/2), int((y1+y2)/2))
+    size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
+    M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
+    cropped = cv2.getRectSubPix(table, size, center)
+    cropped = cv2.warpAffine(cropped, M, size)
+    croppedW = W if not rotated else H
+    croppedH = H if not rotated else W
+    croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
+    return croppedRotated,box
+
+def getMask():
+    """
+    Со снимка эталонного печенья создает маску. Уровень фильтра threshold выбирается вручную,
+    его значение сохраняется в settings.ini
+    """
+
+    original = cv2.imread("cookie1/origin.jpg",1)
+    contours, table = segmentation(original, 1)
 
     for cnt in contours:
 
-            #cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
-
-            rect = cv2.minAreaRect(cnt)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            #cv2.drawContours(table,[box],0,(0,0,255),2)
-            mult = 1
-
-            W = rect[1][0]
-            H = rect[1][1]
-
-            Xs = [i[0] for i in box]
-            Ys = [i[1] for i in box]
-            x1 = min(Xs)
-            x2 = max(Xs)
-            y1 = min(Ys)
-            y2 = max(Ys)
-
-            rotated = False
-            angle = rect[2]
-
-            if angle < -45:
-                angle+=90
-                rotated = True
-
-            center = (int((x1+x2)/2), int((y1+y2)/2))
-            size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
-            #cv2.circle(table, center, 10, (0,255,0), -1) #again this was mostly for debugging purposes
-
-            M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
-
-            cropped = cv2.getRectSubPix(table, size, center)
-            cropped = cv2.warpAffine(cropped, M, size)
-
-            croppedW = W if not rotated else H
-            croppedH = H if not rotated else W
-
-            croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
-
+            table_copy = table.copy();
+            croppedRotated,box = cropAndRotation(cnt,table_copy)
 
     cv2.namedWindow('threshholding')
     cv2.createTrackbar('Tlevel', 'threshholding', 0, 255, nothing)
     gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
-    #blur = cv2.bilateralFilter(gray, 15, 17, 17)
-    #blur = cv2.medianBlur(blur, 3)
 
     while True:
         threshlevel = cv2.getTrackbarPos('Tlevel', 'threshholding')
-        ret, thresh = cv2.threshold(gray, threshlevel, 255, cv2.THRESH_BINARY)
-        kernel1 = np.ones((3, 3), np.uint8)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
-        median = cv2.medianBlur(opening, 5)
+        median = getPattern(gray,threshlevel)
         cv2.imshow("threshholding", median)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -143,171 +176,79 @@ def manmask():
     cv2.destroyAllWindows()
     cv2.imwrite("mask.png", median)
     update_setting(path, "OTK", "threshlevel", str(threshlevel))
-    n_white_pix = np.sum(median == 255)
 
 def mancompare(threshlevel):
+    """
+    Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
+    """
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
     columns = 3
     rows = 2
     subplot_counter = 1
     #----------------------------------------------
-
-    compairing_result = open('mancompare.txt', 'w')
-    counter_of_mistakes = 0
-    original = cv2.imread("3.jpg",1)
+    defectsCounter = 0 #сюда записывается количество печенья-брака на столе
+    original = cv2.imread("cookie1/3.jpg",1)
     mask = cv2.imread("mask.png", 0)
-    cnt1 = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    cnt1 = imutils.grab_contours(cnt1)
-    cnt1 = sorted(cnt1, key = cv2.contourArea, reverse = True)[:1]
-    cnt1 = cnt1[0]
+    cnt1 = getMainContour(mask)
     main_contour_legth_original = cv2.arcLength(cnt1,True)
     n_white_pix_inmask = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
-    ax.set_title(n_white_pix_inmask)
+    ax.set_title("origin")
     plt.axis("off")
     plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
     subplot_counter+=1
     print("ideal number of white pixels",n_white_pix_inmask)
     print("ideal length",main_contour_legth_original)
-    #
-    table = original[2:716, 275:1100]
-    #вырезаю область со столом
-    gray_table = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
-    #выделяю персиковый цвет стола по хуевилу
-    lower_color = np.array([0,79,150])
-    upper_color = np.array([189,218,255])
-    hsv = cv2.cvtColor(table, cv2.COLOR_BGR2HSV)
-    only_table = cv2.inRange(hsv,lower_color,upper_color)
-    only_table = cv2.bitwise_not(only_table)
-    # убираем шумы
-    blur = cv2.medianBlur(only_table, 7)
-    kernel = np.ones((5,5),np.uint8)
-    opening = cv2.morphologyEx(blur,cv2.MORPH_OPEN,kernel, iterations = 2)
-    only_table = opening
-    # выделяем область, которая точно является задним фоном
-    sure_bg = cv2.dilate(opening,kernel,iterations=3)
-    # находим область, которая точно является печеньками
-    dist_transform = cv2.distanceTransform(only_table,cv2.DIST_L2,3)
-    ret, sure_fg = cv2.threshold(dist_transform,0.1*dist_transform.max(),255,0)
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv2.subtract(sure_bg,sure_fg)
-
-    # Marker labelling
-    ret, markers = cv2.connectedComponents(sure_fg)
-    # Add one to all labels so that sure background is not 0, but 1
-    markers = markers+1
-    # Now, mark the region of unknown with zero
-    markers[unknown==255] = 0
-    markers = cv2.watershed(table,markers)
-
-
-
-    blank_space = np.zeros(gray_table.shape, dtype="uint8")
-    #blank_space[markers == -1] = 255
-    blank_space[markers == 1] = 255
-    blank_space = cv2.bitwise_not(blank_space)
-
-
-    height, width = blank_space.shape
-    blank_space_cropped = blank_space[2:height-2, 2:width-2]
-
-    contours = cv2.findContours(blank_space_cropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:7]
-    original_table = table
-    table = cv2.bitwise_and(table,table,mask = blank_space)
-    table = cv2.bitwise_and(table,table,mask = sure_bg)
-
-
-
+    contours, table = segmentation(original,4)
+    original_table = table.copy()
 
     for cnt in contours:
-        table_hui = table.copy();
-        width_hui = table_hui.shape[0]
-        height_hui = table_hui.shape[1]
-        for i in range (width_hui):
-            for j in range(height_hui):
-                dist_hui = cv2.pointPolygonTest(cnt, (j, i), True)
-                if dist_hui<0:
-                    table_hui[i,j] = 0;
-        cv2.drawContours(table, [cnt], -1, (0, 255, 255), 2)
-        rect = cv2.minAreaRect(cnt)
-        box = cv2.boxPoints(rect)
-        box = np.int0(box)
-        #cv2.drawContours(table,[box],0,(0,0,255),2)
-        mult = 1
-        W = rect[1][0]
-        H = rect[1][1]
-        Xs = [i[0] for i in box]
-        Ys = [i[1] for i in box]
-        x1 = min(Xs)
-        x2 = max(Xs)
-        y1 = min(Ys)
-        y2 = max(Ys)
-        rotated = False
-        angle = rect[2]
-        if angle < -45:
-            angle+=90
-            rotated = True
+        table_copy = table.copy();
+        width_of_table = table_copy.shape[0]
+        height_of_table = table_copy.shape[1]
+        for i in range (width_of_table):
+            for j in range(height_of_table):
+                dist_from_contour = cv2.pointPolygonTest(cnt, (j, i), True)
+                if dist_from_contour < 0:
+                    table_copy[i,j] = 0;
 
-        center = (int((x1+x2)/2), int((y1+y2)/2))
-        size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
-        #cv2.circle(table, center, 10, (0,255,0), -1) #again this was mostly for debugging purposes
-
-        M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
-
-        cropped = cv2.getRectSubPix(table_hui, size, center)
-        cropped = cv2.warpAffine(cropped, M, size)
-
-        croppedW = W if not rotated else H
-        croppedH = H if not rotated else W
-
-        croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
-
-        cv2.imshow("croppedRotated ",croppedRotated )
+        croppedRotated,box = cropAndRotation(cnt,table_copy)
         #получение маски с каждой печеньки
-        gray_mask = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
-        #blur = cv2.bilateralFilter(gray_mask, 15, 17, 17)
-        #blur = cv2.medianBlur(blur, 3)
-        ret, thresh = cv2.threshold(gray_mask, int(threshlevel), 255, cv2.THRESH_BINARY)
-        kernel1 = np.ones((3, 3), np.uint8)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel1)
-        median = cv2.medianBlur(opening, 5)
-        cnt2 = cv2.findContours(median.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        cnt2 = imutils.grab_contours(cnt2)
-        cnt2 = sorted(cnt2, key = cv2.contourArea, reverse = True)[:1]
-        cnt2 = cnt2[0]
+        gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
+        median = getPattern(gray,threshlevel)
+        #нахождение внешнего контура, его длины и оценка формы
+        cnt2 = getMainContour(median)
         main_contour_legth = cv2.arcLength(cnt2,True)
-        mask_HUI=cv2.cvtColor(median, cv2.COLOR_GRAY2RGB)
-        cv2.drawContours(mask_HUI,[cnt2],0,(0,0,255),2)
+        mask_RGB=cv2.cvtColor(median, cv2.COLOR_GRAY2RGB)
+        cv2.drawContours(mask_RGB,[cnt2],0,(0,0,255),2)
         match_shapes_result = cv2.matchShapes(cnt1,cnt2,1,0.0)
         n_white_pix = np.sum(median == 255)
-        print("number of white pixels:",n_white_pix)
         ax = fig.add_subplot(rows, columns, subplot_counter)
-        ax.set_title(n_white_pix)
+        ax.set_title(subplot_counter-1)
         plt.axis("off")
         #plt.imshow(cv2.cvtColor(median, cv2.COLOR_GRAY2RGB))
-        plt.imshow(mask_HUI)
-        subplot_counter+=1
+        plt.imshow(mask_RGB)
+        print("-------------------------------------")
+        print("Cookie number:",subplot_counter-1)
         print("match_shapes_result:",match_shapes_result)
         print("main_contour_legth:",main_contour_legth)
-        if ((abs(n_white_pix_inmask - n_white_pix)>1100) | (match_shapes_result > 0.05) | (abs(main_contour_legth_original - main_contour_legth)>150)):
-            counter_of_mistakes +=1
+        print("number of white pixels:",n_white_pix)
+        print("-------------------------------------")
+        subplot_counter+=1
+        if ((abs(n_white_pix_inmask - n_white_pix)>1500) | (match_shapes_result > 0.05) | (abs(main_contour_legth_original - main_contour_legth)>150)):
+            defectsCounter +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
             cv2.drawContours(original_table,[box],0,(0,255,0),2)
 
-    if counter_of_mistakes == 0:
+    if defectsCounter == 0:
         answer = "yes"
     else:
         answer = "no"
-        cv2.imshow("eror",original_table)
-        #cv2.imshow("table",table)
+        cv2.imshow("Table with result",original_table)
     print(answer)
+    print("количество печенек с браком:",defectsCounter)
     plt.show()
-    cv2.waitKey(0)
-    compairing_result.write(answer)
     cv2.destroyAllWindows()
-    compairing_result.close()
+    return answer

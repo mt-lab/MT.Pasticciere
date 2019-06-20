@@ -66,7 +66,7 @@ def get_setting(path, section, setting):
     msg = "{section} {setting} is {value}".format(
         section=section, setting=setting, value=value
     )
-    print(msg)
+    logger.info(msg)
     return value
 
 
@@ -87,6 +87,27 @@ def getFile(host, port, name, password, file):
     localpath = file
     sftp.get(remotepath, localpath)
     sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
+
+
+def sendFile(host, port, name, password, file):
+    """
+    Забирает файл с удалённого устройства не меняя имени файла
+
+    host - ip-адрес устройства
+    port - порт для соединения с устройством
+    name - имя пользователя ssh
+    password - пароль пользователя ssh
+    file - имя файла на удалённом устройстве
+    """
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=name, password=password)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = file
+    localpath = file
+    sftp.get(localpath, remotepath)
+    sftp.put(remotepath, localpath)
     sftp.close()
     transport.close()
 
@@ -197,7 +218,13 @@ def getScan():
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=17')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=10')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=89')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=10')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=116')
+    client.exec_command(r'v4l2-ctl -d /dev/video2 \
+                         --set-ctrl=white_balance_temperature=2800')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=78')
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
                         -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
@@ -221,15 +248,37 @@ def getScan():
     getFile(host, port, sshUsername1, sshPassword1, 'scanner.mp4')
 
 
+def getPrinted():
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    sendFile(host, port, sshUsername1, sshPassword1, "cookie,gcode")
+    time.sleep(2)
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    console = client.invoke_shell()
+    console.keep_this = client
+    console.send('pronsole\n')
+    time.sleep(1)
+    console.send('connect\n')
+    time.sleep(2)
+    console.send('load cookie.gcode\n')
+    time.sleep(1)
+    console.send('print')
+    time.sleep(1)
+    console.send('exit\n')
+    client.close()
+
+
 def mancomparing():
     """
     Сравнение изображения печенья с эталоном (плохая функция надо переписать)
     """
-    thresh = get_setting(path, "OTK", "threshlevel")
-    otk.mancompare(thresh)
-    with open("mancompare.txt", "r") as check:
-        checkstr = check.readline()
-    if checkstr == "no":
+    check = otk.mancompare(get_setting(path, "OTK", "threshlevel"))
+    if check == "no":
         mb.showerror("Внимание!", "Печать с браком!")
         logger.info("Печать с браком!")
 
@@ -268,6 +317,11 @@ def gcodesetdiag():
     stepform.grid(row=1, column=0)
     stepbutton = tk.Button(gcodesetwin, text="Задать", command=gcodeset)
     stepbutton.grid(row=2, column=0)
+
+
+def addressCutter(address):
+    cuttedAddress = address[-15:]
+    return cuttedAddress
 
 
 def pointcloud():
@@ -313,7 +367,8 @@ lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
-ltask = tk.Label(window, text=get_setting(path, "GCoder", "dxfpath"))
+ltask = tk.Label(window, text=".." + addressCutter
+                 (get_setting(path, "GCoder", "dxfpath")))
 ltask.grid(row=1, column=2)
 home = tk.Button(text="Домой", command=getHome)
 home.grid(row=1, column=3)
@@ -321,8 +376,8 @@ camshot = tk.Button(text="Снимок", command=getOtk)
 camshot.grid(row=1, column=4)
 camshot = tk.Button(text="Скан", command=getScan)
 camshot.grid(row=1, column=5)
-manmask = tk.Button(text="Маска", command=otk.manmask)
-manmask.grid(row=1, column=6)
+getMask = tk.Button(text="Маска", command=otk.getMask)
+getMask.grid(row=1, column=6)
 fullstop = tk.Button(text="СТОП", command=stop)
 fullstop.grid(row=1, column=7)
 mancomparing = tk.Button(text="Сравнить", command=mancomparing)
@@ -333,6 +388,8 @@ gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetd
 gcodesetb.grid(row=1, column=10)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
 pointcloudb.grid(row=1, column=11)
+getprinted = tk.Button(window, text="Печать", command=getPrinted)
+getprinted.grid(row=1, column=12)
 
 
 # Конец отрисовки интерфейса
