@@ -46,6 +46,11 @@ def nothing(x):
 
 def segmentation(image):
 
+    """
+    Выделяет с изображения область со столом. Находит контуры всех печенек на столе.
+    Возвращает массив с контурами и изображение печенек на черном фоне.
+    """
+
     table = image[2:716, 275:1100]
     #перевожу область со столом в gtayscale
     grayTable = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
@@ -92,13 +97,27 @@ def segmentation(image):
 
 
 def getPattern(image,threshlevel):
+    """
+    Выделяет рисунок нанесенный белой глазурью.
+    """
     ret, thresh = cv2.threshold(image, int(threshlevel), 255, cv2.THRESH_BINARY)
     kernel = np.ones((3, 3), np.uint8)
     opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     median = cv2.medianBlur(opening, 5)
     return median
 
-def manmask():
+def getMainContour(mask):
+    cnt = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    cnt = imutils.grab_contours(cnt)
+    cnt = sorted(cnt, key = cv2.contourArea, reverse = True)[:1]
+    mainCnt = cnt[0]
+    return mainCnt
+
+def getMask():
+    """
+    Со снимка эталонного печенья создает маску. Уровень фильтра threshold выбирается вручную,
+    его значение сохраняется в settings.ini
+    """
 
     original = cv2.imread("cookie1/origin.jpg",1)
     contours, table = segmentation(original)
@@ -162,21 +181,19 @@ def manmask():
     n_white_pix = np.sum(median == 255)
 
 def mancompare(threshlevel):
+    """
+    Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
+    """
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
     columns = 3
     rows = 2
     subplot_counter = 1
     #----------------------------------------------
-
-    compairing_result = open('mancompare.txt', 'w')
-    counter_of_mistakes = 0
+    counter_of_defects = 0 #сюда записывается количество печенья-брака на столе
     original = cv2.imread("cookie1/3.jpg",1)
     mask = cv2.imread("mask.png", 0)
-    cnt1 = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    cnt1 = imutils.grab_contours(cnt1)
-    cnt1 = sorted(cnt1, key = cv2.contourArea, reverse = True)[:1]
-    cnt1 = cnt1[0]
+    cnt1 = getMainContour(mask)
     main_contour_legth_original = cv2.arcLength(cnt1,True)
     n_white_pix_inmask = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
@@ -237,10 +254,7 @@ def mancompare(threshlevel):
         gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         median = getPattern(gray,threshlevel)
         #нахождение внешнего контура, его длины и оценка формы
-        cnt2 = cv2.findContours(median.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        cnt2 = imutils.grab_contours(cnt2)
-        cnt2 = sorted(cnt2, key = cv2.contourArea, reverse = True)[:1]
-        cnt2 = cnt2[0]
+        cnt2 = getMainContour(median)
         main_contour_legth = cv2.arcLength(cnt2,True)
         mask_RGB=cv2.cvtColor(median, cv2.COLOR_GRAY2RGB)
         cv2.drawContours(mask_RGB,[cnt2],0,(0,0,255),2)
@@ -259,20 +273,19 @@ def mancompare(threshlevel):
         print("-------------------------------------")
         subplot_counter+=1
         if ((abs(n_white_pix_inmask - n_white_pix)>1500) | (match_shapes_result > 0.05) | (abs(main_contour_legth_original - main_contour_legth)>150)):
-            counter_of_mistakes +=1
+            counter_of_defects +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
             cv2.drawContours(original_table,[box],0,(0,255,0),2)
 
-    if counter_of_mistakes == 0:
+    if counter_of_defects == 0:
         answer = "yes"
     else:
         answer = "no"
-        cv2.imshow("Table with result",original_table)
-        #cv2.imshow("table",table)
+        cv2.imshow("Table with result",original_table))
     print(answer)
     plt.show()
-    cv2.waitKey(0)
-    compairing_result.write(answer)
     cv2.destroyAllWindows()
+    compairing_result = open('mancompare.txt', 'w')
+    compairing_result.write(answer)
     compairing_result.close()
