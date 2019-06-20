@@ -194,7 +194,7 @@ def mancompare(threshlevel):
     main_contour_legth_original = cv2.arcLength(cnt1,True)
     n_white_pix_inmask = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
-    ax.set_title(n_white_pix_inmask)
+    ax.set_title("origin")
     plt.axis("off")
     plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
     subplot_counter+=1
@@ -248,8 +248,7 @@ def mancompare(threshlevel):
         answer = "no"
         cv2.imshow("Table with result",original_table)
     print(answer)
+    print("количество печенек с браком:",defectsCounter)
     plt.show()
     cv2.destroyAllWindows()
-    compairing_result = open('mancompare.txt', 'w')
-    compairing_result.write(answer)
-    compairing_result.close()
+    return answer
