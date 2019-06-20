@@ -218,7 +218,13 @@ def getScan():
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=17')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=10')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=89')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=10')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=116')
+    client.exec_command(r'v4l2-ctl -d /dev/video2 \
+                         --set-ctrl=white_balance_temperature=2800')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=78')
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
                         -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
@@ -271,8 +277,7 @@ def mancomparing():
     """
     Сравнение изображения печенья с эталоном (плохая функция надо переписать)
     """
-    thresh = get_setting(path, "OTK", "threshlevel")
-    check = otk.mancompare(thresh)
+    check = otk.mancompare(get_setting(path, "OTK", "threshlevel"))
     if check == "no":
         mb.showerror("Внимание!", "Печать с браком!")
         logger.info("Печать с браком!")
