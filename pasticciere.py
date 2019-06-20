@@ -66,7 +66,7 @@ def get_setting(path, section, setting):
     msg = "{section} {setting} is {value}".format(
         section=section, setting=setting, value=value
     )
-    print(msg)
+    logger.info(msg)
     return value
 
 
@@ -87,6 +87,27 @@ def getFile(host, port, name, password, file):
     localpath = file
     sftp.get(remotepath, localpath)
     sftp.put(localpath, remotepath)
+    sftp.close()
+    transport.close()
+
+
+def sendFile(host, port, name, password, file):
+    """
+    Забирает файл с удалённого устройства не меняя имени файла
+
+    host - ip-адрес устройства
+    port - порт для соединения с устройством
+    name - имя пользователя ssh
+    password - пароль пользователя ssh
+    file - имя файла на удалённом устройстве
+    """
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=name, password=password)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    remotepath = file
+    localpath = file
+    sftp.get(localpath, remotepath)
+    sftp.put(remotepath, localpath)
     sftp.close()
     transport.close()
 
@@ -221,6 +242,31 @@ def getScan():
     getFile(host, port, sshUsername1, sshPassword1, 'scanner.mp4')
 
 
+def getPrinted():
+    host = get_setting(path, "network", "ip1")
+    port = 22
+    sshUsername1 = get_setting(path, "network", "user1")
+    sshPassword1 = get_setting(path, "network", "pass1")
+    sendFile(host, port, sshUsername1, sshPassword1, "cookie,gcode")
+    time.sleep(2)
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                   port=port)
+    console = client.invoke_shell()
+    console.keep_this = client
+    console.send('pronsole\n')
+    time.sleep(1)
+    console.send('connect\n')
+    time.sleep(2)
+    console.send('load cookie.gcode\n')
+    time.sleep(1)
+    console.send('print')
+    time.sleep(1)
+    console.send('exit\n')
+    client.close()
+
+
 def mancomparing():
     """
     Сравнение изображения печенья с эталоном (плохая функция надо переписать)
@@ -270,6 +316,11 @@ def gcodesetdiag():
     stepbutton.grid(row=2, column=0)
 
 
+def addressCutter(address):
+    cuttedAddress = address[-15:]
+    return cuttedAddress
+
+
 def pointcloud():
     """
     Вызывается диалоговое окно с указанием пути к видео для генерации облака
@@ -313,7 +364,8 @@ lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
-ltask = tk.Label(window, text=get_setting(path, "GCoder", "dxfpath"))
+ltask = tk.Label(window, text=".." + addressCutter
+                 (get_setting(path, "GCoder", "dxfpath")))
 ltask.grid(row=1, column=2)
 home = tk.Button(text="Домой", command=getHome)
 home.grid(row=1, column=3)
@@ -333,6 +385,8 @@ gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetd
 gcodesetb.grid(row=1, column=10)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
 pointcloudb.grid(row=1, column=11)
+getprinted = tk.Button(window, text="Печать", command=getPrinted)
+getprinted.grid(row=1, column=12)
 
 
 # Конец отрисовки интерфейса
