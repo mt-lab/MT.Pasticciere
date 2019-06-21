@@ -44,11 +44,11 @@ def update_setting(path, section, setting, value):
 def nothing(x):
     pass
 
-def segmentation(image,contoursNumber):
+def segmentation(image):
 
     """
     Выделяет с изображения область со столом. Находит контуры всех печенек на столе.
-    Возвращает массив с контурами и изображение печенек на черном фоне. Второй аргумент - количество печенек.
+    Возвращает массив с контурами и изображение печенек на черном фоне.
     """
 
     table = image[2:716, 275:1100]
@@ -76,11 +76,12 @@ def segmentation(image,contoursNumber):
 
     # Marker labelling
     ret, markers = cv2.connectedComponents(sureFg)
-    # Add one to all labels so that sure background is not 0, but 1
+    # Add one to all labels so that sure bqackground is not 0, but 1
     markers = markers+1
     # Now, mark the region of unknown with zero
     markers[unknown==255] = 0
     markers = cv2.watershed(table,markers)
+    numberOfCokies = len(np.unique(markers)) - 2
 
     blankSpace = np.zeros(grayTable.shape, dtype="uint8")
     blankSpace[markers == 1] = 255
@@ -91,7 +92,7 @@ def segmentation(image,contoursNumber):
 
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:contoursNumber]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)[:numberOfCokies]
     table = cv2.bitwise_and(table,table,mask = blankSpace)
     table = cv2.bitwise_and(table,table,mask = sureBg)
     return contours, table
@@ -185,7 +186,7 @@ def getMask():
     его значение сохраняется в settings.ini
     """
     original = cv2.imread("cookie1/origin.jpg",1)
-    contours, table = segmentation(original, 1)
+    contours, table = segmentation(original)
     cnt = contours[0];
     table_copy = table.copy();
     croppedRotated,box = cropAndRotation(cnt,table_copy)
@@ -232,7 +233,7 @@ def mancompare(threshlevel):
     subplot_counter+=1
     print("ideal number of white pixels",n_white_pix_original)
     print("ideal length",mainСontourLegthOriginal)
-    contours, table = segmentation(original,4)
+    contours, table = segmentation(original)
     original_table = table.copy()
 
     for cnt in contours:
