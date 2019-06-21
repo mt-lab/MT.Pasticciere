@@ -207,10 +207,14 @@ def mancompare(threshlevel):
     Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
     """
     #Читаем нужные изображения
-    original = cv2.imread("cookie1/3.jpg",1)
+    original = cv2.imread("cookie1/12.jpg",1)
     mask = cv2.imread("mask.png", 0)
     widthOriginal = mask.shape[1]
     heightOriginal  = mask.shape[0]
+    #Основные параметры сравнения:
+    numPixelsTolerance = 0.09
+    contourLengthTolerance = 0.03
+    shapeCompareTolerance = 0.05
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
     columns = 3
@@ -264,7 +268,7 @@ def mancompare(threshlevel):
         print("number of white pixels:",n_white_pix)
         print("-------------------------------------")
         subplot_counter+=1
-        if ((abs(n_white_pix_original - n_white_pix)>1500) | (match_shapes_result > 0.05) | (abs(mainСontourLegthOriginal - main_contour_legth)>150)):
+        if ((abs(n_white_pix_original - n_white_pix)>numPixelsTolerance*n_white_pix_original) | (match_shapes_result > shapeCompareTolerance) | (abs(mainСontourLegthOriginal - main_contour_legth)>contourLengthTolerance*mainСontourLegthOriginal)):
             defectsCounter +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
