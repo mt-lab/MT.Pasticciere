@@ -135,7 +135,10 @@ def cropAndRotation(cnt,table):
     y2 = max(Ys)
     rotated = False
     angle = rect[2]
-    if angle < -45:
+    print(angle)
+    print(W)
+    print(H)
+    if W < H:
         angle+=90
         rotated = True
     center = (int((x1+x2)/2), int((y1+y2)/2))
@@ -177,7 +180,7 @@ def mancompare(threshlevel):
     Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
     """
     #Читаем нужные изображения
-    original = cv2.imread("cookie1/3.jpg",1)
+    original = cv2.imread("cookie1/12.jpg",1)
     mask = cv2.imread("mask.png", 0)
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
@@ -245,7 +248,7 @@ def mancompare(threshlevel):
         cv2.imshow("Table with result",original_table)
     print(answer)
     print("Number of cookies with defect:",defectsCounter)
-    #plt.show()
+    plt.show()
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     return answer
