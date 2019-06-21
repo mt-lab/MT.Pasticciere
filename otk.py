@@ -124,7 +124,7 @@ def cropAndRotation(cnt,table):
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
-    mult = 1
+    mult = 1.1
     W = rect[1][0]
     H = rect[1][1]
     Xs = [i[0] for i in box]
@@ -135,9 +135,6 @@ def cropAndRotation(cnt,table):
     y2 = max(Ys)
     rotated = False
     angle = rect[2]
-    print(angle)
-    print(W)
-    print(H)
     if W < H:
         angle+=90
         rotated = True
@@ -151,6 +148,37 @@ def cropAndRotation(cnt,table):
     croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
     return croppedRotated,box
 
+def cropAndRotation2(cnt,table,widthOriginal,heightOriginal):
+    """
+    Вырезает печенье со стола и поворачивает его.
+    """
+    rect = cv2.minAreaRect(cnt)
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+    mult = 1.1
+    W = rect[1][0]
+    H = rect[1][1]
+    Xs = [i[0] for i in box]
+    Ys = [i[1] for i in box]
+    x1 = min(Xs)
+    x2 = max(Xs)
+    y1 = min(Ys)
+    y2 = max(Ys)
+    rotated = False
+    angle = rect[2]
+    if W < H:
+        angle+=90
+        rotated = True
+    center = (int((x1+x2)/2), int((y1+y2)/2))
+    size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
+    M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
+    cropped = cv2.getRectSubPix(table, size, center)
+    cropped = cv2.warpAffine(cropped, M, size)
+    croppedW = widthOriginal
+    croppedH = heightOriginal
+    croppedRotated = cv2.getRectSubPix(cropped, (int(widthOriginal), int(heightOriginal)), (size[0]/2, size[1]/2))
+    return croppedRotated,box
+
 def getMask():
     """
     Со снимка эталонного печенья создает маску. Уровень фильтра threshold выбирается вручную,
@@ -158,10 +186,9 @@ def getMask():
     """
     original = cv2.imread("cookie1/origin.jpg",1)
     contours, table = segmentation(original, 1)
-    for cnt in contours:
-
-            table_copy = table.copy();
-            croppedRotated,box = cropAndRotation(cnt,table_copy)
+    cnt = contours[0];
+    table_copy = table.copy();
+    croppedRotated,box = cropAndRotation(cnt,table_copy)
     cv2.namedWindow('threshholding')
     cv2.createTrackbar('Tlevel', 'threshholding', 0, 255, nothing)
     gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
@@ -180,8 +207,10 @@ def mancompare(threshlevel):
     Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
     """
     #Читаем нужные изображения
-    original = cv2.imread("cookie1/12.jpg",1)
+    original = cv2.imread("cookie1/3.jpg",1)
     mask = cv2.imread("mask.png", 0)
+    widthOriginal = mask.shape[1]
+    heightOriginal  = mask.shape[0]
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
     columns = 3
@@ -212,7 +241,7 @@ def mancompare(threshlevel):
                 if dist_from_contour < 0:
                     table_copy[i,j] = 0;
 
-        croppedRotated,box = cropAndRotation(cnt,table_copy)
+        croppedRotated,box = cropAndRotation2(cnt,table_copy,widthOriginal,heightOriginal)
         #получение маски с каждой печеньки
         gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         median = getPattern(gray,threshlevel)
