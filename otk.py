@@ -124,7 +124,7 @@ def cropAndRotation(cnt,table):
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
-    mult = 1
+    mult = 1.1
     W = rect[1][0]
     H = rect[1][1]
     Xs = [i[0] for i in box]
@@ -135,7 +135,7 @@ def cropAndRotation(cnt,table):
     y2 = max(Ys)
     rotated = False
     angle = rect[2]
-    if angle < -45:
+    if W < H:
         angle+=90
         rotated = True
     center = (int((x1+x2)/2), int((y1+y2)/2))
@@ -148,31 +148,56 @@ def cropAndRotation(cnt,table):
     croppedRotated = cv2.getRectSubPix(cropped, (int(croppedW*mult), int(croppedH*mult)), (size[0]/2, size[1]/2))
     return croppedRotated,box
 
+def cropAndRotation2(cnt,table,widthOriginal,heightOriginal):
+    """
+    Вырезает печенье со стола и поворачивает его.
+    """
+    rect = cv2.minAreaRect(cnt)
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+    mult = 1.1
+    W = rect[1][0]
+    H = rect[1][1]
+    Xs = [i[0] for i in box]
+    Ys = [i[1] for i in box]
+    x1 = min(Xs)
+    x2 = max(Xs)
+    y1 = min(Ys)
+    y2 = max(Ys)
+    rotated = False
+    angle = rect[2]
+    if W < H:
+        angle+=90
+        rotated = True
+    center = (int((x1+x2)/2), int((y1+y2)/2))
+    size = (int(mult*(x2-x1)),int(mult*(y2-y1)))
+    M = cv2.getRotationMatrix2D((size[0]/2, size[1]/2), angle, 1.0)
+    cropped = cv2.getRectSubPix(table, size, center)
+    cropped = cv2.warpAffine(cropped, M, size)
+    croppedW = widthOriginal
+    croppedH = heightOriginal
+    croppedRotated = cv2.getRectSubPix(cropped, (int(widthOriginal), int(heightOriginal)), (size[0]/2, size[1]/2))
+    return croppedRotated,box
+
 def getMask():
     """
     Со снимка эталонного печенья создает маску. Уровень фильтра threshold выбирается вручную,
     его значение сохраняется в settings.ini
     """
-
     original = cv2.imread("cookie1/origin.jpg",1)
     contours, table = segmentation(original, 1)
-
-    for cnt in contours:
-
-            table_copy = table.copy();
-            croppedRotated,box = cropAndRotation(cnt,table_copy)
-
+    cnt = contours[0];
+    table_copy = table.copy();
+    croppedRotated,box = cropAndRotation(cnt,table_copy)
     cv2.namedWindow('threshholding')
     cv2.createTrackbar('Tlevel', 'threshholding', 0, 255, nothing)
     gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
-
     while True:
         threshlevel = cv2.getTrackbarPos('Tlevel', 'threshholding')
         median = getPattern(gray,threshlevel)
         cv2.imshow("threshholding", median)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
     cv2.destroyAllWindows()
     cv2.imwrite("mask.png", median)
     update_setting(path, "OTK", "threshlevel", str(threshlevel))
@@ -181,6 +206,11 @@ def mancompare(threshlevel):
     """
     Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
     """
+    #Читаем нужные изображения
+    original = cv2.imread("cookie1/3.jpg",1)
+    mask = cv2.imread("mask.png", 0)
+    widthOriginal = mask.shape[1]
+    heightOriginal  = mask.shape[0]
     #создаем окно для отображения каждой печеньки
     fig=plt.figure(figsize=(10,5))
     columns = 3
@@ -188,18 +218,16 @@ def mancompare(threshlevel):
     subplot_counter = 1
     #----------------------------------------------
     defectsCounter = 0 #сюда записывается количество печенья-брака на столе
-    original = cv2.imread("cookie1/3.jpg",1)
-    mask = cv2.imread("mask.png", 0)
     cnt1 = getMainContour(mask)
-    main_contour_legth_original = cv2.arcLength(cnt1,True)
-    n_white_pix_inmask = np.sum(mask == 255)
+    mainСontourLegthOriginal = cv2.arcLength(cnt1,True)
+    n_white_pix_original = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
     ax.set_title("origin")
     plt.axis("off")
     plt.imshow(cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB))
     subplot_counter+=1
-    print("ideal number of white pixels",n_white_pix_inmask)
-    print("ideal length",main_contour_legth_original)
+    print("ideal number of white pixels",n_white_pix_original)
+    print("ideal length",mainСontourLegthOriginal)
     contours, table = segmentation(original,4)
     original_table = table.copy()
 
@@ -213,7 +241,7 @@ def mancompare(threshlevel):
                 if dist_from_contour < 0:
                     table_copy[i,j] = 0;
 
-        croppedRotated,box = cropAndRotation(cnt,table_copy)
+        croppedRotated,box = cropAndRotation2(cnt,table_copy,widthOriginal,heightOriginal)
         #получение маски с каждой печеньки
         gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         median = getPattern(gray,threshlevel)
@@ -236,7 +264,7 @@ def mancompare(threshlevel):
         print("number of white pixels:",n_white_pix)
         print("-------------------------------------")
         subplot_counter+=1
-        if ((abs(n_white_pix_inmask - n_white_pix)>1500) | (match_shapes_result > 0.05) | (abs(main_contour_legth_original - main_contour_legth)>150)):
+        if ((abs(n_white_pix_original - n_white_pix)>1500) | (match_shapes_result > 0.05) | (abs(mainСontourLegthOriginal - main_contour_legth)>150)):
             defectsCounter +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
@@ -248,7 +276,8 @@ def mancompare(threshlevel):
         answer = "no"
         cv2.imshow("Table with result",original_table)
     print(answer)
-    print("количество печенек с браком:",defectsCounter)
+    print("Number of cookies with defect:",defectsCounter)
     plt.show()
+    cv2.waitKey(0)
     cv2.destroyAllWindows()
     return answer
