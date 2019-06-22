@@ -55,8 +55,8 @@ def segmentation(image):
     #перевожу область со столом в gtayscale
     grayTable = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
     #выделяю поверхность стола по цвету
-    lowerColor = np.array([0,79,150])
-    upperColor = np.array([189,218,255])
+    lowerColor = np.array([0,73,141])
+    upperColor = np.array([197,210,255])
     hsv = cv2.cvtColor(table, cv2.COLOR_BGR2HSV)
     onlyTable = cv2.inRange(hsv,lowerColor,upperColor)
     onlyTable = cv2.bitwise_not(onlyTable)
@@ -165,6 +165,23 @@ def cropAndRotation2(cnt,table,widthOriginal,heightOriginal):
     x2 = max(Xs)
     y1 = min(Ys)
     y2 = max(Ys)
+
+    x1Corrected = x1-int(((x2-x1)*(mult-1)/2))
+    x2Corrected = x2+int(((x2-x1)*(mult-1)/2))
+    y1Corrected = y1-int(((y2-y1)*(mult-1)/2))
+    y2Corrected = y2+int(((y2-y1)*(mult-1)/2))
+
+    x1Corrected = 0 if x1Corrected<0 else x1Corrected
+    x2Corrected = 824 if x2Corrected>824 else x2Corrected
+    y1Corrected = 0 if y1Corrected<0 else y1Corrected
+    y2Corrected = 713 if y2Corrected>713 else y2Corrected
+
+    for i in range (y1Corrected,y2Corrected):
+        for j in range(x1Corrected,x2Corrected):
+            dist_from_contour = cv2.pointPolygonTest(cnt, (j, i), True)
+            if dist_from_contour < 0:
+                table[i,j] = 0;
+
     rotated = False
     angle = rect[2]
     if W < H:
@@ -238,14 +255,6 @@ def mancompare(threshlevel):
 
     for cnt in contours:
         table_copy = table.copy();
-        width_of_table = table_copy.shape[0]
-        height_of_table = table_copy.shape[1]
-        for i in range (width_of_table):
-            for j in range(height_of_table):
-                dist_from_contour = cv2.pointPolygonTest(cnt, (j, i), True)
-                if dist_from_contour < 0:
-                    table_copy[i,j] = 0;
-
         croppedRotated,box = cropAndRotation2(cnt,table_copy,widthOriginal,heightOriginal)
         #получение маски с каждой печеньки
         gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
