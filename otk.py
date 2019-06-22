@@ -48,7 +48,11 @@ def segmentation(image):
 
     """
     Выделяет с изображения область со столом. Находит контуры всех печенек на столе.
+    Подсчитывает автоматически количество печенек на столе.
     Возвращает массив с контурами и изображение печенек на черном фоне.
+
+    Параметры:
+    image (array) – трехканальное изображение BGR.
     """
 
     table = image[2:716, 275:1100]
@@ -101,6 +105,10 @@ def segmentation(image):
 def getPattern(image,threshlevel):
     """
     Выделяет рисунок нанесенный белой глазурью.
+
+    Параметры:
+    image (array) – одноканальное изображение в grayscale.
+    threshlevel (int) - число от 0 до 255. Значение порога для threshold
     """
     ret, thresh = cv2.threshold(image, int(threshlevel), 255, cv2.THRESH_BINARY)
     kernel = np.ones((3, 3), np.uint8)
@@ -111,6 +119,9 @@ def getPattern(image,threshlevel):
 def getMainContour(mask):
     """
     Находит самый большой замкнутый контур.
+
+    Параметры:
+    mask(array) – одноканальное изображение в grayscale.
     """
     cnt = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     cnt = imutils.grab_contours(cnt)
@@ -121,6 +132,10 @@ def getMainContour(mask):
 def cropAndRotation(cnt,table):
     """
     Вырезает печенье со стола и поворачивает его.
+
+    Параметры:
+    cnt(vector of 2D points) – контур отдельновзятой печеньки.
+    table(array) – трехканальное изображение печенек на черном фоне.
     """
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
@@ -152,6 +167,12 @@ def cropAndRotation(cnt,table):
 def cropAndRotation2(cnt,table,widthOriginal,heightOriginal):
     """
     Вырезает печенье со стола и поворачивает его.
+
+    Параметры:
+    cnt(vector of 2D points) – контур отдельновзятой печеньки.
+    table(array) – трехканальное изображение печенек на черном фоне.
+    widthOriginal(int) - ширина эталонного изображения
+    heightOriginal(int) - высота эталонного изображения
     """
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
@@ -223,9 +244,12 @@ def getMask():
 def mancompare(threshlevel):
     """
     Сравнивает маску, полученную функцией getMask со рисунками на каждом печенье.
+
+    Параметры:
+    threshlevel (int) - число от 0 до 255. Значение порога для threshold, применяемое для эталонного изображения
     """
     #Читаем нужные изображения
-    original = cv2.imread("cookie1/12.jpg",1)
+    original = cv2.imread("cookie1/7.jpg",1)
     mask = cv2.imread("mask.png", 0)
     widthOriginal = mask.shape[1]
     heightOriginal  = mask.shape[0]
