@@ -171,7 +171,7 @@ def findCookies(imgOrPath):
 
     contours = cv2.findContours(blankSpace.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:contoursNumber]
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
     cv2.imshow('picture', contours)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

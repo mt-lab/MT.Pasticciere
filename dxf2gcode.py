@@ -88,7 +88,14 @@ def organizePath(elements, start_point=(0, 0)):
 
 
 def processPath(path, offset=(0, 0), pathToPly=PCD_PATH):
-    # read pcd
+    """
+    Обработка элементов рисунка, их нарезка (slicing), смещение и добавление координаты по Z
+
+    :param path: массив элементов
+    :param offset: смещение
+    :param pathToPly: путь до облака точек
+    :return: None
+    """
     pcd, pcd_xy, pcd_z = read_pcd(pathToPly)
     # slice dxf and add volume to it, also add offset
     for element in path:
@@ -97,26 +104,43 @@ def processPath(path, offset=(0, 0), pathToPly=PCD_PATH):
         element.add_z(pcd_xy, pcd_z)
 
 
-def writeGcode(gcode_instructions, filename='cookie.gcode'):
+def writeGcode(gcodeInstructions, filename='cookie.gcode'):
+    """
+    Генерирует текстовый файл с инструкциями для принтера
+
+    :param gcodeInstructions: массив строк с командами для принтера
+    :param filename: имя файла для записи команд
+    :return: None
+    """
     with open(filename, 'w+') as gcode:
-        for line in gcode_instructions:
+        for line in gcodeInstructions:
             gcode.write(line + '\n')
 
 
 def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
+    """
+    Функция обработки dxf в Gcode
+
+    :param pathToDxf: путь до рисунка
+    :param pathToPly: путь до облака точек
+    :param offset: смещение рисунка
+    :return: None
+    """
+    # прочесть dxf
     dxf = ez.readfile(pathToDxf)
+    # пространство элементов модели
     msp = dxf.modelspace()
-    # get all entities from dxf
-    elements_heap = dxfReader(dxf, msp)
+    # получить все элементы из рисунка
+    elementsHeap = dxfReader(dxf, msp)
 
-    # organize path
-    path = organizePath(elements_heap)
+    # сформировать порядок элементов для печати
+    path = organizePath(elementsHeap)
 
-    # slice dxf and add volume to it, also add offset
+    # нарезать рисунок, сместить, добавить координату Z
     processPath(path, offset, pathToPly)
 
-    # generate gcode instructions as array
-    gcode_instructions = gcode_generator(path)
+    # сгенерировать инструкции для принтера
+    gcodeInstructions = gcode_generator(path)
 
-    # write gcode to text file
-    writeGcode(gcode_instructions)
+    # записать инструкции в текстовый файл
+    writeGcode(gcodeInstructions)
