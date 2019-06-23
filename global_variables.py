@@ -35,6 +35,10 @@ def get_setting(path, section, setting):
 
 config_path = 'settings.ini'
 X, Y, Z = 0, 1, 2
+hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')[1:-1]
+hsvUpperBoundString = get_setting(config_path, 'Scanner', 'hsv_max')[1:-1]
+hsvLowerBound = [int(hsvLowerBoundString.split(', ')[i]) for i in range(len(hsvLowerBoundString.split(', ')))]
+hsvUpperBound = [int(hsvUpperBoundString.split(', ')[i]) for i in range(len(hsvUpperBoundString.split(', ')))]
 accuracy = float(get_setting(config_path, 'GCoder', 'accuracy'))
 step = float(get_setting(config_path, 'GCoder', 'slice_step'))
 DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')

@@ -60,8 +60,8 @@ def generatePly(pointsArray, filename='cloud.ply'):
             cloud.write(point)
             # print(f'{count:{6}}/{len(ply):{6}} points recorded')
     print(f'{len(ply):{6}} points recorded')
-    time_passed = time.time() - start
-    print(f'Done for {time_passed:.2f} sec\n')
+    timePassed = time.time() - start
+    print(f'Done for {timePassed:.2f} sec\n')
 
 
 def findZeroLevel(img):
@@ -72,8 +72,8 @@ def findZeroLevel(img):
     :param img - изображение
     :return: индекс строки
     """
-    row_sum = img.sum(axis=1)
-    return np.argmax(row_sum)
+    rowSum = img.sum(axis=1)
+    return np.argmax(rowSum)
 
 
 def lineThinner(img, upperBound=0):
@@ -103,9 +103,7 @@ def getMask(img, zero_level=0):
     """
     img = img[zero_level:, :]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    low_bound = np.array([0, 0, 129])
-    up_bound = np.array([180, 255, 255])
-    mask = cv2.inRange(hsv, low_bound, up_bound)
+    mask = cv2.inRange(hsv, hsvLowerBound, hsvUpperBound)
     blur = cv2.medianBlur(mask, 3, 0)
     ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     mask = lineThinner(th3, zero_level)
@@ -233,8 +231,8 @@ def scan(pathToVideo=VID_PATH):
             frameIdx += 1
             print('%03d/%03d processed for %03d sec' % (frameIdx, frameCount, time.time() - start))
         else:
-            time_passed = time.time() - start
-            print('Done. Time passed %03d sec\n' % time_passed)
+            timePassed = time.time() - start
+            print('Done. Time passed %03d sec\n' % timePassed)
             break
     cap.release()
     cv2.imwrite('scanned.png', newPly)
