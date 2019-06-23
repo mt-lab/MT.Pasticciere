@@ -1,3 +1,11 @@
+"""
+elements.py
+Author: bedlamzd of MT.lab
+
+Классы для переопределения элементов в dxf для удобства использования,
+т.к. ezdxf не предоставляет методов необходимых для решения задачи.
+"""
+
 import ezdxf as ez
 import numpy as np
 from utilities import *
@@ -6,7 +14,17 @@ from math import sqrt, cos, sin, pi
 
 
 class Element:
+    """
+    Общий класс с функциями общими для всех элементов, многие оверрайдятся в конкретных случаях
+    """
     def __init__(self, entity, first=(0, 0), last=(0, 0)):
+        """
+        Конструктор объекта
+
+        :param entity: элемент из dxf
+        :param first: первая точка элемента
+        :param last: последняя точка элемента
+        """
         self.entity = entity
         self.points = []
         self.first = first
@@ -16,7 +34,13 @@ class Element:
         self.offset = (0, 0)
         self.length = 0
 
-    def set_offset(self, offset=(0, 0)):
+    def setOffset(self, offset=(0, 0)):
+        """
+        Задать смещение для рисунка (добавить к нарезанным координатам смещение)
+
+        :param offset: величина смещение
+        :return: None
+        """
         if len(self.sliced) != 0:
             for point in self.sliced:
                 point[X] -= self.offset[X]
@@ -27,22 +51,42 @@ class Element:
         else:
             print('nothing to offset')
 
-    def best_distance(self, point):
-        dist_to_first = sqrt(abs(self.first[X] - point[X]) ** 2 + abs(self.first[Y] - point[Y]) ** 2)
-        dist_to_last = sqrt(abs(self.last[X] - point[X]) ** 2 + abs(self.last[Y] - point[Y]) ** 2)
-        self.backwards = dist_to_last < dist_to_first
-        return min(dist_to_first, dist_to_last)
+    def bestDistance(self, point):
+        """
+        Вычисляет с какой стороны точка находится ближе к элементу и ориентирует его соответственно
 
-    def get_points(self):
+        :param point: точка от которой считается расстояние
+        :return: минимальное расстояние до одного из концов объекта
+        """
+        dist2first = sqrt(abs(self.first[X] - point[X]) ** 2 + abs(self.first[Y] - point[Y]) ** 2)
+        dist2last = sqrt(abs(self.last[X] - point[X]) ** 2 + abs(self.last[Y] - point[Y]) ** 2)
+        self.backwards = dist2last < dist2first
+        return min(dist2first, dist2last)
+
+    def getPoints(self):
+        """
+        Возвращает точки как из dxf
+        """
         return self.points if not self.backwards else self.points[::-1]
 
-    def get_sliced_points(self):
+    def getSlicedPoints(self):
+        """
+        Возвращает нарезанные координаты
+        """
         return self.sliced if not self.backwards else self.sliced[::-1]
 
-    def get_length(self):
+    def getLength(self):
+        """
+        Рассчитать длину элемента
+        """
         pass
 
     def slice(self, step=1):
+        """
+        Нарезать элемент на более менее линии с заданным шагом
+        :param step: шаг нарезки
+        :return:
+        """
         for start, end in pairwise(self.points):
             for p in diap(start, end, step):
                 p = list(p)
@@ -52,7 +96,13 @@ class Element:
                     p = p[:3]
                 self.sliced.append(p)
 
-    def add_z(self, pcd_xy, pcd_z):
+    def addZ(self, pcd_xy, pcd_z):
+        """
+        Добавить координату Z к элементу
+        :param pcd_xy: часть облака точек с X и Y координатами
+        :param pcd_z: часть облака точек с Z координатами
+        :return: None
+        """
         if len(self.sliced) != 0:
             for p in self.sliced:
                 p[Z] = find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset)
@@ -62,15 +112,18 @@ class Element:
 
 
 class Polyline(Element):
+    """
+    Подкласс для элемента Полилиния из dxf
+    """
     def __init__(self, polyline):
         super().__init__(polyline)
         self.points = [point for point in polyline.points()]
         self.first = self.points[0]
         self.last = self.points[-1]
         self.sliced = []
-        self.length = self.get_length()
+        self.length = self.getLength()
 
-    def get_length(self):
+    def getLength(self):
         length = 0
         for p1, p2 in pairwise(self.points):
             length += distance(p1, p2)
@@ -78,6 +131,9 @@ class Polyline(Element):
 
 
 class Spline(Element):
+    """
+    Подкласс для объека Сплайн
+    """
     def __init__(self, spline):
         super().__init__(spline)
         self.points = [point for point in spline.control_points]
@@ -87,40 +143,46 @@ class Spline(Element):
 
 
 class Line(Element):
+    """
+    Подкласс для объекта Линия
+    """
     def __init__(self, line):
         super().__init__(line)
         self.points = [line.dxf.start, line.dxf.end]
         self.first = self.points[0]
         self.last = self.points[-1]
         self.sliced = []
-        self.length = self.get_length()
+        self.length = self.getLength()
 
-    def get_length(self):
+    def getLength(self):
         return distance(self.first, self.last)
 
 
 class Circle(Element):
+    """
+    Подкласс для объекта Окружность
+    """
     def __init__(self, circle):
         super().__init__(circle)
         self.center = circle.dxf.center
         self.radius = circle.dxf.radius
-        self.start_angle = 0
-        self.end_angle = 2 * pi
+        self.startAngle = 0
+        self.endAngle = 2 * pi
         self.first = (
-            self.center[X] + self.radius * cos(self.start_angle), self.center[Y] + self.radius * sin(self.start_angle))
+            self.center[X] + self.radius * cos(self.startAngle), self.center[Y] + self.radius * sin(self.startAngle))
         self.last = (
-            self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
+            self.center[X] + self.radius * cos(self.endAngle), self.center[Y] + self.radius * sin(self.endAngle))
         self.points = [self.first, self.last]
         self.sliced = []
-        self.length = self.get_length()
+        self.length = self.getLength()
 
-    def get_length(self):
-        return (self.end_angle - self.start_angle) * self.radius
+    def getLength(self):
+        return (self.endAngle - self.startAngle) * self.radius
 
     def slice(self, step=1):
-        angle_step = step / self.radius * (self.end_angle - self.start_angle) / abs(
-            self.end_angle - self.start_angle)  # в радианах с учетом знака
-        for angle in np.arange(self.start_angle, self.end_angle, angle_step):
+        angle_step = step / self.radius * (self.endAngle - self.startAngle) / abs(
+            self.endAngle - self.startAngle)  # в радианах с учетом знака
+        for angle in np.arange(self.startAngle, self.endAngle, angle_step):
             p = [self.radius * cos(angle) + self.center[X], self.radius * sin(angle) + self.center[Y], 0]
             self.sliced.append(p)
         last = list(self.last)
@@ -132,16 +194,19 @@ class Circle(Element):
 
 
 class Arc(Circle):
+    """
+    Подклас для объекта Дуга
+    """
     def __init__(self, arc):
         super().__init__(arc)
-        self.start_angle = arc.dxf.start_angle * pi / 180  # в радианах
-        self.end_angle = arc.dxf.end_angle * pi / 180  # в радианах
-        if self.start_angle > self.end_angle:
-            self.end_angle += 2 * pi
+        self.startAngle = arc.dxf.start_angle * pi / 180  # в радианах
+        self.endAngle = arc.dxf.end_angle * pi / 180  # в радианах
+        if self.startAngle > self.endAngle:
+            self.endAngle += 2 * pi
         self.first = (
-            self.center[X] + self.radius * cos(self.start_angle), self.center[Y] + self.radius * sin(self.start_angle))
+            self.center[X] + self.radius * cos(self.startAngle), self.center[Y] + self.radius * sin(self.startAngle))
         self.last = (
-            self.center[X] + self.radius * cos(self.end_angle), self.center[Y] + self.radius * sin(self.end_angle))
+            self.center[X] + self.radius * cos(self.endAngle), self.center[Y] + self.radius * sin(self.endAngle))
         self.points = [self.first, self.last]
         self.sliced = []
-        self.length = self.get_length()
+        self.length = self.getLength()

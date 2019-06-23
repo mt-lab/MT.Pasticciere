@@ -74,7 +74,7 @@ def organizePath(elements, start_point=(0, 0)):
     """
     path = []
     # сортировать элементы по их удалению от точки
-    elements.sort(key=lambda x: x.best_distance(start_point))
+    elements.sort(key=lambda x: x.bestDistance(start_point))
     while len(elements) != 0:
         # первый элемент в списке (ближайший к заданной точке) - текущий
         current = elements[0]
@@ -83,7 +83,7 @@ def organizePath(elements, start_point=(0, 0)):
         # убрать этот элемент из неотсортированного списка
         elements.pop(0)
         # отсортировать элементы по их удалению от последней точки предыдущего элемента
-        elements.sort(key=lambda x: x.best_distance(current.get_points()[-1]))
+        elements.sort(key=lambda x: x.bestDistance(current.getPoints()[-1]))
     return path
 
 
@@ -100,8 +100,8 @@ def processPath(path, offset=(0, 0), pathToPly=PCD_PATH):
     # slice dxf and add volume to it, also add offset
     for element in path:
         element.slice(step)
-        element.set_offset(offset)
-        element.add_z(pcd_xy, pcd_z)
+        element.setOffset(offset)
+        element.addZ(pcd_xy, pcd_z)
 
 
 def writeGcode(gcodeInstructions, filename='cookie.gcode'):

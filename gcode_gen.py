@@ -17,7 +17,7 @@ def gcode_generator(path):
     last_point = (0, 0, 0)
     E = 0
     for count, element in enumerate(path):
-        way = element.get_sliced_points()
+        way = element.getSlicedPoints()
         gcode.append('; %03d element' % (count + 1))
         if distance(last_point, way[0]) > accuracy:
             gcode.append(str(GCodeRapidMove(Z=Z_up)))
