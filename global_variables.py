@@ -1,5 +1,6 @@
 import configparser
 
+# TODO: рефактор и комментарии
 
 def get_config(path):
     """

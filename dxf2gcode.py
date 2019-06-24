@@ -126,6 +126,9 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
     :param offset: смещение рисунка
     :return: None
     """
+    # TODO: переписать под работу с классом печенек и избавиться от
+    #  назначения смещения в этой функции
+
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
     # пространство элементов модели

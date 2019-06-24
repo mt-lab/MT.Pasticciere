@@ -5,7 +5,7 @@ from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
-
+# TODO: рефактор и комментарии
 
 def pairwise(iterable):
     """ s -> (s0,s1), (s1,s2), (s2, s3), ... """
