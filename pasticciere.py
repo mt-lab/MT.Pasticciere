@@ -21,7 +21,8 @@ import time
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
 fh = logging.FileHandler("pasticciere.log")
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(r'%(asctime)s - %(name)s - \
+                              %(levelname)s - %(message)s')
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 logger.info("Запуск программы")
@@ -31,7 +32,7 @@ def get_config(path):
     """
     Выбор файла настроек
 
-    path - путь к файлу
+    path (str) - путь к файлу
     """
     config = configparser.ConfigParser()
     config.read(path)
@@ -42,10 +43,10 @@ def update_setting(path, section, setting, value):
     """
     Обновление параметра в файле настроек
 
-    path - путь к файлу настроек
-    section - название секции
-    setting - название параметра в секции
-    value - значение параметра
+    path (str) - путь к файлу настроек
+    section (str) - название секции
+    setting (str) - название параметра в секции
+    value (str) - значение параметра
     """
     config = get_config(path)
     config.set(section, setting, value)
@@ -57,9 +58,9 @@ def get_setting(path, section, setting):
     """
     Выводим значение из настроек
 
-    path - путь к файлу настроек
-    section - название секции
-    setting - название параметра в секции
+    path (str) - путь к файлу настроек
+    section (str) - название секции
+    setting (str) - название параметра в секции
     """
     config = get_config(path)
     value = config.get(section, setting)
@@ -74,11 +75,11 @@ def getFile(host, port, name, password, file):
     """
     Забирает файл с удалённого устройства не меняя имени файла
 
-    host - ip-адрес устройства
-    port - порт для соединения с устройством
-    name - имя пользователя ssh
-    password - пароль пользователя ssh
-    file - имя файла на удалённом устройстве
+    host (str) - ip-адрес устройства
+    port (int) - порт для соединения с устройством
+    name (str) - имя пользователя ssh
+    password (str) - пароль пользователя ssh
+    file (str) - имя файла на удалённом устройстве
     """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
@@ -95,11 +96,11 @@ def sendFile(host, port, name, password, file):
     """
     Забирает файл с удалённого устройства не меняя имени файла
 
-    host - ip-адрес устройства
-    port - порт для соединения с устройством
-    name - имя пользователя ssh
-    password - пароль пользователя ssh
-    file - имя файла на удалённом устройстве
+    host (str) - ip-адрес устройства
+    port (int) - порт для соединения с устройством
+    name (str) - имя пользователя ssh
+    password (str) - пароль пользователя ssh
+    file (str) - имя файла на удалённом устройстве
     """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
@@ -249,6 +250,9 @@ def getScan():
 
 
 def getPrinted():
+    """
+    Отправляет файл на устройство и требует его распечатать
+    """
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
