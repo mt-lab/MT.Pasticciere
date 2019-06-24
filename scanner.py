@@ -213,7 +213,8 @@ def scan(pathToVideo=VID_PATH):
             # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
                 for imgY in range(zeroLevel + 1, img.shape[0]):
-                    # если пиксель белый и высота больше погрещности, то посчитать координаты точки, записать в массив
+                    # если пиксель белый и высота больше погрешности,
+                    # то посчитать координаты точки, записать в массив
                     if img.item(imgY, imgX) and (imgY - zeroLevel) * Kz > accuracy:
                         # zmax = max(zmax, imgY - zeroLevel)
                         ply[pointIdx, X] = frameIdx * Kx + X_0
@@ -223,16 +224,16 @@ def scan(pathToVideo=VID_PATH):
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
                 else:
-                    # если белых пикселей в стобце нет, записать уровень стола
+                    # если белых пикселей в стобце нет или высота меньше погрешности, записать уровень стола
                     ply[pointIdx, X] = frameIdx * Kx + X_0
                     ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
                     ply[pointIdx, Z] = Z_0
                 pointIdx += 1
             frameIdx += 1
-            print('%03d/%03d processed for %03d sec' % (frameIdx, frameCount, time.time() - start))
+            print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:{3}} sec')
         else:
             timePassed = time.time() - start
-            print('Done. Time passed %03d sec\n' % timePassed)
+            print(f'Done. Time passed {timePassed:{3}} sec\n')
             break
     cap.release()
     cv2.imwrite('scanned.png', newPly)
