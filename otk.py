@@ -123,11 +123,12 @@ def getMainContour(mask):
     Параметры:
     mask(array) – одноканальное изображение в grayscale.
     """
-    cnt = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    cnt= cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     cnt = imutils.grab_contours(cnt)
+    contoursNumber = len(cnt)
     cnt = sorted(cnt, key = cv2.contourArea, reverse = True)[:1]
     mainCnt = cnt[0]
-    return mainCnt
+    return mainCnt, contoursNumber
 
 def cropAndRotation(cnt,table):
     """
@@ -187,15 +188,15 @@ def cropAndRotation2(cnt,table,widthOriginal,heightOriginal):
     y1 = min(Ys)
     y2 = max(Ys)
 
-    x1Corrected = x1-int(((x2-x1)*(mult-1)/2))
-    x2Corrected = x2+int(((x2-x1)*(mult-1)/2))
-    y1Corrected = y1-int(((y2-y1)*(mult-1)/2))
-    y2Corrected = y2+int(((y2-y1)*(mult-1)/2))
+    x1Corrected = x1-int(((x2-x1)*(mult-1))/2)
+    x2Corrected = x2+int(((x2-x1)*(mult-1))/2)
+    y1Corrected = y1-int(((y2-y1)*(mult-1))/2)
+    y2Corrected = y2+int(((y2-y1)*(mult-1))/2)
 
     x1Corrected = 0 if x1Corrected<0 else x1Corrected
     x2Corrected = 824 if x2Corrected>824 else x2Corrected
     y1Corrected = 0 if y1Corrected<0 else y1Corrected
-    y2Corrected = 713 if y2Corrected>713 else y2Corrected
+    y2Corrected = 714 if y2Corrected>714 else y2Corrected
 
     for i in range (y1Corrected,y2Corrected):
         for j in range(x1Corrected,x2Corrected):
@@ -249,7 +250,7 @@ def mancompare(threshlevel):
     threshlevel (int) - число от 0 до 255. Значение порога для threshold, применяемое для эталонного изображения
     """
     #Читаем нужные изображения
-    original = cv2.imread("cookie1/7.jpg",1)
+    original = cv2.imread("cookie1/12.jpg",1)
     mask = cv2.imread("mask.png", 0)
     widthOriginal = mask.shape[1]
     heightOriginal  = mask.shape[0]
@@ -264,7 +265,7 @@ def mancompare(threshlevel):
     subplot_counter = 1
     #----------------------------------------------
     defectsCounter = 0 #сюда записывается количество печенья-брака на столе
-    cnt1 = getMainContour(mask)
+    cnt1, contoursNumberOriginal = getMainContour(mask)
     mainСontourLegthOriginal = cv2.arcLength(cnt1,True)
     n_white_pix_original = np.sum(mask == 255)
     ax = fig.add_subplot(rows, columns, subplot_counter)
@@ -274,6 +275,7 @@ def mancompare(threshlevel):
     subplot_counter+=1
     print("ideal number of white pixels",n_white_pix_original)
     print("ideal length",mainСontourLegthOriginal)
+    print("ideal number of contours", contoursNumberOriginal)
     contours, table = segmentation(original)
     original_table = table.copy()
 
@@ -284,7 +286,7 @@ def mancompare(threshlevel):
         gray = cv2.cvtColor(croppedRotated, cv2.COLOR_BGR2GRAY)
         median = getPattern(gray,threshlevel)
         #нахождение внешнего контура, его длины и оценка формы
-        cnt2 = getMainContour(median)
+        cnt2, contoursNumber = getMainContour(median)
         main_contour_legth = cv2.arcLength(cnt2,True)
         mask_RGB=cv2.cvtColor(median, cv2.COLOR_GRAY2RGB)
         cv2.drawContours(mask_RGB,[cnt2],0,(0,0,255),2)
@@ -300,9 +302,10 @@ def mancompare(threshlevel):
         print("match_shapes_result:",match_shapes_result)
         print("main_contour_legth:",main_contour_legth)
         print("number of white pixels:",n_white_pix)
+        print("contoursNumber",contoursNumber)
         print("-------------------------------------")
         subplot_counter+=1
-        if ((abs(n_white_pix_original - n_white_pix)>numPixelsTolerance*n_white_pix_original) | (match_shapes_result > shapeCompareTolerance) | (abs(mainСontourLegthOriginal - main_contour_legth)>contourLengthTolerance*mainСontourLegthOriginal)):
+        if ((abs(n_white_pix_original - n_white_pix)>numPixelsTolerance*n_white_pix_original) | (abs(mainСontourLegthOriginal - main_contour_legth)>contourLengthTolerance*mainСontourLegthOriginal)|(contoursNumberOriginal != contoursNumber)):
             defectsCounter +=1
             cv2.drawContours(original_table,[box],0,(0,0,255),2)
         else:
