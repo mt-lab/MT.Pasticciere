@@ -15,8 +15,8 @@ import imutils
 import os
 
 # координаты фактического начала стола относительно глобальных координат принтера в мм
-X_0 = 0
-Y_0 = 0
+X_0 = 188
+Y_0 = 89
 Z_0 = 0
 
 # максимальная высота на которую может подняться сопло, мм
@@ -113,7 +113,7 @@ def getMask(img, zero_level=0):
     return mask
 
 
-def findCookies(imgOrPath):
+def findCookies(imgOrPath='scanned.png'):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты глубины
     :param img:
@@ -158,7 +158,7 @@ def findCookies(imgOrPath):
         cv2.drawContours(result, [rect], 0, (0, 0, 255), 2)
     cookies = []
     for rect in rectangles:
-        center = (rect[0][X] * Ky, rect[0][Y] * Kx)  # позиция печеньки на столе в мм
+        center = (rect[0][X] * Ky + Y_0, rect[0][Y] * Kx + X_0)  # позиция печеньки на столе в мм
         width = rect[1][X] * Ky
         length = rect[1][Y] * Kx
         rotation = rect[2]  # вращение прямоугольника в углах
@@ -185,7 +185,7 @@ def scan(pathToVideo=VID_PATH):
     numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
     ply = np.zeros((numberOfPoints, 3))  # массив облака точек
     newPly = np.zeros((frameCount, Xend - Xnull))  # массив карты глубины
-    zeroLevel = 10  # нулевой уровень в пикселях
+    zeroLevel = 271  # нулевой уровень в пикселях
     # zmax = 0 # максимальное отклонение по z в пикселях
 
     start = time.time()
@@ -197,7 +197,8 @@ def scan(pathToVideo=VID_PATH):
             img = getMask(frame)
             # для первого кадра получить индекс нулевого уровня
             if frameIdx == 0:
-                zeroLevel = findZeroLevel(img)
+                pass
+                # zeroLevel = findZeroLevel(img)
                 # print(zeroLevel)
             # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
