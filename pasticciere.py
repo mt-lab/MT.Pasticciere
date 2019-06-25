@@ -138,6 +138,8 @@ def getHome():
     console.send('connect\n')
     time.sleep(2)
     console.send('home\n')
+    print("Подана команда домой")
+    logger.info("Подана команда домой")
     time.sleep(1)
     console.send('exit\n')
     client.close()
@@ -147,6 +149,8 @@ def getOtk():
     """
     Фотографирование и получение файла для проведения контроля качества
     """
+    print("Запрос на получение снимка")
+    logger.info("Запрос на получение снимка")
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
@@ -172,6 +176,8 @@ def getOtk():
     sftp.put(localpath, remotepath)
     sftp.close()
     transport.close()
+    print("Снимок получен")
+    logger.info("Снимок получен")
 
 
 def stop():
@@ -203,6 +209,8 @@ def getScan():
     """
     Проведение сканирования на удалённом устройстве и получение видеофайла
     """
+    logger.info("Начало сканирования")
+    print("Начало сканирования")
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
@@ -217,7 +225,7 @@ def getScan():
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=17')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=9')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=89')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=10')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=116')
@@ -225,8 +233,6 @@ def getScan():
                          --set-ctrl=white_balance_temperature=2800')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=78')
     client.exec_command('v4l2-ctl -d /dev/video2 -p 15')
-
-    logger.info("Параметры camera отправлены")
 
     console = client.invoke_shell()
     console.keep_this = client
@@ -239,27 +245,26 @@ def getScan():
     console.send('G0 Z33\n')
     time.sleep(1)
     console.send('G0 X188 Y89\n')
-    logger.info("Onposition sleeping")
     time.sleep(3)
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
                         -i /dev/video2 -t 00:00:10 -vcodec mpeg4 \
                         -y scanner.mp4')
-    logger.info("camera on")
     time.sleep(5)
-    logger.info("wakeupneo")
     console.send('G1 X286\n')
     time.sleep(1)
     console.send('home\n')
     console.send('exit\n')
-    logger.info("kon4ilizakuril")
     time.sleep(15)
     channel.close()
     client.close()
-    logger.info("startfiletransfer")
     getFile(host, port, sshUsername1, sshPassword1, 'scanner.mp4')
+    print("Получен файл с камеры")
+    logger.info("Получен файл с камеры")
 
 
 def getPrinted():
+    print("Отправка задания на печать")
+    logger.info("Отправка задания на печать")
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
@@ -289,6 +294,8 @@ def getPrinted():
     console.send('exit\n')
     channel.close()
     client.close()
+    print("Печать выполнена")
+    logger.info("Печать выполнена")
 
 
 def mancomparing():
@@ -298,7 +305,7 @@ def mancomparing():
     check = otk.mancompare(get_setting(path, "OTK", "threshlevel"))
     if check == "no":
         mb.showerror("Внимание!", "Печать с браком!")
-        logger.info("Печать с браком!")
+        logger.error("Печать с браком!")
 
 
 def gcoder():
@@ -312,6 +319,7 @@ def gcoder():
     update_setting(path, "GCoder", "dxfpath", pathToDxf)
     dxf = get_setting(path, "GCoder", "dxfpath")
     ply = get_setting(path, "GCoder", "pointcloudpath")
+    window.update()
     logger.info("Начало генерации g-code")
     dxf2gcode.dxf2gcode(dxf, ply)
     logger.info("Gcode получен")
@@ -385,7 +393,7 @@ lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
-ltask = tk.Label(window, text=".." + addressCutter
+ltask = tk.Label(window, textvariable=".." + addressCutter
                  (get_setting(path, "GCoder", "dxfpath")))
 ltask.grid(row=1, column=2)
 home = tk.Button(text="Домой", command=getHome)
@@ -418,7 +426,4 @@ icon = tk.Image("photo", file="icon.gif")
 window.tk.call('wm', 'iconphoto', window._w, icon)
 window.title('MT.Pasticciere v.0.2 (Cool Cactus)')
 window.geometry("1280x400+10+10")
-menu = tk.Menu(window)
-menu.add_command(label='Обновить')
-window.config(menu=menu)
 window.mainloop()
