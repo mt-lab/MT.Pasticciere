@@ -147,7 +147,7 @@ def writeGcode(gcodeInstructions, filename='cookie.gcode'):
             gcode.write(line + '\n')
 
 
-def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=cookieCenter):
+def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0,0)):
     """
     Функция обработки dxf в Gcode
 
