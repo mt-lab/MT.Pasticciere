@@ -10,7 +10,7 @@ from global_variables import *
 from elements import *
 from utilities import *
 from scanner import *
-from pygcode import *
+import pygcode as pg
 
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 extrusionCoefficient = 0.41
@@ -29,13 +29,13 @@ def gcode_generator(path, preGcode=[], postGcode=[]):
         way = element.getSlicedPoints()
         gcode.append(f'; {count:3d} element')
         if distance(last_point, way[0]) > accuracy:
-            gcode.append(str(GCodeRapidMove(Z=Z_up)))
-            gcode.append(str(GCodeRapidMove(X=way[0][X], Y=way[0][Y])))
-            gcode.append(str(GCodeRapidMove(Z=way[0][Z])))
+            gcode.append(str(pg.GCodeRapidMove(Z=Z_up)))
+            gcode.append(str(pg.GCodeRapidMove(X=way[0][X], Y=way[0][Y])))
+            gcode.append(str(pg.GCodeRapidMove(Z=way[0][Z])))
             last_point = way[0]
         for point in way[1:]:
             E += round(extrusionCoefficient * distance(last_point, point), 3)
-            gcode.append(str(GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + f' E{E:3.3f}')
+            gcode.append(str(pg.GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + f' E{E:3.3f}')
             last_point = point
         last_point = way[-1]
     return gcode
