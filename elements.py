@@ -105,10 +105,10 @@ class Element:
         """
         if len(self.sliced) != 0:
             for p in self.sliced:
-                p[Z] = find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset)
+                p[Z] = findPointInCloud(p, pcd_xy, pcd_z, self.offset)
         elif len(self.points) != 0:
             for p in self.points:
-                p.append(find_point_in_Cloud(p, pcd_xy, pcd_z, self.offset))
+                p.append(findPointInCloud(p, pcd_xy, pcd_z, self.offset))
 
 
 class Polyline(Element):
