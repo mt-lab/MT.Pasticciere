@@ -226,12 +226,13 @@ def getScan():
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=9')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=89')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=10')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=116')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=30')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=0')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=67')
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature=2800')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=78')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=156')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=sharpness=0')
     client.exec_command('v4l2-ctl -d /dev/video2 -p 15')
 
     console = client.invoke_shell()
