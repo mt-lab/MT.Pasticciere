@@ -361,7 +361,7 @@ def getstatus():
     steplabel = tk.Label(statuswin, text="Размер шага:")
     steplabel.grid(row=0, column=0)
     stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                     "accuracy"))
+                                                     "accuracy")+" мм")
     stepvalue.grid(row=1, column=0)
     videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
     videolabel.grid(row=2, column=0)
