@@ -112,8 +112,8 @@ def getMask(img, zero_level=0):
     ret2,gaussThresh = cv2.threshold(gauss,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
     gaussThin = lineThinner(gaussOp,zero_level)
-    cv2.imshow('w', gaussThin)
-    cv2.waitKey(15)
+    # cv2.imshow('w', gaussThin)
+    # cv2.waitKey(15)
 
 
     # blur = cv2.medianBlur(mask, 3, 0)
