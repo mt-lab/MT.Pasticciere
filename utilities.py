@@ -1,10 +1,11 @@
 from itertools import tee
+from functools import reduce
 from global_variables import *
 from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
-
+# TODO: рефактор и комментарии
 
 def pairwise(iterable):
     """ s -> (s0,s1), (s1,s2), (s2, s3), ... """
@@ -42,6 +43,10 @@ def diap(start, end, step=1):
         # вернуть конечную точку, если мы в неё не попали при нарезке
         x, y = round(end[X], 3), round(end[Y], 3)
         yield (x, y)
+
+
+def avg(*arg):
+    return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
 def distance(p1, p2):

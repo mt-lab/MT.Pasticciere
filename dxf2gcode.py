@@ -9,8 +9,11 @@ import ezdxf as ez
 from global_variables import *
 from elements import *
 from utilities import *
+from scanner import *
 from gcode_gen import *
 
+cookies = findCookies()[0]
+cookieCenter = cookies[0][0][::-1]
 
 def dxfReader(dxf, modelspace, elementsHeap=[]):  # at first input is modelspace
     """
@@ -117,7 +120,7 @@ def writeGcode(gcodeInstructions, filename='cookie.gcode'):
             gcode.write(line + '\n')
 
 
-def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
+def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=cookieCenter):
     """
     Функция обработки dxf в Gcode
 
@@ -126,6 +129,9 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
     :param offset: смещение рисунка
     :return: None
     """
+    # TODO: переписать под работу с классом печенек и избавиться от
+    #  назначения смещения в этой функции
+
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
     # пространство элементов модели
