@@ -12,9 +12,6 @@ from utilities import *
 from scanner import *
 from pygcode import *
 
-# cookies = findCookies()[0]
-# cookieCenter = cookies[0][0][::-1]
-
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 extrusionCoefficient = 0.41
 
@@ -41,6 +38,7 @@ def gcode_generator(path, preGcode=[], postGcode=[]):
             last_point = point
         last_point = way[-1]
     return gcode
+
 
 def dxfReader(dxf, modelspace, elementsHeap=[]):  # at first input is modelspace
     """
@@ -147,7 +145,7 @@ def writeGcode(gcodeInstructions, filename='cookie.gcode'):
             gcode.write(line + '\n')
 
 
-def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0,0)):
+def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
     """
     Функция обработки dxf в Gcode
 
@@ -170,6 +168,8 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0,0)):
     path = organizePath(elementsHeap)
 
     # нарезать рисунок, сместить, добавить координату Z
+    cookies = findCookies()[0]
+    offset = cookies[0][0][::-1]
     processPath(path, offset, pathToPly)
 
     # сгенерировать инструкции для принтера
