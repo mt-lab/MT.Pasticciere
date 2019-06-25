@@ -224,10 +224,13 @@ def scan(pathToVideo=VID_PATH):
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
                 else:
-                    # если белых пикселей в стобце нет или высота меньше погрешности, записать уровень стола
+                    # если белых пикселей в стобце нет или высота меньше погрешности, записать предыдущий уровень
+                    # TODO: обработку точек по ближайшим соседям
                     ply[pointIdx, X] = frameIdx * Kx + X_0
                     ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                    ply[pointIdx, Z] = Z_0
+                    ply[pointIdx, Z] = ply[pointIdx-1 if pointIdx > 0 else 0, Z] + Z_0
+                    # заполнение карты глубины
+                    newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                 pointIdx += 1
             frameIdx += 1
             print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:3.2f} sec')
