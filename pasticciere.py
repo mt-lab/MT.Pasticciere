@@ -1,6 +1,7 @@
 """
 pasticcere.py
 Author: Dmitry K of MT.lab
+mailto: dmitry@kuprianov.su
 
 Главный файл программы, отвечает за отрисовку интерфейса программы и содержит
 функции для передачи данных и команд по сети.
@@ -21,8 +22,7 @@ import time
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
 fh = logging.FileHandler("pasticciere.log")
-formatter = logging.Formatter(r'%(asctime)s - %(name)s - \
-                              %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 logger.info("Запуск программы")
@@ -32,7 +32,7 @@ def get_config(path):
     """
     Выбор файла настроек
 
-    path (str) - путь к файлу
+    path - путь к файлу
     """
     config = configparser.ConfigParser()
     config.read(path)
@@ -43,10 +43,10 @@ def update_setting(path, section, setting, value):
     """
     Обновление параметра в файле настроек
 
-    path (str) - путь к файлу настроек
-    section (str) - название секции
-    setting (str) - название параметра в секции
-    value (str) - значение параметра
+    path - путь к файлу настроек
+    section - название секции
+    setting - название параметра в секции
+    value - значение параметра
     """
     config = get_config(path)
     config.set(section, setting, value)
@@ -58,9 +58,9 @@ def get_setting(path, section, setting):
     """
     Выводим значение из настроек
 
-    path (str) - путь к файлу настроек
-    section (str) - название секции
-    setting (str) - название параметра в секции
+    path - путь к файлу настроек
+    section - название секции
+    setting - название параметра в секции
     """
     config = get_config(path)
     value = config.get(section, setting)
@@ -75,11 +75,11 @@ def getFile(host, port, name, password, file):
     """
     Забирает файл с удалённого устройства не меняя имени файла
 
-    host (str) - ip-адрес устройства
-    port (int) - порт для соединения с устройством
-    name (str) - имя пользователя ssh
-    password (str) - пароль пользователя ssh
-    file (str) - имя файла на удалённом устройстве
+    host - ip-адрес устройства
+    port - порт для соединения с устройством
+    name - имя пользователя ssh
+    password - пароль пользователя ssh
+    file - имя файла на удалённом устройстве
     """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
@@ -87,7 +87,6 @@ def getFile(host, port, name, password, file):
     remotepath = file
     localpath = file
     sftp.get(remotepath, localpath)
-    sftp.put(localpath, remotepath)
     sftp.close()
     transport.close()
 
@@ -96,18 +95,17 @@ def sendFile(host, port, name, password, file):
     """
     Забирает файл с удалённого устройства не меняя имени файла
 
-    host (str) - ip-адрес устройства
-    port (int) - порт для соединения с устройством
-    name (str) - имя пользователя ssh
-    password (str) - пароль пользователя ssh
-    file (str) - имя файла на удалённом устройстве
+    host - ip-адрес устройства
+    port - порт для соединения с устройством
+    name - имя пользователя ssh
+    password - пароль пользователя ssh
+    file - имя файла на удалённом устройстве
     """
     transport = paramiko.Transport((host, port))
     transport.connect(username=name, password=password)
     sftp = paramiko.SFTPClient.from_transport(transport)
     remotepath = file
     localpath = file
-    sftp.get(localpath, remotepath)
     sftp.put(remotepath, localpath)
     sftp.close()
     transport.close()
@@ -219,61 +217,77 @@ def getScan():
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=10')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=17')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=89')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=10')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=116')
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature=2800')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=78')
-    client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
-                        -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
-                        -y scanner.mp4')
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
-                   port=port)
+    client.exec_command('v4l2-ctl -d /dev/video2 -p 15')
+
+    logger.info("Параметры camera отправлены")
+
     console = client.invoke_shell()
     console.keep_this = client
     console.send('pronsole\n')
     time.sleep(1)
     console.send('connect\n')
-    time.sleep(2)
-    console.send('load scanner.gcode\n')
     time.sleep(1)
-    console.send('print\n')
-    time.sleep(9)
+    console.send('home\n')
+    time.sleep(1)
+    console.send('G0 Z33\n')
+    time.sleep(1)
+    console.send('G0 X188 Y89\n')
+    logger.info("Onposition sleeping")
+    time.sleep(3)
+    client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
+                        -i /dev/video2 -t 00:00:10 -vcodec mpeg4 \
+                        -y scanner.mp4')
+    logger.info("camera on")
+    time.sleep(5)
+    logger.info("wakeupneo")
+    console.send('G1 X286\n')
+    time.sleep(1)
+    console.send('home\n')
     console.send('exit\n')
-    time.sleep(17)
+    logger.info("kon4ilizakuril")
+    time.sleep(15)
     channel.close()
     client.close()
+    logger.info("startfiletransfer")
     getFile(host, port, sshUsername1, sshPassword1, 'scanner.mp4')
 
 
 def getPrinted():
-    """
-    Отправляет файл на устройство и требует его распечатать
-    """
     host = get_setting(path, "network", "ip1")
     port = 22
     sshUsername1 = get_setting(path, "network", "user1")
     sshPassword1 = get_setting(path, "network", "pass1")
-    sendFile(host, port, sshUsername1, sshPassword1, "cookie,gcode")
-    time.sleep(2)
+    sendFile(host, port, sshUsername1, sshPassword1, "cookie.gcode")
+    time.sleep(5)
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
                    port=port)
+    channel = client.get_transport().open_session()
+    channel.get_pty()
+    channel.settimeout(5)
     console = client.invoke_shell()
     console.keep_this = client
     console.send('pronsole\n')
     time.sleep(1)
     console.send('connect\n')
-    time.sleep(2)
+    time.sleep(1)
+    console.send('home\n')
+    time.sleep(5)
     console.send('load cookie.gcode\n')
     time.sleep(1)
-    console.send('print')
-    time.sleep(1)
+    console.send('print\n')
+    time.sleep(60)
     console.send('exit\n')
+    channel.close()
     client.close()
 
 
