@@ -104,6 +104,7 @@ def getMask(img, zero_level=0):
     :param zero_level:
     :return: изображение после обработки
     """
+    # TODO: потыкать алгоритм, сделать его мягче, чтобы линия не прерывалась
     img = img[zero_level:, :]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
@@ -215,6 +216,8 @@ def scan(pathToVideo=VID_PATH):
                 for imgY in range(zeroLevel + 1, img.shape[0]):
                     # если пиксель белый и высота больше погрешности,
                     # то посчитать координаты точки, записать в массив
+                    # TODO: разделить генерацию облака и карты высоты
+                    # TODO: написать фильтрацию облака точек с помощью open3d или подобного
                     if img.item(imgY, imgX) and (imgY - zeroLevel) * Kz > accuracy:
                         # zmax = max(zmax, imgY - zeroLevel)
                         ply[pointIdx, X] = frameIdx * Kx + X_0
@@ -231,7 +234,7 @@ def scan(pathToVideo=VID_PATH):
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                 else:
                     # если белых пикселей в стобце нет или высота меньше погрешности, записать предыдущий уровень
-                    # TODO: обработку точек по ближайшим соседям
+                    # TODO: обработку точек по ближайшим соседям или другому алгоритму
                     ply[pointIdx, X] = frameIdx * Kx + X_0
                     ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
                     ply[pointIdx, Z] = Z_0
