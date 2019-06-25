@@ -5,6 +5,8 @@ from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
+
+
 # TODO: рефактор и комментарии
 
 def pairwise(iterable):
@@ -60,7 +62,7 @@ def distance(p1, p2):
     return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
 
 
-def read_pcd(path=PCD_PATH):
+def readPointCloud(path=PCD_PATH):
     """ Read PLY point cloud into numpy array, also split it for xy and z coordinates """
     pcd = []
     with open(path) as cld:
@@ -73,7 +75,7 @@ def read_pcd(path=PCD_PATH):
     return pcd, pcd_xy, pcd_z
 
 
-def find_point_in_Cloud(point, pcd_xy, pcd_z, offset=(0, 0)):
+def findPointInCloud(point, pcd_xy, pcd_z, offset=(0, 0)):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
     # point[X] += offset[X] #-50

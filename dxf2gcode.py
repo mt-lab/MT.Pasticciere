@@ -20,6 +20,7 @@ extrusionCoefficient = 0.41
 def gcode_generator(path, preGcode=[], postGcode=[]):
     # TODO: префиксный и постфиксный Gcode
     # TODO: генерация кода по печенькам
+    # TODO: генерация кода по слоям в рисунке (i.e. отдельным контурам)
     gcode = []
     last_point = (0, 0, 0)
     E = 0
@@ -51,6 +52,7 @@ def dxfReader(dxf, modelspace, elementsHeap=[]):  # at first input is modelspace
     :param elementsHeap: массив в который собираются все элементы
     :return elements_heap: массив со всеми элементами из dxf
     """
+    # TODO: чтение по отдельным слоям (i.e. отдельным контурам)
     for element in modelspace:
         # если элемент это блок, то пройтись через вложенные в него элементы
         if element.dxftype() == 'INSERT':
@@ -124,7 +126,7 @@ def processPath(path, offset=(0, 0), pathToPly=PCD_PATH):
     :param pathToPly: путь до облака точек
     :return: None
     """
-    pcd, pcd_xy, pcd_z = read_pcd(pathToPly)
+    pcd, pcd_xy, pcd_z = readPointCloud(pathToPly)
     # slice dxf and add volume to it, also add offset
     for element in path:
         element.slice(step)
@@ -145,7 +147,7 @@ def writeGcode(gcodeInstructions, filename='cookie.gcode'):
             gcode.write(line + '\n')
 
 
-def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
+def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     """
     Функция обработки dxf в Gcode
 
@@ -154,8 +156,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH, offset=(0, 0)):
     :param offset: смещение рисунка
     :return: None
     """
-    # TODO: переписать под работу с классом печенек и избавиться от
-    #  назначения смещения в этой функции
+    # TODO: переписать под работу с классом печенек
 
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)

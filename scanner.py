@@ -24,9 +24,9 @@ Z_MAX = 30
 
 # масштабные коэффициенты для построения облака точек
 # TODO: сделать автоматический расчёт коэффициентов
-Kz = 6 / 74 # мм/пиксель
-Kx = 1 # мм/кадр
-Ky = 70 / 334  # мм/пиксель
+Kz = 9 / 22  # мм/пиксель
+Kx = 1  # мм/кадр
+Ky = 100 / 447  # мм/пиксель
 # print(Kx, Ky, Kz)
 
 # ширина изображения для обработки, пиксели
@@ -86,7 +86,7 @@ def lineThinner(img, upperBound=0):
     :param upperBound: верхняя граница, выше которой алгоритм применять бессмысленно
     :return: полученное изображение
     """
-    # TODO: переместить в getMask()
+    # TODO: переписать под обработку "сверху" и "снизу"
     newImg = np.zeros(img.shape, dtype="uint8")
     for x in range(img.shape[1]):
         for y in range(img.shape[0] - 1, upperBound, -1):
@@ -107,10 +107,19 @@ def getMask(img, zero_level=0):
     img = img[zero_level:, :]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
-    blur = cv2.medianBlur(mask, 3, 0)
-    ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    mask = lineThinner(th3, zero_level)
-    return mask
+    kernel = np.ones((3, 3), np.uint8)
+    gauss = cv2.GaussianBlur(mask,(15,15),0)
+    ret2,gaussThresh = cv2.threshold(gauss,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    gaussThin = lineThinner(gaussOp,zero_level)
+    cv2.imshow('w', gaussThin)
+    cv2.waitKey(15)
+
+
+    # blur = cv2.medianBlur(mask, 3, 0)
+    # ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # mask = lineThinner(th3, zero_level)
+    return gaussThin
 
 
 def findCookies(imgOrPath='scanned.png'):
@@ -155,7 +164,7 @@ def findCookies(imgOrPath='scanned.png'):
     rectangles = [cv2.minAreaRect(contour) for contour in contours]
     rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
     for idx, rect in enumerate(rectanglesCoords):
-        cv2.drawContours(result, [rect], 0, (0, 0, 255), 2)
+        cv2.drawContours(original, [rect], 0, (0, 0, 255), 2)
     cookies = []
     for rect in rectangles:
         center = (rect[0][X] * Ky + Y_0, rect[0][Y] * Kx + X_0)  # позиция печеньки на столе в мм
@@ -166,7 +175,7 @@ def findCookies(imgOrPath='scanned.png'):
     # cv2.imshow('w', result)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
-    cv2.imwrite('cookies.png', result)
+    cv2.imwrite('cookies.png', original)
     return cookies, result, rectangles, contours
 
 
@@ -186,7 +195,7 @@ def scan(pathToVideo=VID_PATH):
     numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
     ply = np.zeros((numberOfPoints, 3))  # массив облака точек
     newPly = np.zeros((frameCount, Xend - Xnull))  # массив карты глубины
-    zeroLevel = 271  # нулевой уровень в пикселях
+    zeroLevel = 275  # нулевой уровень в пикселях
     # zmax = 0 # максимальное отклонение по z в пикселях
 
     start = time.time()
