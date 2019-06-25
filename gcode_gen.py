@@ -19,9 +19,10 @@ def gcode_generator(path, preGcode=[], postGcode=[]):
     gcode = []
     last_point = (0, 0, 0)
     E = 0
-    for count, element in enumerate(path):
+    gcode.append('G28')
+    for count, element in enumerate(path, 1):
         way = element.getSlicedPoints()
-        gcode.append('; %03d element' % (count + 1))
+        gcode.append(f'; {count:3d} element')
         if distance(last_point, way[0]) > accuracy:
             gcode.append(str(GCodeRapidMove(Z=Z_up)))
             gcode.append(str(GCodeRapidMove(X=way[0][X], Y=way[0][Y])))

@@ -15,18 +15,18 @@ import imutils
 import os
 
 # координаты фактического начала стола относительно глобальных координат принтера в мм
-X_0 = 188
-Y_0 = 89
-Z_0 = 0
+X_0 = 46
+Y_0 = 0
+Z_0 = 5
 
 # максимальная высота на которую может подняться сопло, мм
 Z_MAX = 30
 
-# масштабные коэффициенты для построения облака точек, мм/пиксель
+# масштабные коэффициенты для построения облака точек
 # TODO: сделать автоматический расчёт коэффициентов
-Kz = 6 / 74
-Kx = 60 / 23
-Ky = 70 / 334
+Kz = 6 / 74 # мм/пиксель
+Kx = 1 # мм/кадр
+Ky = 70 / 334  # мм/пиксель
 # print(Kx, Ky, Kz)
 
 # ширина изображения для обработки, пиксели
@@ -63,7 +63,7 @@ def generatePly(pointsArray, filename='cloud.ply'):
             # print(f'{count:{6}}/{len(ply):{6}} points recorded')
     print(f'{len(ply):{6}} points recorded')
     timePassed = time.time() - start
-    print(f'Done for {timePassed:.2f} sec\n')
+    print(f'Done for {timePassed:3.2f} sec\n')
 
 
 def findZeroLevel(img):
@@ -166,6 +166,7 @@ def findCookies(imgOrPath='scanned.png'):
     # cv2.imshow('w', result)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
+    cv2.imwrite('cookies.png', result)
     return cookies, result, rectangles, contours
 
 
@@ -196,8 +197,8 @@ def scan(pathToVideo=VID_PATH):
         if ret == True:
             img = getMask(frame)
             # для первого кадра получить индекс нулевого уровня
-            if frameIdx == 0:
-                pass
+            if frameIdx == 70:
+                cv2.imwrite('sample.png', img)
                 # zeroLevel = findZeroLevel(img)
                 # print(zeroLevel)
             # обработка изображения по столбцам затем строкам
@@ -220,10 +221,10 @@ def scan(pathToVideo=VID_PATH):
                     ply[pointIdx, Z] = Z_0
                 pointIdx += 1
             frameIdx += 1
-            print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:{3}} sec')
+            print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:3.2f} sec')
         else:
             timePassed = time.time() - start
-            print(f'Done. Time passed {timePassed:{3}} sec\n')
+            print(f'Done. Time passed {timePassed:3.2f} sec\n')
             break
     cap.release()
     cv2.imwrite('scanned.png', newPly)
