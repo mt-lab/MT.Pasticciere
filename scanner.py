@@ -108,7 +108,7 @@ def getMask(img, zero_level=0):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
     kernel = np.ones((3, 3), np.uint8)
-    gauss = cv2.GaussianBlur(mask,(15,15),0)
+    gauss = cv2.GaussianBlur(mask,(13,13),0)
     ret2,gaussThresh = cv2.threshold(gauss,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
     gaussThin = lineThinner(gaussOp,zero_level)
@@ -223,14 +223,20 @@ def scan(pathToVideo=VID_PATH):
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
+                    elif img.item(imgY, imgX) and (imgY - zeroLevel) * Kz < accuracy:
+                        ply[pointIdx, X] = frameIdx * Kx + X_0
+                        ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                        ply[pointIdx, Z] = ply[pointIdx -1 if pointIdx > 0 else 0, Z] + Z_0
+                        # заполнение карты глубины
+                        newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                 else:
                     # если белых пикселей в стобце нет или высота меньше погрешности, записать предыдущий уровень
                     # TODO: обработку точек по ближайшим соседям
                     ply[pointIdx, X] = frameIdx * Kx + X_0
                     ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                    ply[pointIdx, Z] = ply[pointIdx-1 if pointIdx > 0 else 0, Z] + Z_0
+                    ply[pointIdx, Z] = Z_0
                     # заполнение карты глубины
-                    newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
+                    newPly[frameIdx, imgX] = Z_0
                 pointIdx += 1
             frameIdx += 1
             print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:3.2f} sec')
