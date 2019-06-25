@@ -394,7 +394,7 @@ lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
 lstat.grid(row=1, column=1)
-ltask = tk.Label(window, textvariable=".." + addressCutter
+ltask = tk.Label(window, text=".." + addressCutter
                  (get_setting(path, "GCoder", "dxfpath")))
 ltask.grid(row=1, column=2)
 home = tk.Button(text="Домой", command=getHome)
