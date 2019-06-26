@@ -38,6 +38,7 @@ def gcode_generator(path, preGcode=[], postGcode=[]):
             gcode.append(str(pg.GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + f' E{E:3.3f}')
             last_point = point
         last_point = way[-1]
+    gcode.append('G28 R20')
     return gcode
 
 
