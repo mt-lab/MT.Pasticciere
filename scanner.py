@@ -25,7 +25,7 @@ Z_MAX = 30
 # масштабные коэффициенты для построения облака точек
 # TODO: сделать автоматический расчёт коэффициентов
 Kz = 9 / 22  # мм/пиксель
-Kx = 1  # мм/кадр
+Kx = 340/150  # мм/кадр
 Ky = 100 / 447  # мм/пиксель
 # print(Kx, Ky, Kz)
 
@@ -108,11 +108,11 @@ def getMask(img, zero_level=0):
     img = img[zero_level:, :]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
-    kernel = np.ones((3, 3), np.uint8)
-    gauss = cv2.GaussianBlur(mask,(13,13),0)
+    # kernel = np.ones((3, 3), np.uint8)
+    gauss = cv2.GaussianBlur(mask,(5,5),0)
     ret2,gaussThresh = cv2.threshold(gauss,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
-    gaussThin = lineThinner(gaussOp,zero_level)
+    # gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    gaussThin = lineThinner(gaussThresh,zero_level)
     # cv2.imshow('w', gaussThin)
     # cv2.waitKey(15)
 
