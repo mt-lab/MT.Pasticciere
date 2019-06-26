@@ -51,7 +51,7 @@ def avg(*arg):
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
-def distance(p1, p2):
+def distance(p1, p2=(0,0)):
     """ Calculate distance between 2 points either 2D or 3D """
     p1 = list(p1)
     p2 = list(p2)
