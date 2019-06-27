@@ -8,8 +8,7 @@ Author: bedlamzd of MT.lab
 
 import ezdxf as ez
 import numpy as np
-from utilities import *
-from global_variables import *
+from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance
 from math import sqrt, cos, sin, pi
 
 
@@ -17,6 +16,7 @@ class Element:
     """
     Общий класс с функциями общими для всех элементов, многие оверрайдятся в конкретных случаях
     """
+
     def __init__(self, entity, first=(0, 0), last=(0, 0)):
         """
         Конструктор объекта
@@ -115,6 +115,7 @@ class Polyline(Element):
     """
     Подкласс для элемента Полилиния из dxf
     """
+
     def __init__(self, polyline):
         super().__init__(polyline)
         self.points = [point for point in polyline.points()]
@@ -134,6 +135,7 @@ class Spline(Element):
     """
     Подкласс для объека Сплайн
     """
+
     def __init__(self, spline):
         super().__init__(spline)
         self.points = [point for point in spline.control_points]
@@ -146,6 +148,7 @@ class Line(Element):
     """
     Подкласс для объекта Линия
     """
+
     def __init__(self, line):
         super().__init__(line)
         self.points = [line.dxf.start, line.dxf.end]
@@ -162,6 +165,7 @@ class Circle(Element):
     """
     Подкласс для объекта Окружность
     """
+
     def __init__(self, circle):
         super().__init__(circle)
         self.center = circle.dxf.center
@@ -197,6 +201,7 @@ class Arc(Circle):
     """
     Подклас для объекта Дуга
     """
+
     def __init__(self, arc):
         super().__init__(arc)
         self.startAngle = arc.dxf.start_angle * pi / 180  # в радианах

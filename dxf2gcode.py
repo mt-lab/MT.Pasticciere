@@ -6,43 +6,58 @@ Author: bedlamzd of MT.lab
 генерация gcode в соответствующий файл
 """
 import ezdxf as ez
-from global_variables import *
+from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH
 from elements import *
-from utilities import *
-from scanner import *
+from utilities import readPointCloud
+from scanner import findCookies
 import pygcode as pg
 
+Z_max = 30
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
-extrusionCoefficient = 0.41
+extrusionCoefficient = 0.41 # коэффицент экструзии, поворот/мм(?)
 
 
 # when path is a set of elements
-def gcode_generator(path, preGcode=[], postGcode=[]):
+def gcode_generator(listOfElements, preGcode=None, postGcode=None):
+    """
+    Генерирует список с командами для принтера
+    :param listOfElements: список элементов из которых состоит рисунок
+    :param preGcode: код для вставки в начало
+    :param postGcode: код для вставки в конец
+    :return gcode: список команд в Gcode
+    """
     # TODO: префиксный и постфиксный Gcode
     # TODO: генерация кода по печенькам
     # TODO: генерация кода по слоям в рисунке (i.e. отдельным контурам)
+    # проверка наличия пре-кода и пост-кода
+    if preGcode is None:
+        preGcode = []
+    if postGcode is None:
+        postGcode = []
     gcode = []
-    last_point = (0, 0, 0)
-    E = 0
-    gcode.append('G28')
-    for count, element in enumerate(path, 1):
+    last_point = (0, 0, 0)  # начало в нуле
+    E = 0  # начальное значение выдавливания глазури (положение мешалки)
+    gcode.append('G28')  # домой
+    # для каждого элемента в рисунке
+    for count, element in enumerate(listOfElements, 1):
         way = element.getSlicedPoints()
-        gcode.append(f'; {count:3d} element')
+        gcode.append(f'; {count:3d} element')  # коммент с номером элемента
         if distance(last_point, way[0]) > accuracy:
+            # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
             gcode.append(str(pg.GCodeRapidMove(Z=Z_up)))
             gcode.append(str(pg.GCodeRapidMove(X=way[0][X], Y=way[0][Y])))
             gcode.append(str(pg.GCodeRapidMove(Z=way[0][Z])))
-            last_point = way[0]
+            last_point = way[0]  # обновить предыдущую точку
         for point in way[1:]:
             E += round(extrusionCoefficient * distance(last_point, point), 3)
             gcode.append(str(pg.GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + f' E{E:3.3f}')
             last_point = point
         last_point = way[-1]
-    gcode.append('G28 R20')
+    gcode.append('G28 R20')  # в конце увести домой
     return gcode
 
 
-def dxfReader(dxf, modelspace, elementsHeap=[]):  # at first input is modelspace
+def dxfReader(dxf, modelspace, elementsHeap=None):  # at first input is modelspace
     """
     Рекуррентная функция
     Собирает данные об элементах в dxf с заходом во все внутренние блоки. При этом описывая их
@@ -54,6 +69,9 @@ def dxfReader(dxf, modelspace, elementsHeap=[]):  # at first input is modelspace
     :return elements_heap: массив со всеми элементами из dxf
     """
     # TODO: чтение по отдельным слоям (i.e. отдельным контурам)
+    if elementsHeap is None:
+        elementsHeap = []
+
     for element in modelspace:
         # если элемент это блок, то пройтись через вложенные в него элементы
         if element.dxftype() == 'INSERT':
@@ -118,7 +136,7 @@ def organizePath(elements, start_point=(0, 0)):
     return path
 
 
-def processPath(path, offset=(0, 0), pathToPly=PCD_PATH):
+def processPath(path, step=1.0, offset=(0, 0), pathToPly=PCD_PATH):
     """
     Обработка элементов рисунка, их нарезка (slicing), смещение и добавление координаты по Z
 
@@ -170,9 +188,10 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     path = organizePath(elementsHeap)
 
     # нарезать рисунок, сместить, добавить координату Z
+    step = sliceStep
     cookies = findCookies()[0]
     offset = cookies[0][0][::-1]
-    processPath(path, offset, pathToPly)
+    processPath(path, step, offset, pathToPly)
 
     # сгенерировать инструкции для принтера
     gcodeInstructions = gcode_generator(path)

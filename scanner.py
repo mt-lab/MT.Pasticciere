@@ -7,12 +7,11 @@ Author: bedlamzd of MT.lab
 
 import numpy as np
 import cv2
-from global_variables import *
-from utilities import *
+from configValues import hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
+from utilities import X, Y, Z
 # from open3d import *  # only for visuals
 import time
 import imutils
-import os
 
 # координаты фактического начала стола относительно глобальных координат принтера в мм
 X_0 = 49
@@ -23,15 +22,29 @@ Z_0 = 5
 Z_MAX = 30
 
 # масштабные коэффициенты для построения облака точек
-# TODO: сделать автоматический расчёт коэффициентов
+# TODO: сделать автоматический расчёт коэффициентов или привязанный к глобальным параметрам принтера
 Kz = 9 / 22  # мм/пиксель
-Kx = 74/214 # мм/кадр
-Ky = 100/447  # мм/пиксель
-# print(Kx, Ky, Kz)
+Kx = 74 / 214  # мм/кадр
+Ky = 100 / 447  # мм/пиксель
 
 # ширина изображения для обработки, пиксели
 Xnull = 0
 Xend = 640
+
+
+def calibrate(video, width: 'in mm', length: 'in mm', height: 'in mm'):
+    """
+    Функция калибровки коэффициентов
+    :param video:
+    :param width:
+    :param length:
+    :param height:
+    :return:
+    """
+    kx = 0
+    ky = 0
+    kz = 0
+    return kx, ky, kz
 
 
 def generatePly(pointsArray, filename='cloud.ply'):
@@ -104,22 +117,14 @@ def getMask(img, zero_level=0):
     :param zero_level:
     :return: изображение после обработки
     """
-    # TODO: потыкать алгоритм, сделать его мягче, чтобы линия не прерывалась
     img = img[zero_level:, :]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
-    # kernel = np.ones((3, 3), np.uint8)
-    gauss = cv2.GaussianBlur(mask,(5,5),0)
-    ret2,gaussThresh = cv2.threshold(gauss,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # gaussOp = cv2.morphologyEx(gaussThresh, cv2.MORPH_OPEN, kernel, iterations=2)
-    gaussThin = lineThinner(gaussThresh,zero_level)
+    gauss = cv2.GaussianBlur(mask, (5, 5), 0)
+    ret2, gaussThresh = cv2.threshold(gauss, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    gaussThin = lineThinner(gaussThresh, zero_level)
     # cv2.imshow('w', gaussThin)
     # cv2.waitKey(15)
-
-
-    # blur = cv2.medianBlur(mask, 3, 0)
-    # ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # mask = lineThinner(th3, zero_level)
     return gaussThin
 
 
@@ -169,8 +174,8 @@ def findCookies(imgOrPath='scanned.png'):
     cookies = []
     for rect in rectangles:
         center = (rect[0][Y] * Kx + X_0, rect[0][X] * Ky + Y_0)  # позиция печеньки на столе в СК принтера в мм
-        width = rect[1][X] * Ky # размер печеньки вдоль оси Y в СК принтера в мм
-        length = rect[1][Y] * Kx # размер печеньки вдоль оси X в СК принтера в мм
+        width = rect[1][X] * Ky  # размер печеньки вдоль оси Y в СК принтера в мм
+        length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
         rotation = rect[2]  # вращение прямоугольника в углах
         cookies.append((center, width, length, rotation))
     # cv2.imshow('w', result)
@@ -229,7 +234,7 @@ def scan(pathToVideo=VID_PATH):
                     elif img.item(imgY, imgX) and (imgY - zeroLevel) * Kz < accuracy:
                         ply[pointIdx, X] = frameIdx * Kx + X_0
                         ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                        ply[pointIdx, Z] = ply[pointIdx -1 if pointIdx > 0 else 0, Z] + Z_0
+                        ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z] + Z_0
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                 else:

@@ -1,13 +1,15 @@
 from itertools import tee
 from functools import reduce
-from global_variables import *
+from configValues import PCD_PATH
 from math import cos, sin, atan, sqrt, floor
 import numpy as np
 
 """ Some tools for convenience """
 
-
 # TODO: рефактор и комментарии
+
+X, Y, Z = 0, 1, 2
+
 
 def pairwise(iterable):
     """ s -> (s0,s1), (s1,s2), (s2, s3), ... """
@@ -51,7 +53,7 @@ def avg(*arg):
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
-def distance(p1, p2=(0,0)):
+def distance(p1, p2=(0, 0)):
     """ Calculate distance between 2 points either 2D or 3D """
     p1 = list(p1)
     p2 = list(p2)

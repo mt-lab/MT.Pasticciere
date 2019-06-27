@@ -1,6 +1,12 @@
+"""
+scanner.py
+Author: bedlamzd of MT.lab
+
+Файл для парса конфига
+"""
+
 import configparser
 
-# TODO: рефактор и комментарии
 
 def get_config(path):
     """
@@ -35,14 +41,16 @@ def get_setting(path, section, setting):
 
 
 config_path = 'settings.ini'
-X, Y, Z = 0, 1, 2
-hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')[1:-1]
-hsvUpperBoundString = get_setting(config_path, 'Scanner', 'hsv_max')[1:-1]
-hsvLowerBound = [int(hsvLowerBoundString.split(', ')[i]) for i in range(len(hsvLowerBoundString.split(', ')))]
-hsvUpperBound = [int(hsvUpperBoundString.split(', ')[i]) for i in range(len(hsvUpperBoundString.split(', ')))]
+# параметры фильтра для сканера (предположительно свои для каждого принтера)
+hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')[1:-1]  # строка
+hsvUpperBoundString = get_setting(config_path, 'Scanner', 'hsv_max')[1:-1]  # строка
+hsvLowerBound = [int(hsvLowerBoundString.split(', ')[i]) for i in range(len(hsvLowerBoundString.split(', ')))]  # список
+hsvUpperBound = [int(hsvUpperBoundString.split(', ')[i]) for i in range(len(hsvUpperBoundString.split(', ')))]  # список
+# окрестность в пределах которой точки считаются совпадающими
 accuracy = float(get_setting(config_path, 'GCoder', 'accuracy'))
-step = float(get_setting(config_path, 'GCoder', 'slice_step'))
+# шаг нарезки рисунка
+sliceStep = float(get_setting(config_path, 'GCoder', 'slice_step'))
+# пути по умолчанию для dxf, облака точек и видео соответственно
 DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')
 PCD_PATH = get_setting(config_path, 'GCoder', 'pointcloudpath')
 VID_PATH = get_setting(config_path, 'GCoder', 'videoforpointcloud')
-Z_max = 30
