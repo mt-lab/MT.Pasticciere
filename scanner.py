@@ -13,6 +13,8 @@ from utilities import X, Y, Z
 import time
 import imutils
 
+# TODO: написать логи
+
 # координаты фактического начала стола относительно глобальных координат принтера в мм
 X_0 = 49
 Y_0 = 21.5
@@ -213,8 +215,7 @@ def scan(pathToVideo=VID_PATH):
             img = getMask(frame)
             # для первого кадра получить индекс нулевого уровня
             if frameIdx == 70:
-                cv2.imwrite('sample.png', img)
-                # zeroLevel = findZeroLevel(img)
+                zeroLevel = findZeroLevel(img)
                 # print(zeroLevel)
             # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
