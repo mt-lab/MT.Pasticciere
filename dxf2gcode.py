@@ -12,6 +12,8 @@ from utilities import readPointCloud
 from scanner import findCookies
 import pygcode as pg
 
+# TODO: написать логи
+
 Z_max = 30
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 extrusionCoefficient = 0.41 # коэффицент экструзии, поворот/мм(?)
@@ -82,7 +84,7 @@ def dxfReader(dxf, modelspace, elementsHeap=None):  # at first input is modelspa
             elementsHeap.append(elementRedef(element))
         # если переопределение вернуло пустой элемент (ещё не описанный), то написать об этом
         else:
-            print('empty element')
+            print('undefined element')
     return elementsHeap
 
 
@@ -183,18 +185,22 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     msp = dxf.modelspace()
     # получить все элементы из рисунка
     elementsHeap = dxfReader(dxf, msp)
+    print('dxf прочтён')
 
     # сформировать порядок элементов для печати
     path = organizePath(elementsHeap)
+    print('Сформирован порядок печати')
 
     # нарезать рисунок, сместить, добавить координату Z
     step = sliceStep
     cookies = findCookies()[0]
     offset = cookies[0][0][::-1]
     processPath(path, step, offset, pathToPly)
+    print(f'Объекты нарезаны с шагом {step:02d} мм и смещены на {offset} мм')
 
     # сгенерировать инструкции для принтера
     gcodeInstructions = gcode_generator(path)
 
     # записать инструкции в текстовый файл
     writeGcode(gcodeInstructions)
+    print('Gcode сгенерирован')
