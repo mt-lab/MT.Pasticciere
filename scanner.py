@@ -132,47 +132,60 @@ def getMask(img, zero_level=0):
 
 def findCookies(imgOrPath='scanned.png'):
     """
-    Функция нахождения расположения и габаритов объектов на столе из полученной карты глубины
-    :param img:
-    :return:
+    Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
+    :param img (np arr, str): карта высот
+    :return cookies, result, rectangles, contours: параметры печенек, картинка с визуализацией, параметры боксов
+            ограничивающих печеньки, контура границ печенья
     """
-    # TODO: рефактор и комменты
+    # проверка параметр строка или нет
     if isinstance(imgOrPath, str):
         original = cv2.imread(imgOrPath)
     else:
         original = imgOrPath
+    # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # cv2.imshow('w', gausThresh)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    # нахождение замкнутых объектов на картинке с помощью морфологических алгоритмов
     kernel = np.ones((5, 5), np.uint8)
     opening = cv2.morphologyEx(gausThresh, cv2.MORPH_OPEN, kernel, iterations=3)
+    # найти однозначный задний фон
     sureBg = cv2.dilate(opening, kernel, iterations=3)
     distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
+    # однозначно объекты
     ret, sureFg = cv2.threshold(distTrans, 0.1 * distTrans.max(), 255, 0)
     sureFg = np.uint8(sureFg)
+    # область в которой находятся контура
     unknown = cv2.subtract(sureBg, sureFg)
+    # назначение маркеров
     ret, markers = cv2.connectedComponents(sureFg)
+    # отмечаем всё так, чтобы у заднего фона было точно 1
     markers += 1
+    # помечаем граничную область нулём
     markers[unknown == 255] = 0
     markers = cv2.watershed(original, markers)
+    # выделяем контуры на изображении
     original[markers == -1] = [255, 0, 0]
+    # количество печенек на столе (уникальные маркеры минус фони что то ещё)
     numOfCookies = len(np.unique(markers)) - 2
+    # вырезаем ненужный контур всей картинки
     blankSpace = np.zeros(gray.shape, dtype='uint8')
     blankSpace[markers == 1] = 255
     blankSpace = cv2.bitwise_not(blankSpace)
     blankSpaceCropped = blankSpace[2:blankSpace.shape[0] - 2, 2:blankSpace.shape[1] - 2]
+    # находим контуры на изображении
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
+    # применяем на изначальную картинку маску с задним фоном
     result = cv2.bitwise_and(original, original, mask=blankSpace)
     result = cv2.bitwise_and(original, original, mask=sureBg)
+    # находим прямоугольники минимальной площади в которые вписываются печеньки
     rectangles = [cv2.minAreaRect(contour) for contour in contours]
     rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
     for idx, rect in enumerate(rectanglesCoords):
         cv2.drawContours(original, [rect], 0, (0, 0, 255), 2)
+    # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
         center = (rect[0][Y] * Kx + X_0, rect[0][X] * Ky + Y_0)  # позиция печеньки на столе в СК принтера в мм
@@ -180,9 +193,7 @@ def findCookies(imgOrPath='scanned.png'):
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
         rotation = rect[2]  # вращение прямоугольника в углах
         cookies.append((center, width, length, rotation))
-    # cv2.imshow('w', result)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    # сохранить изображение с отмеченными контурами
     cv2.imwrite('cookies.png', original)
     return cookies, result, rectangles, contours
 
