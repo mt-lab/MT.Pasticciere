@@ -111,6 +111,11 @@ class Element:
                 p.append(findPointInCloud(p, pcd_xy, pcd_z, self.offset))
 
 
+class Point(Element):
+    # TODO: написать обработку точек
+    pass
+
+
 class Polyline(Element):
     """
     Подкласс для элемента Полилиния из dxf
@@ -131,11 +136,17 @@ class Polyline(Element):
         return length
 
 
+class LWPolyline(Polyline):
+    # TODO: написать обработку LW полилиний
+    pass
+
+
 class Spline(Element):
     """
     Подкласс для объека Сплайн
     """
 
+    # TODO: написать обработку сплайнов для нарезки (использовать чужой dxf2gcode)
     def __init__(self, spline):
         super().__init__(spline)
         self.points = [point for point in spline.control_points]
@@ -215,3 +226,8 @@ class Arc(Circle):
         self.points = [self.first, self.last]
         self.sliced = []
         self.length = self.getLength()
+
+
+class Ellipse(Element):
+    # TODO: написать обработку эллипсов
+    pass
