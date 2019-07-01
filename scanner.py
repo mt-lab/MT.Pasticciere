@@ -7,7 +7,9 @@ Author: bedlamzd of MT.lab
 
 import numpy as np
 import cv2
-from configValues import hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
+from configValues import focal, pxlSize, cameraAngl, distanceToLaser, tableWidth, tableLength, X0, Y0, Z0, \
+    hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
+from math import atan, sin, cos, pi, radians
 from utilities import X, Y, Z
 # from open3d import *  # only for visuals
 import time
@@ -30,6 +32,18 @@ Ky = 100 / 447  # мм/пиксель
 # ширина изображения для обработки, пиксели
 Xnull = 0
 Xend = 640
+
+
+def calculateZ(dPxl):
+    phi = atan(dPxl * pxlSize / focal)
+    height = distanceToLaser * sin(phi) / cos(cameraAngl + phi + Z_0)
+    return height
+
+
+def calculateY(dPxl, midPoint=320, midWidth=tableWidth / 2, z=0):
+    dW = (dPxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngl)) / focal
+    width = midWidth + dW
+    return width
 
 
 def calibrate(video, width: 'in mm', length: 'in mm', height: 'in mm'):
