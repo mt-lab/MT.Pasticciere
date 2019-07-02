@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
-from math import atan, sin, cos, pi, radians
+from math import atan, sin, cos, pi, radians, ceil
 from utilities import X, Y, Z
 # from open3d import *  # only for visuals
 import time
@@ -115,8 +115,26 @@ def lineThinner(img, upperBound=0):
     :param upperBound: верхняя граница, выше которой алгоритм применять бессмысленно
     :return: полученное изображение
     """
-    # TODO: переписать под обработку "сверху" и "снизу"
     newImg = np.zeros(img.shape, dtype="uint8")
+    # for x in range(img.shape[1]):
+    #     for y in range(upperBound, img.shape[0]):
+    #         if (img.item(y, x) == 255):
+    #             up = y
+    #             for yd in range(img.shape[0] - 1, y, -1):
+    #                 if (img.item(y, x) == 255):
+    #                     dn = yd
+    #                     middle = (up + yd) / 2
+    #             else:
+    #                 middle = up
+    #             # for pxl in range(y, img.shape[0]):
+    #             #     if img.item(pxl, x) == 0:
+    #             #         middle = int(((pxl - 1) + y) / 2)
+    #             #         break
+    #             # else:
+    #             #     middle = y
+    #             newImg.itemset((middle, x), 255)
+    #             break
+
     for x in range(img.shape[1]):
         for y in range(img.shape[0] - 1, upperBound, -1):
             if (img.item(y, x) == 255) and (img.item(y, x) == img.item(y - 1, x)):
@@ -138,9 +156,12 @@ def getMask(img, zero_level=0):
     mask = cv2.inRange(hsv, np.array(hsvLowerBound), np.array(hsvUpperBound))
     gauss = cv2.GaussianBlur(mask, (5, 5), 0)
     ret2, gaussThresh = cv2.threshold(gauss, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    gaussThin = lineThinner(gaussThresh, zero_level)
-    # cv2.imshow('w', gaussThin)
-    # cv2.waitKey(15)
+    gaussThin = lineThinner(gaussThresh)
+    # masker = cv2.bitwise_not(gaussThin)
+    # res = cv2.bitwise_not(gaussThresh, gaussThresh, mask=masker)
+    # cv2.imshow('o', img)
+    # cv2.imshow('m', res)
+    # cv2.waitKey(5)
     return gaussThin
 
 
@@ -202,8 +223,9 @@ def findCookies(imgOrPath='scanned.png'):
     # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
-        center = (rect[0][Y] * Kx + X_0, rect[0][X] * Ky + Y_0)  # позиция печеньки на столе в СК принтера в мм
-        width = rect[1][X] * Ky  # размер печеньки вдоль оси Y в СК принтера в мм
+        center = (rect[0][Y] * Kx + X_0, calculateY(rect[0][X]))  # позиция печеньки на столе в СК принтера в мм
+        width = calculateY(rect[0][X] + rect[1][X] / 2) - calculateY(
+            rect[0][X] - rect[1][X] / 2)  # размер печеньки вдоль оси Y в СК принтера в мм
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
         rotation = rect[2]  # вращение прямоугольника в углах
         cookies.append((center, width, length, rotation))
@@ -227,9 +249,9 @@ def scan(pathToVideo=VID_PATH):
 
     numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
     ply = np.zeros((numberOfPoints, 3))  # массив облака точек
-    newPly = np.zeros((frameCount, Xend - Xnull))  # массив карты глубины
-    zeroLevel = 275  # нулевой уровень в пикселях
-    # zmax = 0 # максимальное отклонение по z в пикселях
+    newPly = np.zeros((frameCount, Xend - Xnull),dtype='uint8')  # массив карты глубины
+    zeroLevel = 270  # нулевой уровень в пикселях
+    zmax = 0  # максимальное отклонение по z в пикселях
 
     start = time.time()
     # открыть видео и сканировать пока видео не закончится
@@ -237,34 +259,37 @@ def scan(pathToVideo=VID_PATH):
         ret, frame = cap.read()
         # если с кадром всё в порядке, то сканировать
         if ret == True:
-            img = getMask(frame)
             # для первого кадра получить индекс нулевого уровня
-            if frameIdx == 70:
+            if frameIdx == 0:
+                img = getMask(frame)
                 zeroLevel = findZeroLevel(img)
-                # print(zeroLevel)
+                # cv2.imshow('suka', img)
+                # cv2.waitKey(0)
+                print(zeroLevel)
+            img = getMask(frame)
             # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
-                for imgY in range(zeroLevel + 1, img.shape[0]):
+                for imgY in range(zeroLevel, img.shape[0]):
                     # если пиксель белый и высота больше погрешности,
                     # то посчитать координаты точки, записать в массив
                     # TODO: разделить генерацию облака и карты высоты
                     # TODO: написать фильтрацию облака точек с помощью open3d или подобного
-                    if img.item(imgY, imgX) and calculateZ(imgY-zeroLevel) > accuracy:
-                        # zmax = max(zmax, imgY - zeroLevel)
+                    if img.item(imgY, imgX) and calculateZ(imgY - zeroLevel) > accuracy:
+                        zmax = max(zmax, imgY - zeroLevel)
                         ply[pointIdx, X] = frameIdx * Kx + X_0
                         # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
                         # ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z_0
-                        ply[pointIdx, Z] = calculateZ(imgY-zeroLevel)
+                        ply[pointIdx, Z] = calculateZ(imgY - zeroLevel)
                         ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
                     # или если пиксель белый но высота меньше погрешности
-                    elif img.item(imgY, imgX) and calculateZ(imgY-zeroLevel) < accuracy:
+                    elif img.item(imgY, imgX) and calculateZ(imgY - zeroLevel) < accuracy:
                         ply[pointIdx, X] = frameIdx * Kx + X_0
                         # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
                         # ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z]
-                        ply[pointIdx, Z] = calculateZ(imgY-zeroLevel)
+                        ply[pointIdx, Z] = calculateZ(imgY - zeroLevel)
                         ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
@@ -274,7 +299,7 @@ def scan(pathToVideo=VID_PATH):
                     # TODO: обработку точек по ближайшим соседям или другому алгоритму
                     ply[pointIdx, X] = frameIdx * Kx + X_0
                     # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                    ply[pointIdx, Y] = calculateY(imgX, z=Z0)
+                    ply[pointIdx, Y] = calculateY(imgX, z=Z_0)
                     ply[pointIdx, Z] = Z_0
                     # заполнение карты глубины
                     newPly[frameIdx, imgX] = Z_0
@@ -286,10 +311,14 @@ def scan(pathToVideo=VID_PATH):
             print(f'Done. Time passed {timePassed:3.2f} sec\n')
             break
     cap.release()
+    colored = cv2.applyColorMap(newPly,cv2.COLORMAP_BONE)
+    cv2.imwrite('scannedcolor.png', colored)
     cv2.imwrite('scanned.png', newPly)
-    # print(zmax)
+    print(calculateZ(zmax))
+    print(zmax)
     # сгенерировать файл облака точек
     generatePly(ply)
     cookies = findCookies('scanned.png')[0]
-    print(cookies[0][0])
+    if len(cookies) != 0:
+        print(cookies[0][0])
     cv2.destroyAllWindows()
