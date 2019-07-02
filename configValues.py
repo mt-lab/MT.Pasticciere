@@ -6,6 +6,7 @@ Author: bedlamzd of MT.lab
 """
 
 import configparser
+from math import radians
 
 
 def get_config(path):
@@ -50,9 +51,9 @@ Y0 = float(get_setting(config_path, 'Table','Y0'))
 Z0 = float(get_setting(config_path, 'Table','Z0'))
 
 # характеристики камеры
-focal = float(get_setting(config_path, 'Camera','pixelSize'))
-pxlSize = float(get_setting(config_path, 'Camera','focalLength'))
-cameraAngl = float(get_setting(config_path, 'Camera','angle'))
+focal = float(get_setting(config_path, 'Camera','focalLength'))
+pxlSize = float(get_setting(config_path, 'Camera','pixelSize'))
+cameraAngle = radians(float(get_setting(config_path, 'Camera', 'angle')))
 distanceToLaser = float(get_setting(config_path, 'Camera','distanceToLaser'))
 
 # параметры фильтра для сканера (предположительно свои для каждого принтера)
