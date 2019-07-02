@@ -7,7 +7,7 @@ Author: bedlamzd of MT.lab
 
 import numpy as np
 import cv2
-from configValues import focal, pxlSize, cameraAngl, distanceToLaser, tableWidth, tableLength, X0, Y0, Z0, \
+from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
 from math import atan, sin, cos, pi, radians
 from utilities import X, Y, Z
@@ -20,7 +20,7 @@ import imutils
 # координаты фактического начала стола относительно глобальных координат принтера в мм
 X_0 = 49
 Y_0 = 21.5
-Z_0 = 5
+Z_0 = 0
 
 # максимальная высота на которую может подняться сопло, мм
 Z_MAX = 30
@@ -38,12 +38,12 @@ Xend = 640
 
 def calculateZ(dPxl):
     phi = atan(dPxl * pxlSize / focal)
-    height = distanceToLaser * sin(phi) / cos(cameraAngl + phi + Z_0)
+    height = distanceToLaser * sin(phi) / cos(cameraAngle + phi) + Z_0
     return height
 
 
-def calculateY(dPxl, midPoint=320, midWidth=tableWidth / 2, z=0):
-    dW = (dPxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngl)) / focal
+def calculateY(pxl, midPoint=320, midWidth=tableWidth / 2, z=0):
+    dW = (pxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngle)) / focal
     width = midWidth + dW
     return width
 
@@ -249,25 +249,32 @@ def scan(pathToVideo=VID_PATH):
                     # то посчитать координаты точки, записать в массив
                     # TODO: разделить генерацию облака и карты высоты
                     # TODO: написать фильтрацию облака точек с помощью open3d или подобного
-                    if img.item(imgY, imgX) and (imgY - zeroLevel) * Kz > accuracy:
+                    if img.item(imgY, imgX) and calculateZ(imgY-zeroLevel) > accuracy:
                         # zmax = max(zmax, imgY - zeroLevel)
                         ply[pointIdx, X] = frameIdx * Kx + X_0
-                        ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                        ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z_0
+                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                        # ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z_0
+                        ply[pointIdx, Z] = calculateZ(imgY-zeroLevel)
+                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
-                    elif img.item(imgY, imgX) and (imgY - zeroLevel) * Kz < accuracy:
+                    # или если пиксель белый но высота меньше погрешности
+                    elif img.item(imgY, imgX) and calculateZ(imgY-zeroLevel) < accuracy:
                         ply[pointIdx, X] = frameIdx * Kx + X_0
-                        ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                        ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z] + Z_0
+                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                        # ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z]
+                        ply[pointIdx, Z] = calculateZ(imgY-zeroLevel)
+                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
+                        break
                 else:
-                    # если белых пикселей в стобце нет или высота меньше погрешности, записать предыдущий уровень
+                    # если белых пикселей в стобце нет, то записать предыдущий уровень
                     # TODO: обработку точек по ближайшим соседям или другому алгоритму
                     ply[pointIdx, X] = frameIdx * Kx + X_0
-                    ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                    # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                    ply[pointIdx, Y] = calculateY(imgX, z=Z0)
                     ply[pointIdx, Z] = Z_0
                     # заполнение карты глубины
                     newPly[frameIdx, imgX] = Z_0
