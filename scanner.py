@@ -7,7 +7,7 @@ Author: bedlamzd of MT.lab
 
 import numpy as np
 import cv2
-from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, X0, Y0, Z0, \
+from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
 from math import atan, sin, cos, pi, radians, ceil
 from utilities import X, Y, Z
@@ -17,10 +17,6 @@ import imutils
 
 # TODO: написать логи
 
-# координаты фактического начала стола относительно глобальных координат принтера в мм
-X_0 = 49
-Y_0 = 21.5
-Z_0 = 0
 
 # максимальная высота на которую может подняться сопло, мм
 Z_MAX = 30
@@ -36,13 +32,27 @@ Xnull = 0
 Xend = 640
 
 
-def calculateZ(dPxl):
-    phi = atan(dPxl * pxlSize / focal)
-    height = distanceToLaser * sin(phi) / cos(cameraAngle + phi) + Z_0
+def calculateZ(pxl, midPoint=240):
+    """
+    Функция расчета положения точки по оси Z относительно уровня стола
+    :param pxl: номер пикселя по вертикали на картинке
+    :param midPoint: номер серединного пикселя по вертикали
+    :return height: высота точки
+    """
+    phi = atan((pxl - midPoint) * pxlSize / focal)
+    height = distanceToLaser * sin(phi) / cos(cameraAngle + phi)
     return height
 
 
-def calculateY(pxl, midPoint=320, midWidth=tableWidth / 2, z=0):
+def calculateY(pxl, z=0, midPoint=320, midWidth=tableWidth / 2):
+    """
+    Функция расчета положения точки по оси Y относительно середины обзора камеры (соответственно середины стола)
+    :param pxl: номер пикселя по горизонтали на картинке
+    :param z: высота, на которой находится точка
+    :param midPoint: номер серединного пикселя по горизонтали
+    :param midWidth: расстояние до середины стола
+    :return width: расстояние до точки от начала стола
+    """
     dW = (pxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngle)) / focal
     width = midWidth + dW
     return width
@@ -60,7 +70,10 @@ def calibrate(video, width: 'in mm', length: 'in mm', height: 'in mm'):
     kx = 0
     ky = 0
     kz = 0
-    return kx, ky, kz
+
+    zeroLevel = findZeroLevel()
+    shiftZ = calculateZ(zeroLevel)
+    return kx, ky, kz, zeroLevel
 
 
 def generatePly(pointsArray, filename='cloud.ply'):
@@ -75,7 +88,7 @@ def generatePly(pointsArray, filename='cloud.ply'):
     start = time.time()
     ply = []
     for count, point in enumerate(pointsArray, 1):
-        if point[Z] < Z_0 + accuracy or point[Z] > Z_MAX - accuracy:
+        if point[Z] < Z0 + accuracy or point[Z] > Z_MAX - accuracy:
             continue
         ply.append(f'{point[X]:.3f} {point[Y]:.3f} {point[Z]:.3f}\n')
         # print(f'{count:{6}}/{len(pointsArray):{6}} points processed')
@@ -116,25 +129,6 @@ def lineThinner(img, upperBound=0):
     :return: полученное изображение
     """
     newImg = np.zeros(img.shape, dtype="uint8")
-    # for x in range(img.shape[1]):
-    #     for y in range(upperBound, img.shape[0]):
-    #         if (img.item(y, x) == 255):
-    #             up = y
-    #             for yd in range(img.shape[0] - 1, y, -1):
-    #                 if (img.item(y, x) == 255):
-    #                     dn = yd
-    #                     middle = (up + yd) / 2
-    #             else:
-    #                 middle = up
-    #             # for pxl in range(y, img.shape[0]):
-    #             #     if img.item(pxl, x) == 0:
-    #             #         middle = int(((pxl - 1) + y) / 2)
-    #             #         break
-    #             # else:
-    #             #     middle = y
-    #             newImg.itemset((middle, x), 255)
-    #             break
-
     for x in range(img.shape[1]):
         for y in range(img.shape[0] - 1, upperBound, -1):
             if (img.item(y, x) == 255) and (img.item(y, x) == img.item(y - 1, x)):
@@ -161,6 +155,7 @@ def getMask(img, zero_level=0):
     # res = cv2.bitwise_not(gaussThresh, gaussThresh, mask=masker)
     # cv2.imshow('o', img)
     # cv2.imshow('m', res)
+    # cv2.imshow('t', gaussThin)
     # cv2.waitKey(5)
     return gaussThin
 
@@ -172,6 +167,8 @@ def findCookies(imgOrPath='scanned.png'):
     :return cookies, result, rectangles, contours: параметры печенек, картинка с визуализацией, параметры боксов
             ограничивающих печеньки, контура границ печенья
     """
+    # TODO: подробнее посмотреть происходящее в функции, где то тут баги
+    # TODO: отредактировать вывод функции, слишком много всего
     # проверка параметр строка или нет
     if isinstance(imgOrPath, str):
         original = cv2.imread(imgOrPath)
@@ -223,7 +220,7 @@ def findCookies(imgOrPath='scanned.png'):
     # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
-        center = (rect[0][Y] * Kx + X_0, calculateY(rect[0][X]))  # позиция печеньки на столе в СК принтера в мм
+        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X])+Y0)  # позиция печеньки на столе в СК принтера в мм
         width = calculateY(rect[0][X] + rect[1][X] / 2) - calculateY(
             rect[0][X] - rect[1][X] / 2)  # размер печеньки вдоль оси Y в СК принтера в мм
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
@@ -249,8 +246,9 @@ def scan(pathToVideo=VID_PATH):
 
     numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
     ply = np.zeros((numberOfPoints, 3))  # массив облака точек
-    newPly = np.zeros((frameCount, Xend - Xnull),dtype='uint8')  # массив карты глубины
-    zeroLevel = 270  # нулевой уровень в пикселях
+    newPly = np.zeros((frameCount, Xend - Xnull), dtype='uint8')  # массив карты глубины
+    zeroLevel = 240  # нулевой уровень в пикселях
+    shiftZ = 0
     zmax = 0  # максимальное отклонение по z в пикселях
 
     start = time.time()
@@ -259,10 +257,11 @@ def scan(pathToVideo=VID_PATH):
         ret, frame = cap.read()
         # если с кадром всё в порядке, то сканировать
         if ret == True:
-            # для первого кадра получить индекс нулевого уровня
+            # для  кадра получить индекс нулевого уровня и сдвиг ему соответствующий
             if frameIdx == 0:
                 img = getMask(frame)
                 zeroLevel = findZeroLevel(img)
+                shiftZ = calculateZ(zeroLevel)
                 # cv2.imshow('suka', img)
                 # cv2.waitKey(0)
                 print(zeroLevel)
@@ -274,35 +273,34 @@ def scan(pathToVideo=VID_PATH):
                     # то посчитать координаты точки, записать в массив
                     # TODO: разделить генерацию облака и карты высоты
                     # TODO: написать фильтрацию облака точек с помощью open3d или подобного
-                    if img.item(imgY, imgX) and calculateZ(imgY - zeroLevel) > accuracy:
-                        zmax = max(zmax, imgY - zeroLevel)
-                        ply[pointIdx, X] = frameIdx * Kx + X_0
-                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                        # ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z_0
-                        ply[pointIdx, Z] = calculateZ(imgY - zeroLevel)
+                    if img.item(imgY, imgX) and calculateZ(imgY) - shiftZ > accuracy:
+                        zmax = max(zmax, imgY)
+                        ply[pointIdx, X] = frameIdx * Kx + X0
+                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
+                        # ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z0
+                        ply[pointIdx, Z] = calculateZ(imgY) - shiftZ + Z0
                         ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
                     # или если пиксель белый но высота меньше погрешности
-                    elif img.item(imgY, imgX) and calculateZ(imgY - zeroLevel) < accuracy:
-                        ply[pointIdx, X] = frameIdx * Kx + X_0
-                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
+                    elif img.item(imgY, imgX) and calculateZ(imgY) - shiftZ < accuracy:
+                        ply[pointIdx, X] = frameIdx * Kx + X0
+                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
                         # ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z]
-                        ply[pointIdx, Z] = calculateZ(imgY - zeroLevel)
-                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
+                        ply[pointIdx, Z] = calculateZ(imgY) - shiftZ + Z0
+                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z]) + Y0
                         # заполнение карты глубины
                         newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
                         break
                 else:
-                    # если белых пикселей в стобце нет, то записать предыдущий уровень
-                    # TODO: обработку точек по ближайшим соседям или другому алгоритму
-                    ply[pointIdx, X] = frameIdx * Kx + X_0
-                    # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y_0
-                    ply[pointIdx, Y] = calculateY(imgX, z=Z_0)
-                    ply[pointIdx, Z] = Z_0
+                    # если белых пикселей в стобце нет, то записать нулевой уровень
+                    ply[pointIdx, X] = frameIdx * Kx + X0
+                    # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
+                    ply[pointIdx, Y] = calculateY(imgX, z=Z0) + Y0
+                    ply[pointIdx, Z] = Z0
                     # заполнение карты глубины
-                    newPly[frameIdx, imgX] = Z_0
+                    newPly[frameIdx, imgX] = Z0
                 pointIdx += 1
             frameIdx += 1
             print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:3.2f} sec')
@@ -311,11 +309,8 @@ def scan(pathToVideo=VID_PATH):
             print(f'Done. Time passed {timePassed:3.2f} sec\n')
             break
     cap.release()
-    colored = cv2.applyColorMap(newPly,cv2.COLORMAP_BONE)
-    cv2.imwrite('scannedcolor.png', colored)
     cv2.imwrite('scanned.png', newPly)
-    print(calculateZ(zmax))
-    print(zmax)
+    print(f'Высота объекта {calculateZ(zmax) - shiftZ:3.1f} мм\n')
     # сгенерировать файл облака точек
     generatePly(ply)
     cookies = findCookies('scanned.png')[0]
