@@ -10,17 +10,16 @@ from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH
 from elements import *
 from utilities import readPointCloud
 from scanner import findCookies
-import pygcode as pg
 
 # TODO: написать логи
 
 Z_max = 30
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
-extrusionCoefficient = 0.41 # коэффицент экструзии, поворот/мм(?)
+extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
 
 
 # when path is a set of elements
-def gcode_generator(listOfElements, preGcode=None, postGcode=None):
+def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=None, postGcode=None):
     """
     Генерирует список с командами для принтера
     :param listOfElements: список элементов из которых состоит рисунок
@@ -28,8 +27,6 @@ def gcode_generator(listOfElements, preGcode=None, postGcode=None):
     :param postGcode: код для вставки в конец
     :return gcode: список команд в Gcode
     """
-    # TODO: префиксный и постфиксный Gcode
-    # TODO: генерация кода по печенькам
     # TODO: генерация кода по слоям в рисунке (i.e. отдельным контурам)
     # проверка наличия пре-кода и пост-кода
     if preGcode is None:
@@ -40,22 +37,28 @@ def gcode_generator(listOfElements, preGcode=None, postGcode=None):
     last_point = (0, 0, 0)  # начало в нуле
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
     gcode.append('G28')  # домой
+    gcode += preGcode
     # для каждого элемента в рисунке
-    for count, element in enumerate(listOfElements, 1):
-        way = element.getSlicedPoints()
-        gcode.append(f'; {count:3d} element')  # коммент с номером элемента
-        if distance(last_point, way[0]) > accuracy:
-            # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
-            gcode.append(str(pg.GCodeRapidMove(Z=Z_up)))
-            gcode.append(str(pg.GCodeRapidMove(X=way[0][X], Y=way[0][Y])))
-            gcode.append(str(pg.GCodeRapidMove(Z=way[0][Z])))
-            last_point = way[0]  # обновить предыдущую точку
-        for point in way[1:]:
-            E += round(extrusionCoefficient * distance(last_point, point), 3)
-            gcode.append(str(pg.GCodeLinearMove(X=point[X], Y=point[Y], Z=point[Z])) + f' E{E:3.3f}')
-            last_point = point
-        last_point = way[-1]
-    gcode.append('G28 R20')  # в конце увести домой
+    for count, cookie in enumerate(listOfCookies, 1):
+        adjustPath(listOfElements, cookie.center)
+        gcode.append(f'; {count:3d} cookie')
+        for idx, element in enumerate(listOfElements, 1):
+            way = element.getSlicedPoints()
+            gcode.append(f'; {idx:3d} element')  # коммент с номером элемента
+            if distance(last_point, way[0]) > accuracy:
+                # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
+                gcode.append(f'G0 Z{Z_up:3.3f}')
+                gcode.append(f'G0 X{way[0][X]:3.3f} Y{way[0][Y]:3.3f}')
+                gcode.append(f'G0 Z{way[0][Z]:3.3f}')
+                last_point = way[0]  # обновить предыдущую точку
+            for point in way[1:]:
+                E += round(extrusionCoefficient * distance(last_point, point), 3)
+                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z]:3.3f} E{E:3.3f}')
+                last_point = point
+            last_point = way[-1]
+    gcode += postGcode
+    gcode.append(f'G0 Z{Z_up:3.3f}')  # в конце поднять
+    gcode.append('G28')  # и увести домой
     return gcode
 
 
@@ -138,7 +141,7 @@ def organizePath(elements, start_point=(0, 0)):
     return path
 
 
-def processPath(path, step=1.0, offset=(0, 0), pathToPly=PCD_PATH):
+def slicePath(path, step=1.0):
     """
     Обработка элементов рисунка, их нарезка (slicing), смещение и добавление координаты по Z
 
@@ -147,10 +150,15 @@ def processPath(path, step=1.0, offset=(0, 0), pathToPly=PCD_PATH):
     :param pathToPly: путь до облака точек
     :return: None
     """
-    pcd, pcd_xy, pcd_z = readPointCloud(pathToPly)
-    # slice dxf and add volume to it, also add offset
+    # slice dxf
     for element in path:
         element.slice(step)
+
+
+def adjustPath(path, offset=(0, 0), pathToPly=PCD_PATH):
+    pcd, pcd_xy, pcd_z = readPointCloud(pathToPly)
+    # add volume to dxf, also add offset
+    for element in path:
         element.setOffset(offset)
         element.addZ(pcd_xy, pcd_z)
 
@@ -177,7 +185,6 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     :param offset: смещение рисунка
     :return: None
     """
-    # TODO: переписать под работу с классом печенек
 
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
@@ -191,15 +198,13 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     path = organizePath(elementsHeap)
     print('Сформирован порядок печати')
 
-    # нарезать рисунок, сместить, добавить координату Z
-    step = sliceStep
-    cookies = findCookies()[0]
-    offset = cookies[0][0][::-1]
-    processPath(path, step, offset, pathToPly)
-    print(f'Объекты нарезаны с шагом {step:02d} мм и смещены на {offset} мм')
+    # нарезать рисунок
+    slicePath(path, sliceStep)
+    print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
 
     # сгенерировать инструкции для принтера
-    gcodeInstructions = gcode_generator(path)
+    cookies = findCookies('scanned.png')[0][:1]  # найти положения объектов на столе
+    gcodeInstructions = gcode_generator(path, cookies, pathToPly)
 
     # записать инструкции в текстовый файл
     writeGcode(gcodeInstructions)
