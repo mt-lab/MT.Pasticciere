@@ -9,23 +9,19 @@ import numpy as np
 import cv2
 from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
-from math import atan, sin, cos, pi, radians, ceil
+from math import atan, sin, cos
 from utilities import X, Y, Z
-# from open3d import *  # only for visuals
+from cookie import *
 import time
 import imutils
 
 # TODO: написать логи
 
 
-# максимальная высота на которую может подняться сопло, мм
-Z_MAX = 30
-
 # масштабные коэффициенты для построения облака точек
-# TODO: сделать автоматический расчёт коэффициентов или привязанный к глобальным параметрам принтера
-Kz = 9 / 22  # мм/пиксель
-Kx = 74 / 214  # мм/кадр
-Ky = 100 / 447  # мм/пиксель
+# Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
+Kx = 74 / 214  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/frameCount
+# Ky = 100 / 447  # мм/пиксель // теперь расчёт по формуле
 
 # ширина изображения для обработки, пиксели
 Xnull = 0
@@ -87,11 +83,11 @@ def generatePly(pointsArray, filename='cloud.ply'):
     print('Generating point cloud...')
     start = time.time()
     ply = []
+    # если точка лежит по высоте за пределами рабочей зоны, включая нулевой уровень, то пропустить точку
     for count, point in enumerate(pointsArray, 1):
-        if point[Z] < Z0 + accuracy or point[Z] > Z_MAX - accuracy:
+        if point[Z] < Z0 + accuracy or point[Z] > (Z0 + tableHeight) - accuracy:
             continue
         ply.append(f'{point[X]:.3f} {point[Y]:.3f} {point[Z]:.3f}\n')
-        # print(f'{count:{6}}/{len(pointsArray):{6}} points processed')
     with open(filename, 'w+') as cloud:
         cloud.write("ply\n"
                     "format ascii 1.0\n"
@@ -102,7 +98,6 @@ def generatePly(pointsArray, filename='cloud.ply'):
                     "end_header\n")
         for count, point in enumerate(ply, 1):
             cloud.write(point)
-            # print(f'{count:{6}}/{len(ply):{6}} points recorded')
     print(f'{len(ply):{6}} points recorded')
     timePassed = time.time() - start
     print(f'Done for {timePassed:3.2f} sec\n')
@@ -151,16 +146,10 @@ def getMask(img, zero_level=0):
     gauss = cv2.GaussianBlur(mask, (5, 5), 0)
     ret2, gaussThresh = cv2.threshold(gauss, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     gaussThin = lineThinner(gaussThresh)
-    # masker = cv2.bitwise_not(gaussThin)
-    # res = cv2.bitwise_not(gaussThresh, gaussThresh, mask=masker)
-    # cv2.imshow('o', img)
-    # cv2.imshow('m', res)
-    # cv2.imshow('t', gaussThin)
-    # cv2.waitKey(5)
     return gaussThin
 
 
-def findCookies(imgOrPath='scanned.png'):
+def findCookies(imgOrPath):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
@@ -170,12 +159,17 @@ def findCookies(imgOrPath='scanned.png'):
     # TODO: подробнее посмотреть происходящее в функции, где то тут баги
     # TODO: отредактировать вывод функции, слишком много всего
     # проверка параметр строка или нет
+    original = None
+    gray = None
     if isinstance(imgOrPath, str):
         original = cv2.imread(imgOrPath)
-    else:
-        original = imgOrPath
+        gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+    elif imgOrPath.ndim == 3:
+        original = imgOrPath.copy()
+        gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+    elif imgOrPath.ndim == 2:
+        return 'Вы передали какую то дичь'
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
-    gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     # нахождение замкнутых объектов на картинке с помощью морфологических алгоритмов
@@ -198,13 +192,13 @@ def findCookies(imgOrPath='scanned.png'):
     markers = cv2.watershed(original, markers)
     # выделяем контуры на изображении
     original[markers == -1] = [255, 0, 0]
-    # количество печенек на столе (уникальные маркеры минус фони что то ещё)
+    # количество печенек на столе (уникальные маркеры минус фон и контур всего изображения)
     numOfCookies = len(np.unique(markers)) - 2
     # вырезаем ненужный контур всей картинки
     blankSpace = np.zeros(gray.shape, dtype='uint8')
     blankSpace[markers == 1] = 255
     blankSpace = cv2.bitwise_not(blankSpace)
-    blankSpaceCropped = blankSpace[2:blankSpace.shape[0] - 2, 2:blankSpace.shape[1] - 2]
+    blankSpaceCropped = blankSpace[1:blankSpace.shape[0] - 1, 1:blankSpace.shape[1] - 1]
     # находим контуры на изображении
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
@@ -215,19 +209,20 @@ def findCookies(imgOrPath='scanned.png'):
     # находим прямоугольники минимальной площади в которые вписываются печеньки
     rectangles = [cv2.minAreaRect(contour) for contour in contours]
     rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
+    pic = original.copy()
     for idx, rect in enumerate(rectanglesCoords):
-        cv2.drawContours(original, [rect], 0, (0, 0, 255), 2)
+        cv2.drawContours(pic, [rect], 0, (0, 0, 255), 2)
     # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
-        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X])+Y0)  # позиция печеньки на столе в СК принтера в мм
+        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X]) + Y0)  # позиция печеньки на столе в СК принтера в мм
         width = calculateY(rect[0][X] + rect[1][X] / 2) - calculateY(
             rect[0][X] - rect[1][X] / 2)  # размер печеньки вдоль оси Y в СК принтера в мм
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
         rotation = rect[2]  # вращение прямоугольника в углах
-        cookies.append((center, width, length, rotation))
+        cookies.append(Cookie(center, width, length, rotation))
     # сохранить изображение с отмеченными контурами
-    cv2.imwrite('cookies.png', original)
+    cv2.imwrite('cookies.png', pic)
     return cookies, result, rectangles, contours
 
 
@@ -246,7 +241,7 @@ def scan(pathToVideo=VID_PATH):
 
     numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
     ply = np.zeros((numberOfPoints, 3))  # массив облака точек
-    newPly = np.zeros((frameCount, Xend - Xnull), dtype='uint8')  # массив карты глубины
+    heightMap = np.zeros((frameCount, Xend - Xnull), dtype='uint8')  # массив карты глубины
     zeroLevel = 240  # нулевой уровень в пикселях
     shiftZ = 0
     zmax = 0  # максимальное отклонение по z в пикселях
@@ -262,58 +257,56 @@ def scan(pathToVideo=VID_PATH):
                 img = getMask(frame)
                 zeroLevel = findZeroLevel(img)
                 shiftZ = calculateZ(zeroLevel)
-                # cv2.imshow('suka', img)
-                # cv2.waitKey(0)
-                print(zeroLevel)
+                print(f'Ряд соответствующий нулевому уровню: {zeroLevel:3d}')
             img = getMask(frame)
             # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
                 for imgY in range(zeroLevel, img.shape[0]):
-                    # если пиксель белый и высота больше погрешности,
-                    # то посчитать координаты точки, записать в массив
-                    # TODO: разделить генерацию облака и карты высоты
-                    # TODO: написать фильтрацию облака точек с помощью open3d или подобного
-                    if img.item(imgY, imgX) and calculateZ(imgY) - shiftZ > accuracy:
-                        zmax = max(zmax, imgY)
-                        ply[pointIdx, X] = frameIdx * Kx + X0
-                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
-                        # ply[pointIdx, Z] = (imgY - zeroLevel) * Kz + Z0
-                        ply[pointIdx, Z] = calculateZ(imgY) - shiftZ + Z0
-                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z])
-                        # заполнение карты глубины
-                        newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
-                        break
-                    # или если пиксель белый но высота меньше погрешности
-                    elif img.item(imgY, imgX) and calculateZ(imgY) - shiftZ < accuracy:
-                        ply[pointIdx, X] = frameIdx * Kx + X0
-                        # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
-                        # ply[pointIdx, Z] = ply[pointIdx - 1 if pointIdx > 0 else 0, Z]
-                        ply[pointIdx, Z] = calculateZ(imgY) - shiftZ + Z0
-                        ply[pointIdx, Y] = calculateY(imgX, z=ply[pointIdx, Z]) + Y0
-                        # заполнение карты глубины
-                        newPly[frameIdx, imgX] = 10 * int(ply[pointIdx, Z]) if ply[pointIdx, Z] < 255 else 255
-                        break
+                    # если пиксель белый
+                    if img.item(imgY, imgX):
+                        # рассчитать соответствующую ему высоту над столом
+                        height = calculateZ(imgY) - shiftZ
+                        zmax = max(zmax, height)
+                        # если высота над столом больше погрешности и находится в пределах рабочей высоты принтера
+                        if height > accuracy and height < tableHeight:
+                            ply[pointIdx, X] = frameIdx * Kx + X0
+                            ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
+                            ply[pointIdx, Z] = height + Z0
+                            # заполнение карты высот
+                            heightMap[frameIdx, imgX] = 10 * int(height) if height < 255 else 255
+                            break
+                        # если высота над столом меньшье погрешности
+                        elif height < accuracy:
+                            height = ply[pointIdx - 1 if pointIdx > 0 else 0, Z] - Z0
+                            ply[pointIdx, X] = frameIdx * Kx + X0
+                            ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
+                            ply[pointIdx, Z] = height + Z0
+                            # заполнение карты высот
+                            heightMap[frameIdx, imgX] = 10 * int(height) if height < 255 else 255
+                            break
                 else:
                     # если белых пикселей в стобце нет, то записать нулевой уровень
                     ply[pointIdx, X] = frameIdx * Kx + X0
-                    # ply[pointIdx, Y] = (imgX - Xnull) * Ky + Y0
-                    ply[pointIdx, Y] = calculateY(imgX, z=Z0) + Y0
+                    ply[pointIdx, Y] = calculateY(imgX, z=0) + Y0
                     ply[pointIdx, Z] = Z0
                     # заполнение карты глубины
-                    newPly[frameIdx, imgX] = Z0
+                    heightMap[frameIdx, imgX] = 0
                 pointIdx += 1
             frameIdx += 1
-            print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {time.time() - start:3.2f} sec')
+            print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {(time.time() - start):3.2f} sec')
         else:
             timePassed = time.time() - start
             print(f'Done. Time passed {timePassed:3.2f} sec\n')
             break
-    cap.release()
-    cv2.imwrite('scanned.png', newPly)
-    print(f'Высота объекта {calculateZ(zmax) - shiftZ:3.1f} мм\n')
+    # раскрасить карту высот
+    coloredHeightMap = cv2.applyColorMap(heightMap, cv2.COLORMAP_BONE)
+    cookies = findCookies(coloredHeightMap)[0]
+    if len(cookies) != 0:
+        print(cookies[0].center)
+    # сохранить карту высот
+    cv2.imwrite('colored_height_map.png', coloredHeightMap)
+    print(f'Высота объекта {zmax:3.1f} мм\n')
     # сгенерировать файл облака точек
     generatePly(ply)
-    cookies = findCookies('scanned.png')[0]
-    if len(cookies) != 0:
-        print(cookies[0][0])
+    cap.release()
     cv2.destroyAllWindows()
