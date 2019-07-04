@@ -164,10 +164,13 @@ def findCookies(imgOrPath):
     if isinstance(imgOrPath, str):
         original = cv2.imread(imgOrPath)
         gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-    elif imgOrPath.ndim == 3:
-        original = imgOrPath.copy()
-        gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-    elif imgOrPath.ndim == 2:
+    elif isinstance(imgOrPath, np.ndarray):
+        if imgOrPath.ndim == 3:
+            original = imgOrPath.copy()
+            gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+        elif imgOrPath.ndim == 2:
+            pass
+    else:
         return 'Вы передали какую то дичь'
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -215,12 +218,13 @@ def findCookies(imgOrPath):
     # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
-        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X]) + Y0)  # позиция печеньки на столе в СК принтера в мм
-        width = calculateY(rect[0][X] + rect[1][X] / 2) - calculateY(
-            rect[0][X] - rect[1][X] / 2)  # размер печеньки вдоль оси Y в СК принтера в мм
+        height = gray.item(int(rect[0][Y]), int(rect[0][X]))/10
+        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
+        width = calculateY(rect[0][X] + rect[1][X] / 2, z=height) - \
+                calculateY(rect[0][X] - rect[1][X] / 2, z=height)  # размер печеньки вдоль оси Y в СК принтера в мм
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
         rotation = rect[2]  # вращение прямоугольника в углах
-        cookies.append(Cookie(center, width, length, rotation))
+        cookies.append(Cookie(center, width, length, height, rotation))
     # сохранить изображение с отмеченными контурами
     cv2.imwrite('cookies.png', pic)
     return cookies, result, rectangles, contours
@@ -273,7 +277,7 @@ def scan(pathToVideo=VID_PATH):
                             ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
                             ply[pointIdx, Z] = height + Z0
                             # заполнение карты высот
-                            heightMap[frameIdx, imgX] = 10 * int(height) if height < 255 else 255
+                            heightMap[frameIdx, imgX] = round(10*height) if height < 25.5 else 255
                             break
                         # если высота над столом меньшье погрешности
                         elif height < accuracy:
@@ -282,15 +286,13 @@ def scan(pathToVideo=VID_PATH):
                             ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
                             ply[pointIdx, Z] = height + Z0
                             # заполнение карты высот
-                            heightMap[frameIdx, imgX] = 10 * int(height) if height < 255 else 255
+                            heightMap[frameIdx, imgX] = round(10*height) if height < 25.5 else 255
                             break
                 else:
                     # если белых пикселей в стобце нет, то записать нулевой уровень
                     ply[pointIdx, X] = frameIdx * Kx + X0
                     ply[pointIdx, Y] = calculateY(imgX, z=0) + Y0
                     ply[pointIdx, Z] = Z0
-                    # заполнение карты глубины
-                    heightMap[frameIdx, imgX] = 0
                 pointIdx += 1
             frameIdx += 1
             print(f'{frameIdx:{3}}/{frameCount:{3}} processed for {(time.time() - start):3.2f} sec')
@@ -302,7 +304,7 @@ def scan(pathToVideo=VID_PATH):
     coloredHeightMap = cv2.applyColorMap(heightMap, cv2.COLORMAP_BONE)
     cookies = findCookies(coloredHeightMap)[0]
     if len(cookies) != 0:
-        print(cookies[0].center)
+        print(cookies[0].center, cookies[0].height)
     # сохранить карту высот
     cv2.imwrite('colored_height_map.png', coloredHeightMap)
     print(f'Высота объекта {zmax:3.1f} мм\n')
