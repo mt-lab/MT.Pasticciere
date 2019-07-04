@@ -243,16 +243,17 @@ def getScan():
     time.sleep(1)
     console.send('home\n')
     time.sleep(1)
-    console.send('G0 Z33\n')
+    console.send('G0 F2000 Z33\n')
     time.sleep(1)
     console.send('G0 X188 Y89\n')
-    time.sleep(3)
+    time.sleep(10)
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
-                        -i /dev/video2 -t 00:00:10 -vcodec mpeg4 \
+                        -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
                         -y scanner.mp4')
-    time.sleep(5)
-    console.send('G1 X286\n')
     time.sleep(1)
+    console.send('G0 F300 X286\n')
+    time.sleep(25)
+    console.send('G0 F2000\n')
     console.send('home\n')
     console.send('exit\n')
     time.sleep(15)
