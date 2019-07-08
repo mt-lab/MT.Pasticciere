@@ -218,8 +218,9 @@ def findCookies(imgOrPath):
     # определить положение печенек в мм и поворот
     cookies = []
     for rect in rectangles:
-        height = gray.item(int(rect[0][Y]), int(rect[0][X]))/10
-        center = (rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
+        height = gray.item(int(rect[0][Y]), int(rect[0][X])) / 10
+        center = (
+            rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
         width = calculateY(rect[0][X] + rect[1][X] / 2, z=height) - \
                 calculateY(rect[0][X] - rect[1][X] / 2, z=height)  # размер печеньки вдоль оси Y в СК принтера в мм
         length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
@@ -230,40 +231,58 @@ def findCookies(imgOrPath):
     return cookies, result, rectangles, contours
 
 
-def scan(pathToVideo=VID_PATH):
-    """
-    Функция обработки видео (сканирования)
-    :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
-    :return: None
-    """
-    # TODO: разделить на несколько функций
-    frameIdx = 0  # счётчик кадров
-    pointIdx = 0  # счётчик точек
+def compare(img, mask, threshold=0.5):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv = cv2.inRange(hsv, np.array([75,92,32]),np.array([95,215,65]))
+    # получить чб из img по фильтру
+    compare = cv2.bitwise_and(hsv, hsv, mask=mask)
+    cv2.imshow('compare', compare)
+    similarity = np.sum(compare == 255) / np.sum(mask == 255)
+    if similarity >= threshold:
+        return True
+    else:
+        return False
 
-    cap = cv2.VideoCapture(pathToVideo)  # чтение видео
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # всего кадров в файле
 
-    numberOfPoints = (Xend - Xnull) * frameCount  # количество точек в облаке
-    ply = np.zeros((numberOfPoints, 3))  # массив облака точек
-    heightMap = np.zeros((frameCount, Xend - Xnull), dtype='uint8')  # массив карты глубины
-    zeroLevel = 240  # нулевой уровень в пикселях
-    shiftZ = 0
-    zmax = 0  # максимальное отклонение по z в пикселях
+startMask = cv2.imread('/home/bedlamzd/Reps/MT.Pasticciere/startMask1.png',0)
 
-    start = time.time()
-    # открыть видео и сканировать пока видео не закончится
-    while (cap.isOpened()):
+
+def detectStart(cap, mask, threshold=0.5):
+    start = False
+    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    while True:
+        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
-        # если с кадром всё в порядке, то сканировать
+        if ret != True:
+            yield -1
+        if compare(frame, mask, threshold):
+            start = True
+        while start:
+            yield True
+        print(f'{frameIdx:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
+        yield False
+
+
+def scanning(cap, initialFrameIdx=0):
+    cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
+    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frameIdx = initialFrameIdx
+    numberOfPoints = (Xend - Xnull) * (frameCount - frameIdx)
+    pointIdx = 0
+    ply = np.zeros((numberOfPoints, 3))
+    heightMap = np.zeros((frameCount - initialFrameIdx, Xend - Xnull), dtype='uint8')
+    zeroLevel = 240
+    shiftZ = 0
+    zmax = 0
+    start = time.time()
+    while cap.isOpened():
+        ret, frame = cap.read()
         if ret == True:
-            # для  кадра получить индекс нулевого уровня и сдвиг ему соответствующий
-            if frameIdx == 0:
-                img = getMask(frame)
+            img = getMask(frame)
+            if frameIdx == initialFrameIdx:
                 zeroLevel = findZeroLevel(img)
                 shiftZ = calculateZ(zeroLevel)
                 print(f'Ряд соответствующий нулевому уровню: {zeroLevel:3d}')
-            img = getMask(frame)
-            # обработка изображения по столбцам затем строкам
             for imgX in range(Xnull, Xend):
                 for imgY in range(zeroLevel, img.shape[0]):
                     # если пиксель белый
@@ -277,7 +296,7 @@ def scan(pathToVideo=VID_PATH):
                             ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
                             ply[pointIdx, Z] = height + Z0
                             # заполнение карты высот
-                            heightMap[frameIdx, imgX] = round(10*height) if height < 25.5 else 255
+                            heightMap[frameIdx, imgX] = round(10 * height) if height < 25.5 else 255
                             break
                         # если высота над столом меньшье погрешности
                         elif height < accuracy:
@@ -286,7 +305,7 @@ def scan(pathToVideo=VID_PATH):
                             ply[pointIdx, Y] = calculateY(imgX, z=height) + Y0
                             ply[pointIdx, Z] = height + Z0
                             # заполнение карты высот
-                            heightMap[frameIdx, imgX] = round(10*height) if height < 25.5 else 255
+                            heightMap[frameIdx, imgX] = round(10 * height) if height < 25.5 else 255
                             break
                 else:
                     # если белых пикселей в стобце нет, то записать нулевой уровень
@@ -299,16 +318,43 @@ def scan(pathToVideo=VID_PATH):
         else:
             timePassed = time.time() - start
             print(f'Done. Time passed {timePassed:3.2f} sec\n')
-            break
+            return ply, heightMap
+
+
+def scan(pathToVideo=VID_PATH, threshold = 0.5):
+    """
+    Функция обработки видео (сканирования)
+    :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
+    :return: None
+    """
+
+    cap = cv2.VideoCapture(pathToVideo)  # чтение видео
+
+    # найти кадр начала сканирования
+    print('Ожидание точки старта...')
+    detector = detectStart(cap, startMask, threshold)
+    start = next(detector)
+    while not start:
+        if start == -1:
+            return 'сканирование не удалось'
+        start = next(detector)
+    initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))-1
+    print(f'Точка начала сканирования: {initialFrameIdx+1: 3d} кадр')
+
+    # сканировать от найденного кадра до конца
+    ply, heightMap = scanning(cap, initialFrameIdx)
+
     # раскрасить карту высот
     coloredHeightMap = cv2.applyColorMap(heightMap, cv2.COLORMAP_BONE)
     cookies = findCookies(coloredHeightMap)[0]
     if len(cookies) != 0:
         print(cookies[0].center, cookies[0].height)
+
     # сохранить карту высот
     cv2.imwrite('colored_height_map.png', coloredHeightMap)
-    print(f'Высота объекта {zmax:3.1f} мм\n')
+
     # сгенерировать файл облака точек
     generatePly(ply)
+
     cap.release()
     cv2.destroyAllWindows()
