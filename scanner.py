@@ -20,7 +20,7 @@ import imutils
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
-Kx = 74 / 214  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
+Kx = 1/3  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
 # Ky = 100 / 447  # мм/пиксель // теперь расчёт по формуле
 
 # ширина изображения для обработки, пиксели
@@ -170,7 +170,7 @@ def findCookies(imgOrPath):
             original = imgOrPath.copy()
             gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
         elif imgOrPath.ndim == 2:
-            original = cv2.merge((imgOrPath.copy(), imgOrPath.copy(),imgOrPath.copy()))
+            original = cv2.merge((imgOrPath.copy(), imgOrPath.copy(), imgOrPath.copy()))
             gray = imgOrPath.copy()
     else:
         return 'Вы передали какую то дичь'
@@ -242,11 +242,13 @@ def compare(img, mask, threshold=0.5):
     :return: True/False в зависимости от схожести
     """
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    hsv = cv2.inRange(hsv, np.array([75, 92, 32]), np.array([95, 215, 65]))
-    # получить чб из img по фильтру
+    hsv = cv2.inRange(hsv, np.array([88, 161, 55]), np.array([144, 255, 92]))
     compare = cv2.bitwise_and(hsv, hsv, mask=mask)
     # cv2.imshow('compare', compare)
-    similarity = np.sum(compare == 255) / np.sum(mask == 255)
+    # cv2.imshow('raw', img)
+    # cv2.waitKey(30)
+    similarity = np.sum(compare == 255) / np.sum(mask == 255) if np.sum(mask == 255) != 0 else 0
+    print(f'{similarity:4.2f}')
     if similarity >= threshold:
         return True
     else:
@@ -255,7 +257,7 @@ def compare(img, mask, threshold=0.5):
 
 def avgK(frame, ksize):
     pad = int((ksize - 1) / 2)
-    img = np.pad(frame, (pad,pad), 'constant', constant_values=(0,0))
+    img = np.pad(frame, (pad, pad), 'constant', constant_values=(0, 0))
     result = np.zeros(frame.shape)
     for x in range(pad, frame.shape[1]):
         for y in range(pad, frame.shape[0]):
@@ -288,7 +290,7 @@ def detectStart(cap, mask, threshold=0.5):
             start = True
         while start:
             yield True
-        print(f'{frameIdx:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
+        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
         yield False
 
 
@@ -296,15 +298,15 @@ def scanning(cap, initialFrameIdx=0):
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
     totalFrames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frameIdx = initialFrameIdx
     # количество точек в облаке
-    numberOfPoints = (Xend - Xnull) * (totalFrames - frameIdx)
+    numberOfPoints = (Xend - Xnull) * (totalFrames - initialFrameIdx)
     # массив с координатами точек в облаке
     ply = np.zeros((numberOfPoints, 3))
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
     shiftZ = 0  # смещение по Z вызванное постоянным смещением лазера
+    frameIdx = 0
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
@@ -312,10 +314,11 @@ def scanning(cap, initialFrameIdx=0):
         if ret == True:
             img = getMask(frame)
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
-            if frameIdx == initialFrameIdx:
+            if frameIdx + initialFrameIdx == initialFrameIdx:
                 zeroLevel = findZeroLevel(img)
                 shiftZ = calculateZ(zeroLevel)
-                print(f'Ряд соответствующий нулевому уровню и соответствующее смещение: {zeroLevel:3d} строка, {shiftZ:3.1f} мм')
+                print(
+                    f'Ряд соответствующий нулевому уровню и соответствующее смещение: {zeroLevel:3d} строка, {shiftZ:3.1f} мм')
             for imgX in range(Xnull, Xend):
                 for imgY in range(zeroLevel, img.shape[0]):
                     # если пиксель белый
@@ -327,12 +330,12 @@ def scanning(cap, initialFrameIdx=0):
                             # заполнение карты высот
                             heightMap[frameIdx, imgX] = height
                             break
+            print(f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {(time.time() - start):4.2f} sec')
             frameIdx += 1
-            print(f'{frameIdx:{3}}/{totalFrames:{3}} processed for {(time.time() - start):4.2f} sec')
         else:
             # когда видео кончилось
             print('Обработка карты высот...')
-            heightMap = avgK(heightMap, 5) # усреднить значения высот по квадрату 5х5 не учитывая нулевую высоту
+            heightMap = avgK(heightMap, 5)  # усреднить значения высот по квадрату 5х5 не учитывая нулевую высоту
             print('Готово.')
             print('Генерация массива с координатами точек...')
             for x in range(heightMap.shape[X]):
@@ -361,7 +364,7 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.5):
     print('Ожидание точки старта...')
     detector = detectStart(cap, mask, threshold)
     start = next(detector)
-    while not start:
+    while not start or start == -1:
         if start == -1:
             return 'сканирование не удалось'
         start = next(detector)
@@ -371,11 +374,11 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.5):
     # сканировать от найденного кадра до конца
     ply, heightMap = scanning(cap, initialFrameIdx)
     # массив для нахождения позиций объектов
-    heightMap = np.uint8(heightMap*10)
+    heightMap = np.uint8(heightMap * 10)
     positionMap = heightMap.copy()
     positionMap[positionMap != 0] = positionMap.max()
 
-    cookies = findCookies(positionMap)[0]
+    cookies = findCookies(heightMap)[0]
     if len(cookies) != 0:
         print(cookies[0].center, cookies[0].height)
 
