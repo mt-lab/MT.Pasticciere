@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
-from math import atan, sin, cos
+from math import atan, sin, cos, pi
 from utilities import X, Y, Z
 from cookie import *
 import time
@@ -26,7 +26,7 @@ Kx = 1/3  # мм/кадр // уточнить коэффициент, по хо�
 # ширина изображения для обработки, пиксели
 Xnull = 0
 Xend = 640
-startMask = cv2.imread('/home/bedlamzd/Reps/MT.Pasticciere/startMask1.png', 0)
+startMask = cv2.imread('startMask.png', 0)
 
 
 def calculateZ(pxl, midPoint=240):
@@ -208,29 +208,50 @@ def findCookies(imgOrPath):
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
+    cntParm = []
+    for contour in contours:
+        moments = cv2.moments(contour)
+        cx = moments['m10']/moments['m00']
+        cy = moments['m01']/moments['m00']
+        center = (cy, cx)
+        a = moments['m20']/moments['m00'] - cx**2
+        b = 2*(moments['m11']/moments['m00'] -cx*cy)
+        c = moments['m02']/moments['m00'] - cy**2
+        theta = 1/2*atan(b/(a-c)) + (a<c)*pi/2
+        cntParm.append((center, theta))
+    print(cntParm)
     # применяем на изначальную картинку маску с задним фоном
     result = cv2.bitwise_and(original, original, mask=blankSpace)
     result = cv2.bitwise_and(original, original, mask=sureBg)
     # находим прямоугольники минимальной площади в которые вписываются печеньки
-    rectangles = [cv2.minAreaRect(contour) for contour in contours]
-    rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
+    ellipses = [cv2.fitEllipse(contour) for contour in contours]
+    # rectangles = [cv2.minAreaRect(contour) for contour in contours]
+    # rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
+
     pic = original.copy()
-    for idx, rect in enumerate(rectanglesCoords):
-        cv2.drawContours(pic, [rect], 0, (0, 0, 255), 2)
+    for ellipse in ellipses:
+        cv2.ellipse(pic, ellipse, (0,255,0), 1)
+    # for idx, rect in enumerate(rectanglesCoords):
+    #     cv2.drawContours(pic, [rect], 0, (0, 0, 255), 2)
     # определить положение печенек в мм и поворот
     cookies = []
-    for rect in rectangles:
-        height = gray.item(int(rect[0][Y]), int(rect[0][X])) / 10
-        center = (
-            rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
-        width = calculateY(rect[0][X] + rect[1][X] / 2, z=height) - \
-                calculateY(rect[0][X] - rect[1][X] / 2, z=height)  # размер печеньки вдоль оси Y в СК принтера в мм
-        length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
-        rotation = rect[2]  # вращение прямоугольника в углах
-        cookies.append(Cookie(center, width, length, height, rotation))
+    for ellipse in ellipses:
+        height = gray.item(int(ellipse[0][Y]),int(ellipse[0][X]))/10
+        center = (ellipse[0][Y] * Kx + X0, calculateY(ellipse[0][X], z=height) + Y0)
+        rotation = ellipse[2]
+        cookies.append(Cookie(center=center, height=height, rotation=rotation))
+    # for rect in rectangles:
+    #     height = gray.item(int(rect[0][Y]), int(rect[0][X])) / 10
+    #     center = (
+    #         rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
+    #     width = calculateY(rect[0][X] + rect[1][X] / 2, z=height) - \
+    #             calculateY(rect[0][X] - rect[1][X] / 2, z=height)  # размер печеньки вдоль оси Y в СК принтера в мм
+    #     length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
+    #     rotation = rect[2]  # вращение прямоугольника в углах
+    #     cookies.append(Cookie(center, width, length, height, rotation))
     # сохранить изображение с отмеченными контурами
     cv2.imwrite('cookies.png', pic)
-    return cookies, result, rectangles, contours
+    return cookies, result, "rectangles", contours
 
 
 def compare(img, mask, threshold=0.5):
@@ -376,9 +397,10 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.5):
     # массив для нахождения позиций объектов
     heightMap = np.uint8(heightMap * 10)
     positionMap = heightMap.copy()
+    positionMap[positionMap < positionMap.mean()] = 0
     positionMap[positionMap != 0] = positionMap.max()
 
-    cookies = findCookies(heightMap)[0]
+    cookies = findCookies(positionMap)[0]
     if len(cookies) != 0:
         print(cookies[0].center, cookies[0].height)
 
