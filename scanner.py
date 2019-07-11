@@ -20,7 +20,7 @@ import imutils
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
-Kx = 1/3  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
+Kx = 48 / 132.28  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
 # Ky = 100 / 447  # мм/пиксель // теперь расчёт по формуле
 
 # ширина изображения для обработки, пиксели
@@ -41,7 +41,7 @@ def calculateZ(pxl, midPoint=240):
     return height
 
 
-def calculateY(pxl, z=0, midPoint=320, midWidth=tableWidth / 2):
+def calculateY(pxl, z=0.0, midPoint=320, midWidth=tableWidth / 2):
     """
     Функция расчета положения точки по оси Y относительно середины обзора камеры (соответственно середины стола)
     :param pxl: номер пикселя по горизонтали на картинке
@@ -159,6 +159,7 @@ def findCookies(imgOrPath):
     """
     # TODO: подробнее посмотреть происходящее в функции, где то тут баги
     # TODO: отредактировать вывод функции, слишком много всего
+
     # проверка параметр строка или нет
     original = None
     gray = None
@@ -174,6 +175,7 @@ def findCookies(imgOrPath):
             gray = imgOrPath.copy()
     else:
         return 'Вы передали какую то дичь'
+
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -208,50 +210,40 @@ def findCookies(imgOrPath):
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
-    cntParm = []
-    for contour in contours:
-        moments = cv2.moments(contour)
-        cx = moments['m10']/moments['m00']
-        cy = moments['m01']/moments['m00']
-        center = (cy, cx)
-        a = moments['m20']/moments['m00'] - cx**2
-        b = 2*(moments['m11']/moments['m00'] -cx*cy)
-        c = moments['m02']/moments['m00'] - cy**2
-        theta = 1/2*atan(b/(a-c)) + (a<c)*pi/2
-        cntParm.append((center, theta))
-    print(cntParm)
     # применяем на изначальную картинку маску с задним фоном
     result = cv2.bitwise_and(original, original, mask=blankSpace)
     result = cv2.bitwise_and(original, original, mask=sureBg)
-    # находим прямоугольники минимальной площади в которые вписываются печеньки
-    ellipses = [cv2.fitEllipse(contour) for contour in contours]
-    # rectangles = [cv2.minAreaRect(contour) for contour in contours]
-    # rectanglesCoords = [np.int0(cv2.boxPoints(rect)) for rect in rectangles]
-
-    pic = original.copy()
-    for ellipse in ellipses:
-        cv2.ellipse(pic, ellipse, (0,255,0), 1)
-    # for idx, rect in enumerate(rectanglesCoords):
-    #     cv2.drawContours(pic, [rect], 0, (0, 0, 255), 2)
-    # определить положение печенек в мм и поворот
+    # расчет центров и поворотов контуров сразу в мм
+    cntParm = []
+    for contour in contours:
+        tmp = contour.copy()  # скопировать контур, чтобы не изменять оригинал
+        # перевести из пикселей в мм
+        for point in tmp:
+            px = point[0][1]
+            py = point[0][0]
+            point[0][1] = px * Kx + X0
+            point[0][0] = calculateY(py) + Y0
+        moments = cv2.moments(tmp)
+        # найти центр контура и записать его в СК принтера
+        cx = moments['m10'] / moments['m00']
+        cy = moments['m01'] / moments['m00']
+        center = (cy, cx)
+        # найти угол поворота контура (главная ось)
+        a = moments['m20'] / moments['m00'] - cx ** 2
+        b = 2 * (moments['m11'] / moments['m00'] - cx * cy)
+        c = moments['m02'] / moments['m00'] - cy ** 2
+        theta = 1 / 2 * atan(b / (a - c)) + (a < c) * pi / 2
+        # угол поворота с учетом приведения в СК принтера
+        rotation = theta + pi / 2
+        cntParm.append((center, rotation))
     cookies = []
-    for ellipse in ellipses:
-        height = gray.item(int(ellipse[0][Y]),int(ellipse[0][X]))/10
-        center = (ellipse[0][Y] * Kx + X0, calculateY(ellipse[0][X], z=height) + Y0)
-        rotation = ellipse[2]
+    for contour in cntParm:
+        height = gray.max()
+        center = contour[0]
+        rotation = contour[1]
         cookies.append(Cookie(center=center, height=height, rotation=rotation))
-    # for rect in rectangles:
-    #     height = gray.item(int(rect[0][Y]), int(rect[0][X])) / 10
-    #     center = (
-    #         rect[0][Y] * Kx + X0, calculateY(rect[0][X], z=height) + Y0)  # позиция печеньки на столе в СК принтера в мм
-    #     width = calculateY(rect[0][X] + rect[1][X] / 2, z=height) - \
-    #             calculateY(rect[0][X] - rect[1][X] / 2, z=height)  # размер печеньки вдоль оси Y в СК принтера в мм
-    #     length = rect[1][Y] * Kx  # размер печеньки вдоль оси X в СК принтера в мм
-    #     rotation = rect[2]  # вращение прямоугольника в углах
-    #     cookies.append(Cookie(center, width, length, height, rotation))
-    # сохранить изображение с отмеченными контурами
-    cv2.imwrite('cookies.png', pic)
-    return cookies, result, "rectangles", contours
+
+    return cookies, result
 
 
 def compare(img, mask, threshold=0.5):
@@ -351,7 +343,8 @@ def scanning(cap, initialFrameIdx=0):
                             # заполнение карты высот
                             heightMap[frameIdx, imgX] = height
                             break
-            print(f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {(time.time() - start):4.2f} sec')
+            print(
+                f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {time.time() - start:4.2f} sec')
             frameIdx += 1
         else:
             # когда видео кончилось
