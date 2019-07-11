@@ -274,9 +274,11 @@ def avgK(frame, ksize):
     result = np.zeros(frame.shape)
     for x in range(pad, frame.shape[1]):
         for y in range(pad, frame.shape[0]):
-            crop = img[y - pad:y + pad, x - pad:x + pad]
-            nonZeros = np.sum(crop != 0)
-            avg = np.sum(crop) / nonZeros if nonZeros != 0 else 0
+            crop = img[y - pad:y + pad + 1, x - pad:x + pad + 1]
+            avg = 0
+            if crop[pad, pad] != 0:
+                nonZeros = np.sum(crop != 0)
+                avg = np.sum(crop) / nonZeros if nonZeros != 0 else 0
             pxlvalue = avg
             result[y, x] = pxlvalue
     return result
