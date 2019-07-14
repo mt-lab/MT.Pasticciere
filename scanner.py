@@ -176,7 +176,7 @@ def findCookies(imgOrPath):
     else:
         return 'Вы передали какую то дичь'
 
-    heightMap = gray.copy()
+    heightMap = gray.copy()/10
     gray[gray < gray.mean()] = 0
     gray[gray != 0] = gray.max()
 
@@ -231,8 +231,13 @@ def findCookies(imgOrPath):
             point[0][0] = calculateY(py, z=heightMap[px, py]) + Y0
         moments = cv2.moments(tmp)
         # найти центр контура и записать его в СК принтера
+        M = cv2.moments(contour)
+        Cx = int(M['m10'] / M['m00'])
+        Cy = int(M['m01'] / M['m00'])
         cx = moments['m10'] / moments['m00']
         cy = moments['m01'] / moments['m00']
+        centerPixel = (Cy, Cx)
+        centerHeight = heightMap[Cy,Cx]
         center = (cy, cx)
         # найти угол поворота контура (главная ось)
         a = moments['m20'] / moments['m00'] - cx ** 2
@@ -241,12 +246,12 @@ def findCookies(imgOrPath):
         theta = 1 / 2 * atan(b / (a - c)) + (a < c) * pi / 2
         # угол поворота с учетом приведения в СК принтера
         rotation = theta + pi / 2
-        cntParm.append((center, rotation))
+        cntParm.append((center, centerHeight, rotation))
     cookies = []
     for contour in cntParm:
-        height = gray.max()/10
+        height = contour[1]
         center = contour[0]
-        rotation = contour[1]
+        rotation = contour[2]
         cookies.append(Cookie(center=center, height=height, rotation=rotation))
 
     return cookies, result
@@ -401,7 +406,7 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.6):
     cookies, detectedContours = findCookies(heightMap)
     if len(cookies) != 0:
         for cookie in cookies:
-            print(cookie.center)
+            print(cookie.center, cookie.height)
 
     # сохранить карты
     cv2.imwrite('height_map.png', heightMap)
