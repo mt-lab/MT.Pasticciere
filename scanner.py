@@ -20,7 +20,7 @@ import imutils
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
-Kx = 48 / 132.28  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
+Kx = 1/3 # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
 # Ky = 100 / 447  # мм/пиксель // теперь расчёт по формуле
 
 # ширина изображения для обработки, пиксели
@@ -176,12 +176,17 @@ def findCookies(imgOrPath):
     else:
         return 'Вы передали какую то дичь'
 
+    heightMap = gray.copy()
+    gray[gray < gray.mean()] = 0
+    gray[gray != 0] = gray.max()
+
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     # нахождение замкнутых объектов на картинке с помощью морфологических алгоритмов
     kernel = np.ones((5, 5), np.uint8)
-    opening = cv2.morphologyEx(gausThresh, cv2.MORPH_OPEN, kernel, iterations=3)
+    closing = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
+    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=2)
     # найти однозначный задний фон
     sureBg = cv2.dilate(opening, kernel, iterations=3)
     distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
@@ -217,12 +222,13 @@ def findCookies(imgOrPath):
     cntParm = []
     for contour in contours:
         tmp = contour.copy()  # скопировать контур, чтобы не изменять оригинал
+        tmp = np.float32(tmp)
         # перевести из пикселей в мм
         for point in tmp:
-            px = point[0][1]
-            py = point[0][0]
+            px = int(point[0][1])
+            py = int(point[0][0])
             point[0][1] = px * Kx + X0
-            point[0][0] = calculateY(py) + Y0
+            point[0][0] = calculateY(py, z=heightMap[px, py]) + Y0
         moments = cv2.moments(tmp)
         # найти центр контура и записать его в СК принтера
         cx = moments['m10'] / moments['m00']
@@ -238,7 +244,7 @@ def findCookies(imgOrPath):
         cntParm.append((center, rotation))
     cookies = []
     for contour in cntParm:
-        height = gray.max()
+        height = gray.max()/10
         center = contour[0]
         rotation = contour[1]
         cookies.append(Cookie(center=center, height=height, rotation=rotation))
@@ -367,7 +373,7 @@ def scanning(cap, initialFrameIdx=0):
             return ply, heightMap
 
 
-def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.5):
+def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.6):
     """
     Функция обработки видео (сканирования)
     :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
@@ -391,17 +397,15 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.5):
     ply, heightMap = scanning(cap, initialFrameIdx)
     # массив для нахождения позиций объектов
     heightMap = np.uint8(heightMap * 10)
-    positionMap = heightMap.copy()
-    positionMap[positionMap < positionMap.mean()] = 0
-    positionMap[positionMap != 0] = positionMap.max()
 
-    cookies = findCookies(positionMap)[0]
+    cookies, detectedContours = findCookies(heightMap)
     if len(cookies) != 0:
-        print(cookies[0].center, cookies[0].height)
+        for cookie in cookies:
+            print(cookie.center)
 
     # сохранить карты
-    cv2.imwrite('position_map.png', positionMap)
     cv2.imwrite('height_map.png', heightMap)
+    cv2.imwrite('cookies.png', detectedContours)
 
     # сгенерировать файл облака точек
     generatePly(ply)
