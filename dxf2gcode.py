@@ -56,6 +56,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
                 gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z]:3.3f} E{E:3.3f}')
                 last_point = point
             last_point = way[-1]
+        gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
     gcode.append(f'G0 Z{Z_up:3.3f}')  # в конце поднять
     gcode.append('G28')  # и увести домой
