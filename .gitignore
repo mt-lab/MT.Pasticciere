@@ -10,5 +10,7 @@
 *.mp4
 *.jpg
 *.pyc
+*.pdf
+/.idea/*
 settings.ini
 /__pycache__/*.pyc
