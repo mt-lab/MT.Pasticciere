@@ -20,7 +20,7 @@ import imutils
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
-Kx = 1/3 # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
+Kx = 1 / 3  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
 # Ky = 100 / 447  # мм/пиксель // теперь расчёт по формуле
 
 # ширина изображения для обработки, пиксели
@@ -29,15 +29,18 @@ Xend = 640
 startMask = cv2.imread('startMask.png', 0)
 
 
-def calculateZ(pxl, midPoint=240):
+def calculateZ(pxl, midPoint=240, zeroLevel=240):
     """
     Функция расчета положения точки по оси Z относительно уровня стола
     :param pxl: номер пикселя по вертикали на картинке
     :param midPoint: номер серединного пикселя по вертикали
     :return height: высота точки
     """
-    phi = atan((pxl - midPoint) * pxlSize / focal)
-    height = distanceToLaser * sin(phi) / cos(cameraAngle + phi)
+    theta = atan((zeroLevel - midPoint) * pxlSize / focal)
+    chi = atan((pxl - midPoint) * pxlSize / focal)
+    phi = chi - theta
+    beta = pi / 2 - cameraAngle - theta
+    height = distanceToLaser * sin(phi) / cos(beta - phi)
     return height
 
 
@@ -53,6 +56,29 @@ def calculateY(pxl, z=0.0, midPoint=320, midWidth=tableWidth / 2):
     dW = (pxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngle)) / focal
     width = midWidth + dW
     return width
+
+
+def findLaserCenter(prev=(0, 0), middle=(0, 0), next=(0, 0), default=(240.0, 0)):
+    if prev[X] == middle[X] or prev[X] == next[X]:
+        return default
+    a = ((middle[Y] - prev[Y]) * (prev[X] - next[X]) + (next[Y] - prev[Y]) * (middle[X] - prev[X])) / (
+            (prev[X] - next[X]) * (middle[X] ** 2 - prev[X] ** 2) + (middle[X] - prev[X]) * (
+            next[X] ** 2 - prev[X] ** 2))
+    b = ((middle[Y] - prev[Y]) - a * (middle[X] ** 2 - prev[X] ** 2))
+    c = prev[Y] - a * prev[X] ** 2 - b * prev[X]
+    if a == 0:
+        return middle
+    xc = -b / (2 * a)
+    yc = a * xc ** 2 + b * xc + c
+    return (xc, yc)
+
+
+def LoG(img, ksize, sigma, delta=0.0):
+    kernelX = cv2.getGaussianKernel(ksize, sigma)
+    kernelY = kernelX.T
+    gauss = -cv2.sepFilter2D(img, cv2.CV_64F, kernelX, kernelY, delta=delta)
+    laplace = cv2.Laplacian(gauss, cv2.CV_64F)
+    return laplace
 
 
 def calibrate(video, width: 'in mm', length: 'in mm', height: 'in mm'):
@@ -150,7 +176,7 @@ def getMask(img, zero_level=0):
     return gaussThin
 
 
-def findCookies(imgOrPath):
+def findCookies(imgOrPath, heightMap=None):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
@@ -176,9 +202,10 @@ def findCookies(imgOrPath):
     else:
         return 'Вы передали какую то дичь'
 
-    heightMap = gray.copy()/10
+    if heightMap is None:
+        heightMap = gray.copy() / 10
+
     gray[gray < gray.mean()] = 0
-    gray[gray != 0] = gray.max()
 
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -236,8 +263,7 @@ def findCookies(imgOrPath):
         Cy = int(M['m01'] / M['m00'])
         cx = moments['m10'] / moments['m00']
         cy = moments['m01'] / moments['m00']
-        centerPixel = (Cy, Cx)
-        centerHeight = heightMap[Cy,Cx]
+        centerHeight = heightMap[Cy, Cx]
         center = (cy, cx)
         # найти угол поворота контура (главная ось)
         a = moments['m20'] / moments['m00'] - cx ** 2
@@ -295,6 +321,12 @@ def avgK(frame, ksize):
     return result
 
 
+def normalize(img):
+    array = img.copy().astype(np.float64)
+    array = (array - array.min()) / (array.max() - array.min())
+    return array
+
+
 def detectStart(cap, mask, threshold=0.5):
     """
     Поиск кадра для начала сканирования
@@ -336,33 +368,50 @@ def scanning(cap, initialFrameIdx=0):
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
+        ksize = 29
+        sigma = 3.3
         # пока кадры есть - сканировать
         if ret == True:
-            img = getMask(frame)
+            # img = getMask(frame)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            derivative = LoG(gray, ksize, sigma)
+            apprxLaserCenter = np.argmax(derivative, axis=0)
+            fineLaserCenter = np.zeros(apprxLaserCenter.shape)
+            for column, row in enumerate(apprxLaserCenter):
+                prevRow = row - 1 if row > 0 else 0
+                nextRow = row + 1 if row < frame.shape[0] - 1 else frame.shape[0] - 1
+                p1 = (1.0 * prevRow, derivative[prevRow, column])
+                p2 = (1.0 * row, derivative[row, column])
+                p3 = (1.0 * nextRow, derivative[nextRow, column])
+                fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0]
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             if frameIdx + initialFrameIdx == initialFrameIdx:
-                zeroLevel = findZeroLevel(img)
-                shiftZ = calculateZ(zeroLevel)
+                zeroLevel = fineLaserCenter.mean()
                 print(
-                    f'Ряд соответствующий нулевому уровню и соответствующее смещение: {zeroLevel:3d} строка, {shiftZ:3.1f} мм')
-            for imgX in range(Xnull, Xend):
-                for imgY in range(zeroLevel, img.shape[0]):
-                    # если пиксель белый
-                    if img.item(imgY, imgX):
-                        # рассчитать соответствующую ему высоту над столом
-                        height = calculateZ(imgY) - shiftZ
-                        # если высота над столом больше погрешности и находится в пределах рабочей высоты принтера
-                        if accuracy <= height and height <= tableHeight:
-                            # заполнение карты высот
-                            heightMap[frameIdx, imgX] = height
-                            break
+                    f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
+            for column, row in enumerate(fineLaserCenter):
+                height = calculateZ(row, zeroLevel=zeroLevel)
+                if accuracy <= height and height <= tableHeight:
+                    heightMap[frameIdx, column] = height
+
+            # for imgX in range(Xnull, Xend):
+            #     for imgY in range(zeroLevel, img.shape[0]):
+            #         # если пиксель белый
+            #         if img.item(imgY, imgX):
+            #             # рассчитать соответствующую ему высоту над столом
+            #             height = calculateZ(imgY) - shiftZ
+            #             # если высота над столом больше погрешности и находится в пределах рабочей высоты принтера
+            #             if accuracy <= height and height <= tableHeight:
+            #                 # заполнение карты высот
+            #                 heightMap[frameIdx, imgX] = height
+            #                 break
             print(
                 f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {time.time() - start:4.2f} sec')
             frameIdx += 1
         else:
             # когда видео кончилось
             print('Обработка карты высот...')
-            heightMap = avgK(heightMap, 5)  # усреднить значения высот по квадрату 5х5 не учитывая нулевую высоту
+            # heightMap = avgK(heightMap, 5)  # усреднить значения высот по квадрату 5х5 не учитывая нулевую высоту
             print('Готово.')
             print('Генерация массива с координатами точек...')
             for x in range(heightMap.shape[X]):
@@ -400,16 +449,16 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.6):
 
     # сканировать от найденного кадра до конца
     ply, heightMap = scanning(cap, initialFrameIdx)
-    # массив для нахождения позиций объектов
-    heightMap = np.uint8(heightMap * 10)
 
-    cookies, detectedContours = findCookies(heightMap)
+    # массив для нахождения позиций объектов
+    heightMap8bit = (heightMap * 10).astype(np.uint8)
+    cookies, detectedContours = findCookies(heightMap8bit, heightMap)
     if len(cookies) != 0:
         for cookie in cookies:
-            print(cookie.center, cookie.height)
+            print(cookie.center, cookie.height, cookie.rotation)
 
     # сохранить карты
-    cv2.imwrite('height_map.png', heightMap)
+    cv2.imwrite('height_map.png', heightMap8bit)
     cv2.imwrite('cookies.png', detectedContours)
 
     # сгенерировать файл облака точек
