@@ -17,7 +17,6 @@ import imutils
 
 # TODO: написать логи
 
-
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
 Kx = 1 / 3  # мм/кадр // уточнить коэффициент, по хорошему должно быть tableLength/(frameCount-initialFrameIdx)
@@ -59,15 +58,17 @@ def calculateY(pxl, z=0.0, midPoint=320, midWidth=tableWidth / 2):
 
 
 def findLaserCenter(prev=(0, 0), middle=(0, 0), next=(0, 0), default=(240.0, 0)):
-    if prev[X] == middle[X] or prev[X] == next[X]:
-        return default
+    # TODO: обработка багов связанных с вычислениями
+    if prev[X] == middle[X] or middle[X] == next[X]:
+        return middle
     a = ((middle[Y] - prev[Y]) * (prev[X] - next[X]) + (next[Y] - prev[Y]) * (middle[X] - prev[X])) / (
             (prev[X] - next[X]) * (middle[X] ** 2 - prev[X] ** 2) + (middle[X] - prev[X]) * (
             next[X] ** 2 - prev[X] ** 2))
-    b = ((middle[Y] - prev[Y]) - a * (middle[X] ** 2 - prev[X] ** 2))
-    c = prev[Y] - a * prev[X] ** 2 - b * prev[X]
     if a == 0:
         return middle
+    b = ((middle[Y] - prev[Y]) - a * (middle[X] ** 2 - prev[X] ** 2))
+    c = prev[Y] - a * prev[X] ** 2 - b * prev[X]
+
     xc = -b / (2 * a)
     yc = a * xc ** 2 + b * xc + c
     return (xc, yc)
@@ -369,7 +370,7 @@ def scanning(cap, initialFrameIdx=0):
     while cap.isOpened():
         ret, frame = cap.read()
         ksize = 29
-        sigma = 3.3
+        sigma = 4.45
         # пока кадры есть - сканировать
         if ret == True:
             # img = getMask(frame)
@@ -427,7 +428,7 @@ def scanning(cap, initialFrameIdx=0):
             return ply, heightMap
 
 
-def scan(pathToVideo=VID_PATH, mask=startMask, threshold=0.6):
+def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
     """
     Функция обработки видео (сканирования)
     :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
