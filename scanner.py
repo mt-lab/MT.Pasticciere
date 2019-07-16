@@ -7,7 +7,7 @@ Author: bedlamzd of MT.lab
 
 import numpy as np
 import cv2
-from configValues import focal, pxlSize, cameraAngle, distanceToLaser, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
+from configValues import focal, pxlSize, cameraAngle, cameraHeight, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
     hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
 from math import atan, sin, cos, pi
 from utilities import X, Y, Z
@@ -28,33 +28,65 @@ Xend = 640
 startMask = cv2.imread('startMask.png', 0)
 
 
-def calculateZ(pxl, midPoint=240, zeroLevel=240):
+def findDistanceToLaser(midPoint=240, zeroLevel=240):
+    theta = atan((zeroLevel - midPoint) * pxlSize / focal)  # угол смещения нулевого уровня
+    distanceToLaser = cameraHeight / cos(cameraAngle + theta)  # расстояние от линзы до лазера
+    return distanceToLaser, theta
+
+
+def calculateZ(pxl, midPoint=240, zeroLevel=240, distanceToLaser=None, theta=None):
     """
     Функция расчета положения точки по оси Z относительно уровня стола
     :param pxl: номер пикселя по вертикали на картинке
     :param midPoint: номер серединного пикселя по вертикали
     :return height: высота точки
     """
-    theta = atan((zeroLevel - midPoint) * pxlSize / focal)
-    chi = atan((pxl - midPoint) * pxlSize / focal)
-    phi = chi - theta
-    beta = pi / 2 - cameraAngle - theta
+    if distanceToLaser is None or theta is None:
+        distanceToLaser, theta = findDistanceToLaser(midPoint, zeroLevel)
+    chi = atan((pxl - midPoint) * pxlSize / focal)  # угловая координата пикселя
+    phi = chi - theta  # угол изменения высоты
+    beta = pi / 2 - cameraAngle - theta  # угол между плоскостью стола и прямой между линзой и лазером
     height = distanceToLaser * sin(phi) / cos(beta - phi)
     return height
 
 
-def calculateY(pxl, z=0.0, midPoint=320, midWidth=tableWidth / 2):
+def calculateY(pxl, z=0.0, columnMidPoint=320, rowMidPoint=240, midWidth=tableWidth / 2, zeroLevel=240,
+               distanceToLaser=None):
     """
     Функция расчета положения точки по оси Y относительно середины обзора камеры (соответственно середины стола)
     :param pxl: номер пикселя по горизонтали на картинке
     :param z: высота, на которой находится точка
-    :param midPoint: номер серединного пикселя по горизонтали
+    :param columnMidPoint: номер серединного пикселя по горизонтали
     :param midWidth: расстояние до середины стола
     :return width: расстояние до точки от начала стола
     """
-    dW = (pxl - midPoint) * pxlSize * (distanceToLaser - z * cos(cameraAngle)) / focal
+    if distanceToLaser is None:
+        distanceToLaser, _ = findDistanceToLaser(rowMidPoint, zeroLevel)
+    dW = (pxl - columnMidPoint) * pxlSize * (distanceToLaser - z * cameraHeight / distanceToLaser) / focal
     width = midWidth + dW
     return width
+
+
+def calculateX(frameIdx):
+    return frameIdx * Kx
+
+
+def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=240, columnMidPoint=320, zeroLevel=240,
+                         midWidth=tableWidth / 2, distanceToLaser=None, theta=None):
+    row = pixelCoordinate[0]
+    column = pixelCoordinate[1]
+
+    if distanceToLaser is None or theta is None:
+        distanceToLaser, theta = findDistanceToLaser(rowMidPoint, zeroLevel)
+
+    height = calculateZ(row, rowMidPoint, zeroLevel, distanceToLaser, theta)  # высота точки относительно стола
+
+    width = calculateY(column, height, columnMidPoint, midWidth,
+                       distanceToLaser)  # координата Y относительно начала стола
+
+    length = calculateX(frameIdx)  # координата точки по X относительно начала стола
+
+    return (length, width, height)
 
 
 def findLaserCenter(prev=(0, 0), middle=(0, 0), next=(0, 0), default=(240.0, 0)):
@@ -177,7 +209,7 @@ def getMask(img, zero_level=0):
     return gaussThin
 
 
-def findCookies(imgOrPath, heightMap=None):
+def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(cameraAngle)):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
@@ -255,8 +287,8 @@ def findCookies(imgOrPath, heightMap=None):
         for point in tmp:
             px = int(point[0][1])
             py = int(point[0][0])
-            point[0][1] = px * Kx + X0
-            point[0][0] = calculateY(py, z=heightMap[px, py]) + Y0
+            point[0][1] = calculateX(px) + X0
+            point[0][0] = calculateY(py, z=heightMap[px, py], distanceToLaser=distanceToLaser) + Y0
         moments = cv2.moments(tmp)
         # найти центр контура и записать его в СК принтера
         M = cv2.moments(contour)
@@ -357,15 +389,17 @@ def scanning(cap, initialFrameIdx=0):
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
     totalFrames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frameIdx = 0
     # количество точек в облаке
     numberOfPoints = (Xend - Xnull) * (totalFrames - initialFrameIdx)
+    pointNumber = 0
     # массив с координатами точек в облаке
     ply = np.zeros((numberOfPoints, 3))
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
-    shiftZ = 0  # смещение по Z вызванное постоянным смещением лазера
-    frameIdx = 0
+    distanceToLaser = cameraHeight / cos(cameraAngle)
+    theta = 0
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
@@ -388,44 +422,27 @@ def scanning(cap, initialFrameIdx=0):
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             if frameIdx + initialFrameIdx == initialFrameIdx:
                 zeroLevel = fineLaserCenter.mean()
+                distanceToLaser, theta = findDistanceToLaser(zeroLevel=zeroLevel)
                 print(
                     f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
             for column, row in enumerate(fineLaserCenter):
-                height = calculateZ(row, zeroLevel=zeroLevel)
+                length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
+                                                             distanceToLaser=distanceToLaser, theta=theta)
                 if accuracy <= height and height <= tableHeight:
                     heightMap[frameIdx, column] = height
+                    ply[pointNumber, X] = length + X0
+                    ply[pointNumber, Y] = width + Y0
+                    ply[pointNumber, Z] = height + Z0
+                pointNumber += 1
 
-            # for imgX in range(Xnull, Xend):
-            #     for imgY in range(zeroLevel, img.shape[0]):
-            #         # если пиксель белый
-            #         if img.item(imgY, imgX):
-            #             # рассчитать соответствующую ему высоту над столом
-            #             height = calculateZ(imgY) - shiftZ
-            #             # если высота над столом больше погрешности и находится в пределах рабочей высоты принтера
-            #             if accuracy <= height and height <= tableHeight:
-            #                 # заполнение карты высот
-            #                 heightMap[frameIdx, imgX] = height
-            #                 break
             print(
                 f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {time.time() - start:4.2f} sec')
             frameIdx += 1
         else:
             # когда видео кончилось
-            print('Обработка карты высот...')
-            # heightMap = avgK(heightMap, 5)  # усреднить значения высот по квадрату 5х5 не учитывая нулевую высоту
-            print('Готово.')
-            print('Генерация массива с координатами точек...')
-            for x in range(heightMap.shape[X]):
-                for y in range(heightMap.shape[Y]):
-                    height = heightMap[x, y]
-                    pointNumber = x * heightMap.shape[Y] + y
-                    ply[pointNumber, X] = x * Kx + X0
-                    ply[pointNumber, Y] = calculateY(y, z=height) + Y0
-                    ply[pointNumber, Z] = height + Z0
-            print('Готово.')
             timePassed = time.time() - start
             print(f'Done. Time passed {timePassed:3.2f} sec\n')
-            return ply, heightMap
+            return ply, heightMap, distanceToLaser
 
 
 def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
@@ -449,11 +466,11 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
     print(f'Точка начала сканирования: {initialFrameIdx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    ply, heightMap = scanning(cap, initialFrameIdx)
+    ply, heightMap, distanceToLaser = scanning(cap, initialFrameIdx)
 
     # массив для нахождения позиций объектов
     heightMap8bit = (heightMap * 10).astype(np.uint8)
-    cookies, detectedContours = findCookies(heightMap8bit, heightMap)
+    cookies, detectedContours = findCookies(heightMap8bit, heightMap, distanceToLaser)
     if len(cookies) != 0:
         for cookie in cookies:
             print(cookie.center, cookie.height, cookie.rotation)

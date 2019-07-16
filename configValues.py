@@ -54,7 +54,7 @@ Z0 = float(get_setting(config_path, 'Table','Z0'))
 focal = float(get_setting(config_path, 'Camera','focalLength'))
 pxlSize = float(get_setting(config_path, 'Camera','pixelSize'))
 cameraAngle = radians(float(get_setting(config_path, 'Camera', 'angle')))
-distanceToLaser = float(get_setting(config_path, 'Camera','distanceToLaser'))
+cameraHeight = float(get_setting(config_path, 'Camera', 'cameraHeight'))
 
 # параметры фильтра для сканера (предположительно свои для каждого принтера)
 hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')[1:-1]  # строка
