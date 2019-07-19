@@ -8,22 +8,23 @@ Author: bedlamzd of MT.lab
 import numpy as np
 import cv2
 from configValues import focal, pxlSize, cameraAngle, cameraHeight, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
-    hsvLowerBound, hsvUpperBound, accuracy, VID_PATH
+    hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
 from math import atan, sin, cos, pi
-from utilities import X, Y, Z
+from utilities import X, Y, Z, distance
 from cookie import *
 import time
 import imutils
 
 # TODO: написать логи
 
-# TODO: для задания линии центра лазера попробовать находить среднее и отклонение интенсивности линии нулевого уровня
-#       и отмечать как лазер значения только в этом диапазоке, для избавления от искажений на краях объектов
+# TODO: комментарии и рефактор
 
 # TODO: для постобработки облака взять значения внутри найденных контуров (используя маску), найти среднее и отклонения
 #       и обрезать всё что выше mean + std (или 2*std)
 
-# TODO: template search для детекта старта
+# TODO: отделить наполнение массива облака точек от наполнения карты высот для более удобной постобработки
+
+# TODO: template search для детекта старта (испытать и дополнить алгоритм, пока используется matchContours)
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
@@ -315,10 +316,10 @@ def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(ca
         cntParm.append((center, centerHeight, rotation))
     cookies = []
     for contour in cntParm:
-        height = contour[1]
+        centerHeight = contour[1]
         center = contour[0]
         rotation = contour[2]
-        cookies.append(Cookie(center=center, height=height, rotation=rotation))
+        cookies.append(Cookie(center=center, centerHeight=centerHeight, rotation=rotation))
 
     return cookies, result
 
@@ -392,6 +393,82 @@ def detectStart(cap, mask, threshold=0.5):
         yield False
 
 
+def detectStart2(cap, contourPath='', threshold=0.5):
+    # копия findCookies заточеная под поиск конкретного контура и его положение с целью привязки к глобальной СК
+    # работает сразу с видео потоком по принципу detectStart()
+    # TODO: разделить на функции, подумать как обобщить вместе с findCookies()
+
+    if threshold < 0:
+        print('Сканирование без привязки к глобальной СК')
+        yield True
+
+    # прочитать контур метки
+    markPic = cv2.imread(contourPath, cv2.IMREAD_GRAYSCALE)
+    markContours = cv2.findContours(markPic, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    markContours = imutils.grab_contours(markContours)
+    markContour = sorted(markContours, key=cv2.contourArea, reverse=True)[0]
+
+    start = False
+    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    while True:
+        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        ret, frame = cap.read()
+
+        if ret != True or not cap.isOpened():
+            # если видео закончилось или не открылось вернуть ошибку
+            yield -1
+
+        original = frame
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        kernel = np.ones((5, 5), np.uint8)
+        closing = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
+        opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=2)
+        # найти однозначный задний фон
+        sureBg = cv2.dilate(opening, kernel, iterations=3)
+        distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
+        # однозначно объекты
+        ret, sureFg = cv2.threshold(distTrans, 0.1 * distTrans.max(), 255, 0)
+        sureFg = np.uint8(sureFg)
+        # область в которой находятся контура
+        unknown = cv2.subtract(sureBg, sureFg)
+        # назначение маркеров
+        ret, markers = cv2.connectedComponents(sureFg)
+        # отмечаем всё так, чтобы у заднего фона было точно 1
+        markers += 1
+        # помечаем граничную область нулём
+        markers[unknown == 255] = 0
+        markers = cv2.watershed(original, markers)
+        # выделяем контуры на изображении
+        original[markers == -1] = [255, 0, 0]
+        # количество контуров на столе (уникальные маркеры минус фон и контур всего изображения)
+        numOfContours = len(np.unique(markers)) - 2
+        # вырезаем ненужный контур всей картинки
+        blankSpace = np.zeros(gray.shape, dtype='uint8')
+        blankSpace[markers == 1] = 255
+        blankSpace = cv2.bitwise_not(blankSpace)
+        blankSpaceCropped = blankSpace[1:blankSpace.shape[0] - 1, 1:blankSpace.shape[1] - 1]
+        # находим контуры на изображении
+        contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        contours = imutils.grab_contours(contours)
+        contours = sorted(contours, key=lambda x: cv2.matchShapes(markContour, x, cv2.CONTOURS_MATCH_I2, 0))[
+                   :numOfContours]  # сортируем их по схожести с мастер контуром
+        if cv2.matchShapes(markContour, contours[0], cv2.CONTOURS_MATCH_I2, 0) < threshold:
+            moments = cv2.moments(contours[0])
+            candidateCenter = (int(moments['m01'] / moments['m00']), int(moments['m10'] / moments['m00']))
+            if distance(markCenter, candidateCenter) <= 2:
+                start = True
+        while start:
+            yield True
+        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
+        yield False
+        # применяем на изначальную картинку маску с задним фоном
+        # result = cv2.bitwise_and(original, original, mask=blankSpace)
+        # result = cv2.bitwise_and(original, original, mask=sureBg)
+
+
 def scanning(cap, initialFrameIdx=0):
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
@@ -405,13 +482,13 @@ def scanning(cap, initialFrameIdx=0):
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
+    ksize = 29
+    sigma = 4.45
     distanceToLaser = cameraHeight / cos(cameraAngle)
     theta = 0
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
-        ksize = 29
-        sigma = 4.45
         # пока кадры есть - сканировать
         if ret == True:
             # img = getMask(frame)
@@ -425,7 +502,7 @@ def scanning(cap, initialFrameIdx=0):
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
-                fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0]
+                fineLaserCenter[column], _ = findLaserCenter(p1, p2, p3)
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             if frameIdx + initialFrameIdx == initialFrameIdx:
                 zeroLevel = fineLaserCenter.mean()
@@ -440,6 +517,10 @@ def scanning(cap, initialFrameIdx=0):
                     ply[pointNumber, X] = length + X0
                     ply[pointNumber, Y] = width + Y0
                     ply[pointNumber, Z] = height + Z0
+                else:
+                    ply[pointNumber, X] = length + X0
+                    ply[pointNumber, Y] = width + Y0
+                    ply[pointNumber, Z] = Z0
                 pointNumber += 1
 
             print(
@@ -452,7 +533,7 @@ def scanning(cap, initialFrameIdx=0):
             return ply, heightMap, distanceToLaser
 
 
-def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
+def scan(pathToVideo=VID_PATH, contourPath=markPicture, mask=startMask, threshold=-1):
     """
     Функция обработки видео (сканирования)
     :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
@@ -463,7 +544,7 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
 
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
-    detector = detectStart(cap, mask, threshold)
+    detector = detectStart2(cap, contourPath, threshold)
     start = next(detector)
     while not start or start == -1:
         if start == -1:
@@ -480,7 +561,7 @@ def scan(pathToVideo=VID_PATH, mask=startMask, threshold=-1):
     cookies, detectedContours = findCookies(heightMap8bit, heightMap, distanceToLaser)
     if len(cookies) != 0:
         for cookie in cookies:
-            print(cookie.center, cookie.height, cookie.rotation)
+            print(cookie.center, cookie.centerHeight, cookie.rotation)
 
     # сохранить карты
     cv2.imwrite('height_map.png', heightMap8bit)
