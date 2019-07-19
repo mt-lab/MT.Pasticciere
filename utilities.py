@@ -64,6 +64,24 @@ def distance(p1, p2=(0, 0)):
     return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
 
 
+def lineFrom2points(p1=(0,0), p2=(0,0)):
+    k = (p2[X]-p1[X])/(p2[Y]-p1[Y])
+    b = p1[Y]-k*p1[X]
+    return k, b
+
+
+def perpendicular2line(p=(0,0), k=1,b=0):
+    pk = 1/k
+    pb = p[X]/k + p[Y]
+    return pk, pb
+
+
+def crossectionOfLines(k1 = 1, b1=0, k2=1, b2=0):
+    x = (b2-b1)/(k1-k2)
+    y = k1*x + b1
+    return (x, y)
+
+
 def readPointCloud(path=PCD_PATH):
     """ Read PLY point cloud into numpy array, also split it for xy and z coordinates """
     pcd = []

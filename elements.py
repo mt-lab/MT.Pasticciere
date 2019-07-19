@@ -103,6 +103,8 @@ class Element:
         :param pcd_z: часть облака точек с Z координатами
         :return: None
         """
+        # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
+        #       весами сделать расстояние до соседей
         if len(self.sliced) != 0:
             for p in self.sliced:
                 p[Z] = findPointInCloud(p, pcd_xy, pcd_z, self.offset)

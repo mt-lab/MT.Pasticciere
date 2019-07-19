@@ -15,6 +15,7 @@ from scanner import findCookies
 
 Z_max = 30
 Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
+# TODO: написать динамический коэффициент с учетом специфики насоса
 extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
 
 
