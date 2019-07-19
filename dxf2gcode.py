@@ -205,7 +205,8 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
 
     # сгенерировать инструкции для принтера
-    cookies = findCookies('position_map.png')[0][:1]  # найти положения объектов на столе
+    # TODO: переделать так чтобы использовалась нормальная карта высот, а не дискретная
+    cookies = findCookies('height_map.png')[0][:1]  # найти положения объектов на столе
     gcodeInstructions = gcode_generator(path, cookies, pathToPly)
 
     # записать инструкции в текстовый файл
