@@ -9,6 +9,7 @@ import ezdxf as ez
 from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH
 from elements import *
 from utilities import readPointCloud
+import globalValues
 from scanner import findCookies
 
 # TODO: написать логи
@@ -41,7 +42,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     gcode += preGcode
     # для каждого элемента в рисунке
     for count, cookie in enumerate(listOfCookies, 1):
-        adjustPath(listOfElements, cookie.center)
+        adjustPath(listOfElements, cookie.center, pathToPly)
         gcode.append(f'; {count:3d} cookie')
         for idx, element in enumerate(listOfElements, 1):
             way = element.getSlicedPoints()
@@ -205,8 +206,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
 
     # сгенерировать инструкции для принтера
-    # TODO: переделать так чтобы использовалась нормальная карта высот, а не дискретная
-    cookies = findCookies('height_map.png')[0][:1]  # найти положения объектов на столе
+    cookies, _ = findCookies('height_map.png', globalValues.heightMap, globalValues.distanceToLaser)  # найти положения объектов на столе
     gcodeInstructions = gcode_generator(path, cookies, pathToPly)
 
     # записать инструкции в текстовый файл

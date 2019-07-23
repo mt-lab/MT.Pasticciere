@@ -11,6 +11,7 @@ from configValues import focal, pxlSize, cameraAngle, cameraHeight, tableWidth, 
     hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
 from math import atan, sin, cos, pi
 from utilities import X, Y, Z, distance
+import globalValues
 from cookie import *
 import time
 import imutils
@@ -555,6 +556,8 @@ def scan(pathToVideo=VID_PATH, contourPath=markPicture, mask=startMask, threshol
 
     # сканировать от найденного кадра до конца
     ply, heightMap, distanceToLaser = scanning(cap, initialFrameIdx)
+    globalValues.heightMap = heightMap
+    globalValues.distanceToLaser = distanceToLaser
 
     # массив для нахождения позиций объектов
     heightMap8bit = (heightMap * 10).astype(np.uint8)
