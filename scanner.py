@@ -23,9 +23,6 @@ import imutils
 # TODO: для постобработки облака взять значения внутри найденных контуров (используя маску), найти среднее и отклонения
 #       и обрезать всё что выше mean + std (или 2*std)
 
-# TODO: отделить наполнение массива облака точек от наполнения карты высот для более удобной постобработки
-
-# TODO: template search для детекта старта (испытать и дополнить алгоритм, пока используется matchContours)
 
 # масштабные коэффициенты для построения облака точек
 # Kz = 9 / 22  # мм/пиксель // теперь расчёт по формуле
@@ -470,7 +467,64 @@ def detectStart2(cap, contourPath='', threshold=0.5):
         # result = cv2.bitwise_and(original, original, mask=sureBg)
 
 
-def scanning(cap, initialFrameIdx=0):
+def detectStart3(cap, sensitivity=104):
+    if sensitivity < 0:
+        yield True
+    start = False
+    mirror = False
+    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    firstLine = False
+    while True:
+        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        ret, frame = cap.read()
+        if ret != True:
+            yield -1
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (61, 61), 0)
+        _, thresh = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
+        # skeleton = skeletonize(thresh)
+        lines = cv2.HoughLines(thresh, 1, np.pi / 2, sensitivity)
+        if not firstLine:
+            if lines is not None:
+                firstLine = True
+        elif not mirror:
+            if lines is None:
+                mirror = True
+        else:
+            if lines is not None:
+                start = True
+        while start:
+            yield True
+        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} кадров пропущенно в ожидании точки старта')
+        yield False
+
+
+def skeletonize(img):
+    size = np.size(img)
+    skel = np.zeros(img.shape, np.uint8)
+
+    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    done = False
+
+    while (not done):
+        eroded = cv2.erode(img, element)
+        temp = cv2.dilate(eroded, element)
+        temp = cv2.subtract(img, temp)
+        skel = cv2.bitwise_or(skel, temp)
+        img = eroded.copy()
+
+        zeros = size - cv2.countNonZero(img)
+        if zeros == size:
+            done = True
+    return skel
+
+
+def scanning(cap, initialFrameIdx=0, tolerance=0.1):
+    # TODO: отделить наполнение массива облака точек от наполнения карты высот для более удобной постобработки
+
+    # TODO: доработать фильтрацию шумов от разрыва лазера и непостоянства его яркости
+    #       идея - сравнивать с threshold от оригинальной картики, если на обоих место яркое, то учитывать его
+
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
     totalFrames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -483,6 +537,7 @@ def scanning(cap, initialFrameIdx=0):
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
+    minIntensity = 0
     ksize = 29
     sigma = 4.45
     distanceToLaser = cameraHeight / cos(cameraAngle)
@@ -495,7 +550,9 @@ def scanning(cap, initialFrameIdx=0):
             # img = getMask(frame)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             derivative = LoG(gray, ksize, sigma)
+            _, thresh = cv2.threshold(derivative, minIntensity*(1-tolerance), derivative.max(), cv2.THRESH_TOZERO)
             apprxLaserCenter = np.argmax(derivative, axis=0)
+            intensity = np.zeros(apprxLaserCenter.shape)
             fineLaserCenter = np.zeros(apprxLaserCenter.shape)
             for column, row in enumerate(apprxLaserCenter):
                 prevRow = row - 1 if row > 0 else 0
@@ -503,24 +560,27 @@ def scanning(cap, initialFrameIdx=0):
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
-                fineLaserCenter[column], _ = findLaserCenter(p1, p2, p3)
+                fineLaserCenter[column], intensity[column] = findLaserCenter(p1, p2, p3)
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             if frameIdx + initialFrameIdx == initialFrameIdx:
                 zeroLevel = fineLaserCenter.mean()
+                minIntensity = intensity.min()
                 distanceToLaser, theta = findDistanceToLaser(zeroLevel=zeroLevel)
                 print(
                     f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
             for column, row in enumerate(fineLaserCenter):
                 length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
                                                              distanceToLaser=distanceToLaser, theta=theta)
+                if intensity[column] < minIntensity*(1-tolerance) or row < zeroLevel:
+                    continue
+                ply[pointNumber, X] = length + X0
+                ply[pointNumber, Y] = width + Y0
                 if accuracy <= height and height <= tableHeight:
                     heightMap[frameIdx, column] = height
-                    ply[pointNumber, X] = length + X0
-                    ply[pointNumber, Y] = width + Y0
                     ply[pointNumber, Z] = height + Z0
+                elif height > tableHeight:
+                    ply[pointNumber, Z] = tableHeight
                 else:
-                    ply[pointNumber, X] = length + X0
-                    ply[pointNumber, Y] = width + Y0
                     ply[pointNumber, Z] = Z0
                 pointNumber += 1
 
@@ -534,7 +594,7 @@ def scanning(cap, initialFrameIdx=0):
             return ply, heightMap, distanceToLaser
 
 
-def scan(pathToVideo=VID_PATH, contourPath=markPicture, mask=startMask, threshold=-1):
+def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1):
     """
     Функция обработки видео (сканирования)
     :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
@@ -545,7 +605,7 @@ def scan(pathToVideo=VID_PATH, contourPath=markPicture, mask=startMask, threshol
 
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
-    detector = detectStart2(cap, contourPath, threshold)
+    detector = detectStart3(cap, sensitivity)
     start = next(detector)
     while not start or start == -1:
         if start == -1:
@@ -555,7 +615,7 @@ def scan(pathToVideo=VID_PATH, contourPath=markPicture, mask=startMask, threshol
     print(f'Точка начала сканирования: {initialFrameIdx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    ply, heightMap, distanceToLaser = scanning(cap, initialFrameIdx)
+    ply, heightMap, distanceToLaser = scanning(cap, initialFrameIdx, tolerance)
     globalValues.heightMap = heightMap
     globalValues.distanceToLaser = distanceToLaser
 
