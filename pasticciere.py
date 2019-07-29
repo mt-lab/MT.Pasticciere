@@ -226,8 +226,8 @@ def getScan():
                          --set-ctrl=white_balance_temperature_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=9')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=56')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=6')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=30')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=7')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=0')
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature=6166')
@@ -247,13 +247,13 @@ def getScan():
     console.send('G0 F2000 Z33\n')
     time.sleep(1)
     console.send('G0 X188 Y89\n')
-    time.sleep(10)
+    time.sleep(8)
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
                         -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
                         -y scanner.mp4')
-    time.sleep(1)
+    time.sleep(3)
     console.send('G0 F300 X286\n')
-    time.sleep(25)
+    time.sleep(20)
     console.send('G0 F2000\n')
     console.send('home\n')
     console.send('exit\n')
