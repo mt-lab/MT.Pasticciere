@@ -451,13 +451,14 @@ def detectStart2(cap, contourPath='', threshold=0.5):
         # находим контуры на изображении
         contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         contours = imutils.grab_contours(contours)
-        contours = sorted(contours, key=lambda x: cv2.matchShapes(markContour, x, cv2.CONTOURS_MATCH_I2, 0))[
-                   :numOfContours]  # сортируем их по схожести с мастер контуром
-        if cv2.matchShapes(markContour, contours[0], cv2.CONTOURS_MATCH_I2, 0) < threshold:
-            moments = cv2.moments(contours[0])
-            candidateCenter = (int(moments['m01'] / moments['m00']), int(moments['m10'] / moments['m00']))
-            if distance(markCenter, candidateCenter) <= 2:
-                start = True
+        if len(contours) != 0 and contours is not None:
+            contours = sorted(contours, key=lambda x: cv2.matchShapes(markContour, x, cv2.CONTOURS_MATCH_I2, 0))[
+                       :numOfContours]  # сортируем их по схожести с мастер контуром
+            if cv2.matchShapes(markContour, contours[0], cv2.CONTOURS_MATCH_I2, 0) < threshold:
+                moments = cv2.moments(contours[0])
+                candidateCenter = (int(moments['m01'] / moments['m00']), int(moments['m10'] / moments['m00']))
+                if distance(markCenter, candidateCenter) <= 2:
+                    start = True
         while start:
             yield True
         print(f'{frameIdx + 1:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
@@ -467,7 +468,7 @@ def detectStart2(cap, contourPath='', threshold=0.5):
         # result = cv2.bitwise_and(original, original, mask=sureBg)
 
 
-def detectStart3(cap, sensitivity=104):
+def detectStart3(cap, sensitivity=50):
     if sensitivity < 0:
         yield True
     start = False
@@ -477,13 +478,15 @@ def detectStart3(cap, sensitivity=104):
     while True:
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
-        if ret != True:
+        if ret != True or not cap.isOpened():
             yield -1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (61, 61), 0)
-        _, thresh = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
-        # skeleton = skeletonize(thresh)
-        lines = cv2.HoughLines(thresh, 1, np.pi / 2, sensitivity)
+        blur = cv2.GaussianBlur(gray, (15, 15), 0)
+        _, thresh = cv2.threshold(blur, 8, 255, cv2.THRESH_BINARY)
+        # cv2.imshow('thresh', gray)
+        # cv2.waitKey(10)
+        skeleton = skeletonize(thresh)
+        lines = cv2.HoughLines(skeleton, 1, np.pi / 2, sensitivity)
         if not firstLine:
             if lines is not None:
                 firstLine = True
@@ -609,7 +612,9 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1):
     start = next(detector)
     while not start or start == -1:
         if start == -1:
-            return 'сканирование не удалось'
+            print('сканирование не удалось')
+            cv2.destroyAllWindows()
+            return None
         start = next(detector)
     initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
     print(f'Точка начала сканирования: {initialFrameIdx + 1: 3d} кадр')
