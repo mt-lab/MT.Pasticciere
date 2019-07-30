@@ -525,9 +525,6 @@ def skeletonize(img):
 def scanning(cap, initialFrameIdx=0, tolerance=0.1):
     # TODO: отделить наполнение массива облака точек от наполнения карты высот для более удобной постобработки
 
-    # TODO: доработать фильтрацию шумов от разрыва лазера и непостоянства его яркости
-    #       идея - сравнивать с threshold от оригинальной картики, если на обоих место яркое, то учитывать его
-
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
     totalFrames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -540,7 +537,6 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
-    minIntensity = 0
     ksize = 29
     sigma = 4.45
     distanceToLaser = cameraHeight / cos(cameraAngle)
@@ -550,12 +546,11 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
         ret, frame = cap.read()
         # пока кадры есть - сканировать
         if ret == True:
-            # img = getMask(frame)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             derivative = LoG(gray, ksize, sigma)
-            _, thresh = cv2.threshold(derivative, minIntensity*(1-tolerance), derivative.max(), cv2.THRESH_TOZERO)
+            _, mask = cv2.threshold(gray, 8, 255, cv2.THRESH_BINARY)  # + cv2.THRESH_OTSU)
+            derivative = cv2.bitwise_and(derivative, derivative, mask=mask)
             apprxLaserCenter = np.argmax(derivative, axis=0)
-            intensity = np.zeros(apprxLaserCenter.shape)
             fineLaserCenter = np.zeros(apprxLaserCenter.shape)
             for column, row in enumerate(apprxLaserCenter):
                 prevRow = row - 1 if row > 0 else 0
@@ -563,18 +558,18 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
-                fineLaserCenter[column], intensity[column] = findLaserCenter(p1, p2, p3)
+                frame[row, column] = (0, 255, 0)
+                fineLaserCenter[column], _ = findLaserCenter(p1, p2, p3)
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             if frameIdx + initialFrameIdx == initialFrameIdx:
                 zeroLevel = fineLaserCenter.mean()
-                minIntensity = intensity.min()
                 distanceToLaser, theta = findDistanceToLaser(zeroLevel=zeroLevel)
                 print(
                     f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
             for column, row in enumerate(fineLaserCenter):
                 length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
                                                              distanceToLaser=distanceToLaser, theta=theta)
-                if intensity[column] < minIntensity*(1-tolerance) or row < zeroLevel:
+                if row < zeroLevel:
                     continue
                 ply[pointNumber, X] = length + X0
                 ply[pointNumber, Y] = width + Y0
@@ -616,7 +611,7 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1):
             cv2.destroyAllWindows()
             return None
         start = next(detector)
-    initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+    initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
     print(f'Точка начала сканирования: {initialFrameIdx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
