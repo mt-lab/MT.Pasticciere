@@ -121,22 +121,15 @@ def LoG(img, ksize, sigma, delta=0.0):
     return laplace
 
 
-def calibrate(video, width: 'in mm', length: 'in mm', height: 'in mm'):
+def calibrateKx(videoFPS: 'frame per sec', printerVelocity: 'mm per minute' = 300):
     """
-    Функция калибровки коэффициентов
-    :param video:
-    :param width:
-    :param length:
-    :param height:
+    Функция калибровки коэффициента Kx
+    :param videoFPS:
+    :param printerVelocity:
     :return:
     """
-    kx = 0
-    ky = 0
-    kz = 0
-
-    zeroLevel = findZeroLevel()
-    shiftZ = calculateZ(zeroLevel)
-    return kx, ky, kz, zeroLevel
+    kx = printerVelocity / 60 / videoFPS
+    return kx
 
 
 def generatePly(pointsArray, filename='cloud.ply'):
@@ -537,6 +530,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
     # карта высот
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
+    Kx = calibrateKx(cap.get(cv2.CAP_PROP_FPS))
     ksize = 29
     sigma = 4.45
     distanceToLaser = cameraHeight / cos(cameraAngle)
