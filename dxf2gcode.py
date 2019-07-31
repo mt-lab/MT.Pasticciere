@@ -36,6 +36,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     if postGcode is None:
         postGcode = []
     gcode = []
+    Z_offset = 3
     last_point = (0, 0, 0)  # начало в нуле
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
     gcode.append('G28')  # домой
@@ -51,12 +52,13 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
                 # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
                 gcode.append(f'G0 Z{Z_up:3.3f}')
                 gcode.append(f'G0 X{way[0][X]:3.3f} Y{way[0][Y]:3.3f}')
-                gcode.append(f'G0 Z{way[0][Z]:3.3f}')
+                gcode.append(f'G0 Z{way[0][Z] + Z_offset:3.3f}')
                 last_point = way[0]  # обновить предыдущую точку
             for point in way[1:]:
                 E += round(extrusionCoefficient * distance(last_point, point), 3)
-                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z]:3.3f} E{E:3.3f}')
+                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + Z_offset:3.3f} E{E:3.3f}')
                 last_point = point
+            E -= extrusionCoefficient*5
             last_point = way[-1]
         gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
