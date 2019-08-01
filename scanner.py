@@ -35,13 +35,13 @@ Xend = 640
 startMask = cv2.imread('startMask.png', 0)
 
 
-def findDistanceToLaser(midPoint=240, zeroLevel=240):
+def findDistanceToLaser(midPoint=239, zeroLevel=239):
     theta = atan((zeroLevel - midPoint) * pxlSize / focal)  # угол смещения нулевого уровня
     distanceToLaser = cameraHeight / cos(cameraAngle + theta)  # расстояние от линзы до лазера
     return distanceToLaser, theta
 
 
-def calculateZ(pxl, midPoint=240, zeroLevel=240, distanceToLaser=None, theta=None):
+def calculateZ(pxl, midPoint=239, zeroLevel=239, distanceToLaser=None, theta=None):
     """
     Функция расчета положения точки по оси Z относительно уровня стола
     :param pxl: номер пикселя по вертикали на картинке
@@ -57,7 +57,7 @@ def calculateZ(pxl, midPoint=240, zeroLevel=240, distanceToLaser=None, theta=Non
     return height
 
 
-def calculateY(pxl, z=0.0, columnMidPoint=320, rowMidPoint=240, midWidth=tableWidth / 2, zeroLevel=240,
+def calculateY(pxl, z=0.0, columnMidPoint=319, rowMidPoint=239, midWidth=tableWidth / 2, zeroLevel=239,
                distanceToLaser=None):
     """
     Функция расчета положения точки по оси Y относительно середины обзора камеры (соответственно середины стола)
@@ -78,7 +78,7 @@ def calculateX(frameIdx):
     return frameIdx * Kx
 
 
-def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=240, columnMidPoint=320, zeroLevel=240,
+def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=239, columnMidPoint=319, zeroLevel=239,
                          midWidth=tableWidth / 2, distanceToLaser=None, theta=None):
     row = pixelCoordinate[0]
     column = pixelCoordinate[1]
@@ -128,7 +128,7 @@ def calibrateKx(videoFPS: 'frame per sec', printerVelocity: 'mm per minute' = 30
     :param printerVelocity:
     :return:
     """
-    kx = printerVelocity / 60 / videoFPS
+    kx = (printerVelocity / 60) / (videoFPS / 2)
     return kx
 
 
@@ -485,13 +485,13 @@ def detectStart3(cap, sensitivity=50):
                 for rho, theta in line:
                     a = np.cos(theta)
                     b = np.sin(theta)
-                    x0 = a*rho
-                    y0 = b*rho
-                    x1 = int(x0 + 1000*(-b))
-                    y1 = int(y0 + 1000*(a))
-                    x2 = int(x0 - 1000*(-b))
-                    y2 = int(y0 - 1000*(a))
-                    cv2.line(frame,(x1,y1),(x2,y2),(0,0,255),2)
+                    x0 = a * rho
+                    y0 = b * rho
+                    x1 = int(x0 + 1000 * (-b))
+                    y1 = int(y0 + 1000 * (a))
+                    x2 = int(x0 - 1000 * (-b))
+                    y2 = int(y0 - 1000 * (a))
+                    cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
         cv2.imshow('skeleton', frame)
         cv2.waitKey(15)
         if not firstLine:
@@ -545,6 +545,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
     heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull), dtype='float16')
     zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
     row_max = 0
+    global Kx
     Kx = calibrateKx(cap.get(cv2.CAP_PROP_FPS))
     ksize = 29
     sigma = 4.45
@@ -568,16 +569,11 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
-                frame[row, column] = (0, 255, 0)
                 fineLaserCenter[column], _ = findLaserCenter(p1, p2, p3)
-            print(f'fineLaserZeroLvl {(fineLaserCenter[0] + fineLaserCenter[-1])/2}')
-            row_max = calculateZ(fineLaserCenter.max(), zeroLevel=zeroLevel, distanceToLaser=distanceToLaser, theta=theta)
+            # print(f'fineLaserZeroLvl {(fineLaserCenter[0] + fineLaserCenter[-1]) / 2}')
+            row_max = calculateZ(fineLaserCenter.max(), zeroLevel=zeroLevel, distanceToLaser=distanceToLaser,
+                                 theta=theta)
             print(f'max_row {row_max}')
-            frame[int(zeroLevel)] = (255,0,0)
-            frame[int(fineLaserCenter.max())] = (0, 0, 255)
-            cv2.imshow('frame',frame)
-            cv2.imshow('mask', mask)
-            cv2.waitKey(15)
             # при первом кадре найти нулевой уровень и соответствующее смещение по Z
             # if frameIdx + initialFrameIdx == initialFrameIdx:
             #     zeroLevel = fineLaserCenter.mean()
@@ -588,12 +584,20 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
             #     print(
             #         f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
             #     cv2.waitKey(0)
-            zeroLevel = (fineLaserCenter[0]+fineLaserCenter[-1])/2
+            zeroLevel = (fineLaserCenter[0] + fineLaserCenter[-1]) / 2
             distanceToLaser, theta = findDistanceToLaser(zeroLevel=zeroLevel)
+            fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
+            for column, row in enumerate(fineLaserCenter):
+                frame[int(row), column] = (0, 255, 0)
+            frame[int(zeroLevel)] = (255, 0, 0)
+            frame[int(fineLaserCenter.max())] = (0, 0, 255)
+            cv2.imshow('frame', frame)
+            cv2.imshow('mask', mask)
+            cv2.waitKey(15)
             for column, row in enumerate(fineLaserCenter):
                 length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
                                                              distanceToLaser=distanceToLaser, theta=theta)
-                if row < zeroLevel:
+                if row < zeroLevel or zeroLevel < frame.shape[0]/2:
                     continue
                 ply[pointNumber, X] = length + X0
                 ply[pointNumber, Y] = width + Y0
@@ -635,7 +639,7 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1):
             cv2.destroyAllWindows()
             return None
         start = next(detector)
-    initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))-1
+    initialFrameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
     print(f'Точка начала сканирования: {initialFrameIdx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
