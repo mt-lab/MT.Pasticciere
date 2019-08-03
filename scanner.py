@@ -50,24 +50,18 @@ def calculateZ(pxl, midPoint=239, zeroLevel=239, distanceToLaser=None, theta=Non
     """
     dp = (pxl - midPoint) * pxlSize
     dp0 = (zeroLevel - midPoint) * pxlSize
+    theta = atan(dp / focal)
+    beta = atan(dp0 / focal)
+    phi = theta - beta
     alpha = cameraAngle
-    tan_theta = dp / focal
-    tan_gamma = dp0 / focal
-    tan_alpha = tan(alpha)
-    dz = sqrt(
-        (1 + ((tan_alpha + tan_gamma) /
-              (1 - tan_alpha * tan_gamma)) ** 2) * \
-        (1 + ((1 - tan_theta * tan_alpha) /
-              (tan_theta + tan_alpha)) ** 2) / \
-        (1 + ((1 + tan_theta * tan_gamma) /
-              (tan_theta - tan_gamma)) ** 2))*cameraHeight
+    height = cameraHeight * sin(phi) / (sin(alpha + beta + phi) * cos(alpha + beta))
     # if distanceToLaser is None or theta is None:
     #     distanceToLaser, theta = findDistanceToLaser(midPoint, zeroLevel)
     # chi = atan((pxl - midPoint) * pxlSize / focal)  # угловая координата пикселя
     # phi = chi - theta  # угол изменения высоты
     # beta = pi / 2 - cameraAngle - theta  # угол между плоскостью стола и прямой между линзой и лазером
     # height = distanceToLaser * sin(phi) / cos(beta - phi)
-    return dz  # height
+    return height
 
 
 def calculateY(pxl, z=0.0, columnMidPoint=319, rowMidPoint=239, midWidth=tableWidth / 2, zeroLevel=239,
@@ -488,7 +482,7 @@ def detectStart3(cap, sensitivity=50):
             yield -1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (15, 15), 0)
-        _, thresh = cv2.threshold(blur, 40, 255, cv2.THRESH_BINARY)
+        _, thresh = cv2.threshold(blur, 10, 255, cv2.THRESH_BINARY)
         # cv2.imshow('thresh', thresh)
         thresh = skeletonize(thresh)
         lines = cv2.HoughLines(thresh, 1, np.pi / 2, sensitivity)
@@ -605,6 +599,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1):
             frame[int(fineLaserCenter.max())] = (0, 0, 255)
             # cv2.imshow('frame', frame)
             # cv2.imshow('mask', mask)
+            # cv2.waitKey(15)
             for column, row in enumerate(fineLaserCenter):
                 length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
                                                              distanceToLaser=distanceToLaser, theta=theta)
