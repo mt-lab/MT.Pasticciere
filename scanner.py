@@ -6,10 +6,10 @@ Author: bedlamzd of MT.lab
 """
 
 import numpy as np
+from numpy import cos, sin, tan, sqrt, arctan, pi
 import cv2
-from configValues import focal, pxlSize, cameraAngle, cameraHeight, tableWidth, tableLength, tableHeight, X0, Y0, Z0, \
-    hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
-from math import atan, sin, cos, pi, sqrt, tan
+from configValues import focal, pxlSize, cameraAngle, cameraHeight, cameraShift, tableWidth, tableLength, tableHeight, \
+    X0, Y0, Z0, hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
 from utilities import X, Y, Z, distance
 import globalValues
 from cookie import *
@@ -31,14 +31,21 @@ Kx = 1 / 3  # мм/кадр // уточнить коэффициент, по х�
 
 # ширина изображения для обработки, пиксели
 Xnull = 0
-Xend = 640
+Xend = 639
+Ynull = 240
+Yend = 479
 startMask = cv2.imread('startMask.png', 0)
+cos_alpha = cos(cameraAngle)
+tan_alpha = tan(cameraAngle)
 
 
 def findDistanceToLaser(zeroLevel=239, column=319, rowMidPoint=239, columnMidPoint=319):
-    tau = atan((column - columnMidPoint) * pxlSize / focal)  # угол смещения нулевого уровня по горизонтали от оси камеры
-    psi = atan((zeroLevel - rowMidPoint)*pxlSize/focal)# угол смещения точки нулевого уровня по вертикали от оси камеры
-    distanceToLaser = cameraHeight*sqrt(1+tan(cameraAngle+tau)**2+tan(psi)**2/cos(cameraAngle)**2)# расстояние от линзы до лазера
+    tau = arctan(
+        (column - columnMidPoint) * pxlSize / focal)  # угол смещения нулевого уровня по горизонтали от оси камеры
+    psi = arctan(
+        (zeroLevel - rowMidPoint) * pxlSize / focal)  # угол смещения точки нулевого уровня по вертикали от оси камеры
+    distanceToLaser = cameraHeight * sqrt(
+        1 + tan(cameraAngle + tau) ** 2 + tan(psi) ** 2 / cos(cameraAngle) ** 2)  # расстояние от линзы до лазера
     # distanceToLaser = cameraHeight / cos(cameraAngle + theta)  # расстояние от линзы до лазера
     return distanceToLaser, psi, tau
 
@@ -52,14 +59,14 @@ def calculateZ(pxl, rowMidPoint=239, columnMidPoint=319, zeroLevel=239, distance
     """
     dp = (pxl - rowMidPoint) * pxlSize
     dp0 = (zeroLevel - rowMidPoint) * pxlSize
-    theta = atan(dp / focal)
-    beta = atan(dp0 / focal)
+    theta = arctan(dp / focal)
+    beta = arctan(dp0 / focal)
     phi = theta - beta
     alpha = cameraAngle
     height = cameraHeight * sin(phi) / (sin(alpha + beta + phi) * cos(alpha + beta))
     # if distanceToLaser is None or theta is None:
     #     distanceToLaser, theta = findDistanceToLaser(midPoint, zeroLevel)
-    # chi = atan((pxl - midPoint) * pxlSize / focal)  # угловая координата пикселя
+    # chi = arctan((pxl - midPoint) * pxlSize / focal)  # угловая координата пикселя
     # phi = chi - theta  # угол изменения высоты
     # beta = pi / 2 - cameraAngle - theta  # угол между плоскостью стола и прямой между линзой и лазером
     # height = distanceToLaser * sin(phi) / cos(beta - phi)
@@ -77,8 +84,8 @@ def calculateY(pxl, z=0.0, columnMidPoint=319, rowMidPoint=239, midWidth=tableWi
     :return width: расстояние до точки от начала стола
     """
     if distanceToLaser is None:
-        distanceToLaser, psi, tau= findDistanceToLaser(zeroLevel, pxl, rowMidPoint, columnMidPoint)
-    dW = (distanceToLaser - z / cos(tau)) *tan(tau)
+        distanceToLaser, psi, tau = findDistanceToLaser(zeroLevel, pxl, rowMidPoint, columnMidPoint)
+    dW = (distanceToLaser - z / cos(tau)) * tan(tau)
     width = midWidth + dW
     return width
 
@@ -95,7 +102,8 @@ def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=239, co
     if distanceToLaser is None or psi is None or tau is None:
         distanceToLaser, psi, tau = findDistanceToLaser(rowMidPoint, zeroLevel)
 
-    height = calculateZ(row, rowMidPoint, columnMidPoint, zeroLevel, distanceToLaser, psi)  # высота точки относительно стола
+    height = calculateZ(row, rowMidPoint, columnMidPoint, zeroLevel, distanceToLaser,
+                        psi)  # высота точки относительно стола
 
     width = calculateY(column, height, columnMidPoint, rowMidPoint, midWidth, zeroLevel,
                        distanceToLaser, psi, tau)  # координата Y относительно начала стола
@@ -103,6 +111,23 @@ def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=239, co
     length = calculateX(frameIdx)  # координата точки по X относительно начала стола
 
     return (length, width, height)
+
+
+def calculateYZCoordinates(frameIdx, pxlCoords=(0, 0), zeroLvlRow=239, frameShape=(480, 640)):
+    dpy0 = (zeroLvlRow - (frameShape[0] / 2 - 1)) * pxlSize
+    dpy = (pxlCoords[0] - (frameShape[0] / 2 - 1)) * pxlSize
+    dpx = (pxlCoords[1] - (frameShape[1] / 2) - 1) * pxlSize
+    tan_gamma = dpy0 / focal
+    tan_theta = dpy / focal
+    tan_rho = dpx / (focal * cos_alpha)
+    sin_thetaMgamma = 1 / (sqrt(1 + ((1 + tan_theta * tan_gamma) / (tan_theta - tan_gamma)) ** 2))
+    sin_alphaPtheta = 1 / (sqrt(1 + ((1 - tan_alpha * tan_theta) / (tan_alpha + tan_theta)) ** 2))
+    cos_alphaPgamma = 1 / (sqrt(1 + ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma)) ** 2))
+    z = cameraHeight * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)  # высота точки от нулевого уровня
+    y = (cameraHeight - z) * tan_rho  # координата y точки относительно камеры
+    y += cameraShift
+    # x = calculateX(frameIdx) # координата x точки высчитанная по номеру кадра
+    return y, z
 
 
 def findLaserCenter(prev=(0, 0), middle=(0, 0), next=(0, 0), default=(240.0, 0)):
@@ -294,8 +319,8 @@ def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(ca
         for point in tmp:
             px = int(point[0][1])
             py = int(point[0][0])
-            point[0][1] = heightMap[px,py,X] + X0
-            point[0][0] = heightMap[px,py,Y] + Y0
+            point[0][1] = heightMap[px, py, X] + X0
+            point[0][0] = heightMap[px, py, Y] + Y0
         moments = cv2.moments(tmp)
         # найти центр контура и записать его в СК принтера
         M = cv2.moments(contour)
@@ -309,7 +334,7 @@ def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(ca
         a = moments['m20'] / moments['m00'] - cx ** 2
         b = 2 * (moments['m11'] / moments['m00'] - cx * cy)
         c = moments['m02'] / moments['m00'] - cy ** 2
-        theta = 1 / 2 * atan(b / (a - c)) + (a < c) * pi / 2
+        theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
         # угол поворота с учетом приведения в СК принтера
         rotation = theta + pi / 2
         cntParm.append((center, centerHeight, rotation))
@@ -377,6 +402,9 @@ def detectStart(cap, mask, threshold=0.5):
              до тех пор пока для потока не найден нужный кадр False;
              когда кадр найден и все последующие вызовы генератора для данного потока True;
     """
+    if threshold == -1:
+        print('Сканирование без привязки к глобальной СК')
+        yield True
     start = False
     frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     while True:
@@ -544,37 +572,36 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
     totalFrames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     frameIdx = 0
     # количество точек в облаке
-    numberOfPoints = (Xend - Xnull) * (totalFrames - initialFrameIdx)
+    numberOfPoints = (Xend - Xnull + 1) * (totalFrames - initialFrameIdx)
     pointNumber = 0
     # массив с координатами точек в облаке
     ply = np.zeros((numberOfPoints, 3))
     # карта высот
-    heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull, 3), dtype='float16')
-    zeroLevel = 240  # ряд пикселей принимаемый за ноль высоты
-    row_max = 0
+    heightMap = np.zeros((totalFrames - initialFrameIdx, Xend - Xnull + 1, 3), dtype='float16')
     global Kx
     Kx = calibrateKx(cap.get(cv2.CAP_PROP_FPS))
     ksize = 29
     sigma = 4.45
     distanceToLaser = cameraHeight / cos(cameraAngle)
-    psi = 0
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
         # пока кадры есть - сканировать
         if ret == True:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            roi = frame[Ynull:Yend, :]
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             derivative = LoG(gray, ksize, sigma)
             if colored:
-                blur = cv2.GaussianBlur(frame, (33,33), 0)
-                mask = getMask(blur, frame.shape[0]/2-1)
+                blur = cv2.GaussianBlur(roi, (33, 33), 0)
+                # mask = getMask(blur, frame.shape[0] / 2 - 1)
+                mask = getMask(blur)
             else:
-                blur = cv2.GaussianBlur(gray, (33,33), 0)
-                blur[:int(gray.shape[0]/2-1)] = 0
+                blur = cv2.GaussianBlur(gray, (33, 33), 0)
                 _, mask = cv2.threshold(blur, 5, 255, cv2.THRESH_BINARY)  # + cv2.THRESH_OTSU)
             derivative = cv2.bitwise_and(derivative, derivative, mask=mask)
             apprxLaserCenter = np.argmax(derivative, axis=0)
-            apprxLaserCenter[apprxLaserCenter < frame.shape[0] / 2] = 0
+            apprxLaserCenter[apprxLaserCenter + Ynull < frame.shape[0] / 2] = 0
             fineLaserCenter = np.zeros(apprxLaserCenter.shape)
             for column, row in enumerate(apprxLaserCenter):
                 if row == 0:
@@ -584,41 +611,39 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
-                fineLaserCenter[column], _ = findLaserCenter(p1, p2, p3)
-            # print(f'fineLaserZeroLvl {(fineLaserCenter[0] + fineLaserCenter[-1]) / 2}')
-            row_max = calculateZ(fineLaserCenter.max(), zeroLevel=zeroLevel, distanceToLaser=distanceToLaser,
-                                 theta=psi)
-            print(f'max_row {row_max}')
-            # при первом кадре найти нулевой уровень и соответствующее смещение по Z
-            # if frameIdx + initialFrameIdx == initialFrameIdx:
-            #     zeroLevel = fineLaserCenter.mean()
-            #     if zeroLevel < 240:
-            #         initialFrameIdx +=1
-            #         continue
-            #     distanceToLaser, psi = findDistanceToLaser(zeroLevel=zeroLevel)
-            #     print(
-            #         f'Ряд соответствующий нулевому уровню: {zeroLevel:3.1f} ряд')
-            #     cv2.waitKey(0)
+                fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0] + Ynull
             zeroLevel = fineLaserCenter[np.nonzero(fineLaserCenter)]
-            if zeroLevel.size != 0:
+            zeroLevel = sorted(zeroLevel)
+            if len(zeroLevel) != 0:
                 zeroLevel = zeroLevel[0]
+            else:
+                zeroLevel = 239
             fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
-            for column, row in enumerate(fineLaserCenter):
-                frame[int(row), column] = (0, 255, 0)
-            frame[int(zeroLevel)] = (255, 0, 0)
-            frame[int(fineLaserCenter.max())] = (0, 0, 255)
+            #####################################################
+            # for column, row in enumerate(fineLaserCenter):
+            #     frame[int(row), column] = (0, 255, 0)
+            # frame[int(zeroLevel)] = (255, 0, 0)
+            # frame[int(fineLaserCenter.max())] = (0, 0, 255)
             # cv2.imshow('frame', frame)
             # cv2.imshow('mask', mask)
             # cv2.waitKey(15)
+            #####################################################
+            length = calculateX(frameIdx)  # координата x точки высчитанная по номеру кадра
+            if length <= 0 or length >= tableLength:
+                frameIdx += 1
+                continue
+            max_height = 0
             for column, row in enumerate(fineLaserCenter):
-                distanceToLaser, psi, tau = findDistanceToLaser(column=column, zeroLevel=zeroLevel)
-                length, width, height = calculateCoordinates(frameIdx, (row, column), zeroLevel=zeroLevel,
-                                                             distanceToLaser=distanceToLaser, psi=psi, tau=tau)
-                heightMap[frameIdx, column, X] = length
-                heightMap[frameIdx, column, Y] = width
-                ply[pointNumber, X] = length + X0
-                ply[pointNumber, Y] = width + Y0
-                if accuracy <= height and height <= tableHeight:
+                width, height = calculateYZCoordinates(frameIdx, (row, column), zeroLevel)
+                max_height = max(height, max_height)
+                if width >= 0 and width <= tableWidth:
+                    heightMap[frameIdx, column, X] = length
+                    heightMap[frameIdx, column, Y] = width
+                    ply[pointNumber, X] = length + X0
+                    ply[pointNumber, Y] = width + Y0
+                else:
+                    continue
+                if height >= 0 and height <= tableHeight:
                     heightMap[frameIdx, column, Z] = height
                     ply[pointNumber, Z] = height + Z0
                 elif height > tableHeight:
@@ -626,18 +651,18 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 else:
                     ply[pointNumber, Z] = Z0
                 pointNumber += 1
-
             print(
-                f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} processed for {time.time() - start:4.2f} sec')
+                f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
+                f'  X: {length:4.2f} мм; Zmax: {max_height:4.2f} мм')
             frameIdx += 1
         else:
             # когда видео кончилось
             timePassed = time.time() - start
-            print(f'Done. Time passed {timePassed:3.2f} sec\n')
+            print(f'Готово. Потрачено времени на анализ рельефа: {timePassed:3.2f} с\n')
             return ply, heightMap, distanceToLaser
 
 
-def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1, colored=False):
+def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1, colored=False, threshold=0.6):
     """
     Функция обработки видео (сканирования)
     :param pathToVideo: путь к видео, по умолчанию путь из settings.ini
@@ -649,7 +674,7 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1, colored=False):
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
     if colored:
-        detector = detectStart(cap)
+        detector = detectStart(cap, startMask, threshold)
     else:
         detector = detectStart3(cap, sensitivity)
     start = next(detector)
@@ -668,12 +693,18 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1, colored=False):
     globalValues.distanceToLaser = distanceToLaser
 
     # массив для нахождения позиций объектов
-    heightMapZ = np.dsplit(heightMap,3)[Z].reshape(heightMap.shape[0], heightMap.shape[1])
+    heightMapZ = np.dsplit(heightMap, 3)[Z].reshape(heightMap.shape[0], heightMap.shape[1])
     heightMap8bit = (heightMapZ * 10).astype(np.uint8)
     cookies, detectedContours = findCookies(heightMap8bit, heightMap, distanceToLaser)
     if len(cookies) != 0:
-        for cookie in cookies:
-            print(cookie.center, cookie.centerHeight, cookie.rotation)
+        print(f'Объектов найдено: {len(cookies):{3}}')
+        print('#############################################')
+        for i, cookie in enumerate(cookies, 1):
+            print(f'Объект №{i:3d}')
+            print('#############################################')
+            print(cookie)
+            print('#############################################')
+        print()
 
     # сохранить карты
     cv2.imwrite('height_map.png', heightMap8bit)
