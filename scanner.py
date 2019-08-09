@@ -512,9 +512,8 @@ def detectStart3(cap, sensitivity=50):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (15, 15), 0)
         _, thresh = cv2.threshold(blur, 10, 255, cv2.THRESH_BINARY)
-        # cv2.imshow('thresh', thresh)
         thresh = skeletonize(thresh)
-        lines = cv2.HoughLines(thresh, 1, np.pi / 2, sensitivity)
+        lines = cv2.HoughLines(thresh, 1, np.pi / 180, sensitivity)
         if lines is not None:
             for line in lines:
                 for rho, theta in line:
@@ -527,6 +526,7 @@ def detectStart3(cap, sensitivity=50):
                     x2 = int(x0 - 1000 * (-b))
                     y2 = int(y0 - 1000 * (a))
                     cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        # cv2.imshow('thresh', thresh)
         # cv2.imshow('skeleton', frame)
         # cv2.waitKey(15)
         if not firstLine:
@@ -588,6 +588,12 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
     while cap.isOpened():
         ret, frame = cap.read()
         # пока кадры есть - сканировать
+        length = calculateX(frameIdx)  # координата x точки высчитанная по номеру кадра
+        if length <= 0:
+            frameIdx += 1
+            continue
+        if length >= tableLength:
+            ret = False
         if ret == True:
             roi = frame[Ynull:Yend, :]
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -613,29 +619,40 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
                 fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0] + Ynull
-            zeroLevel = fineLaserCenter[np.nonzero(fineLaserCenter)]
-            zeroLevel = sorted(zeroLevel)
-            if len(zeroLevel) != 0:
-                zeroLevel = zeroLevel[0]
+            zeroLevel = np.zeros(fineLaserCenter.shape)
+            nzIdc = np.nonzero(fineLaserCenter)
+            # zeroLevel = sorted(zeroLevel)
+            if len(nzIdc[0]) != 0:
+                fnzIdx = nzIdc[0][0]
+                lnzIdx = nzIdc[0][-1]
+                tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx])/(lnzIdx-fnzIdx)
+                for column, _ in enumerate(zeroLevel):
+                    zeroLevel[column] = (column-fnzIdx)*tangent + fineLaserCenter[fnzIdx]
+                    if fineLaserCenter[column] < zeroLevel[column]:
+                        fineLaserCenter[column] = zeroLevel[column]
             else:
                 zeroLevel = 239
-            fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
+                fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
             #####################################################
             # for column, row in enumerate(fineLaserCenter):
             #     frame[int(row), column] = (0, 255, 0)
-            # frame[int(zeroLevel)] = (255, 0, 0)
+            #     if isinstance(zeroLevel, int):
+            #         frame[zeroLevel, column] = (255, 0, 0)
+            #     else:
+            #         frame[int(zeroLevel[column]), column] = (255, 0, 0)
             # frame[int(fineLaserCenter.max())] = (0, 0, 255)
             # cv2.imshow('frame', frame)
             # cv2.imshow('mask', mask)
             # cv2.waitKey(15)
             #####################################################
-            length = calculateX(frameIdx)  # координата x точки высчитанная по номеру кадра
-            if length <= 0 or length >= tableLength:
-                frameIdx += 1
-                continue
+
             max_height = 0
             for column, row in enumerate(fineLaserCenter):
-                width, height = calculateYZCoordinates(frameIdx, (row, column), zeroLevel)
+                if isinstance(zeroLevel, int):
+                    zL=zeroLevel
+                else:
+                    zL = zeroLevel[column]
+                width, height = calculateYZCoordinates(frameIdx, (row, column), zL)
                 max_height = max(height, max_height)
                 if width >= 0 and width <= tableWidth:
                     heightMap[frameIdx, column, X] = length
@@ -653,7 +670,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                     ply[pointNumber, Z] = Z0
                 pointNumber += 1
             print(
-                f'{frameIdx + 1 + initialFrameIdx:{3}}/{totalFrames:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
+                f'{frameIdx + initialFrameIdx:{3}}/{totalFrames:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
                 f'  X: {length:4.2f} мм; Zmax: {max_height:4.2f} мм')
             frameIdx += 1
         else:
