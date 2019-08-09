@@ -566,6 +566,7 @@ def skeletonize(img):
 
 def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
     # TODO: отделить наполнение массива облака точек от наполнения карты высот для более удобной постобработки
+    #   (отказаться от ply облака точек совсем)
 
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initialFrameIdx)
