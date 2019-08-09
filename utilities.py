@@ -159,9 +159,10 @@ def readPointCloud(path=PCD_PATH):
 def findPointInCloud(point, pcd_xy, pcd_z, pcd=None):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
-    closest_points = sorted(pcd, key=lambda p:distance(p, point[:2]))[:3]
+    # closest_points = sorted(pcd, key=lambda p:distance(p, point[:2], simple=True))[:3]
     # point[X] += offset[X] #-50
     # point[Y] += offset[Y] #120
-    z = apprxPointHeight(point, closest_points)
+    # z = apprxPointHeight(point, closest_points)
+    z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
     # point.append(z if z else 0)
     return z if z else 0
