@@ -6,7 +6,7 @@ Author: bedlamzd of MT.lab
 генерация gcode в соответствующий файл
 """
 import ezdxf as ez
-from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH
+from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset
 from elements import *
 from utilities import readPointCloud
 import globalValues
@@ -15,7 +15,7 @@ from scanner import findCookies
 # TODO: написать логи
 
 Z_max = 30
-Z_up = Z_max + 3  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
+Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 # TODO: написать динамический коэффициент с учетом специфики насоса
 extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
 
@@ -36,7 +36,6 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     if postGcode is None:
         postGcode = []
     gcode = []
-    Z_offset = 3
     last_point = (0, 0, 0)  # начало в нуле
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
     gcode.append('G28')  # домой
@@ -52,11 +51,11 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
                 # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
                 gcode.append(f'G0 Z{Z_up:3.3f}')
                 gcode.append(f'G0 X{way[0][X]:3.3f} Y{way[0][Y]:3.3f}')
-                gcode.append(f'G0 Z{way[0][Z] + Z_offset:3.3f}')
+                gcode.append(f'G0 Z{way[0][Z] + zOffset:3.3f}')
                 last_point = way[0]  # обновить предыдущую точку
             for point in way[1:]:
                 E += round(extrusionCoefficient * distance(last_point, point), 3)
-                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + Z_offset:3.3f} E{E:3.3f}')
+                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
                 last_point = point
             E -= extrusionCoefficient*5
             last_point = way[-1]
@@ -209,7 +208,9 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
 
     # сгенерировать инструкции для принтера
     cookies, _ = findCookies('height_map.png', globalValues.heightMap, globalValues.distanceToLaser)  # найти положения объектов на столе
+    print('Положения печенек найдены')
     gcodeInstructions = gcode_generator(path, cookies, pathToPly)
+    print('Инструкции сгенерированы')
 
     # записать инструкции в текстовый файл
     writeGcode(gcodeInstructions)

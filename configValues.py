@@ -71,6 +71,7 @@ accuracy = float(get_setting(config_path, 'GCoder', 'accuracy'))
 
 # шаг нарезки рисунка
 sliceStep = float(get_setting(config_path, 'GCoder', 'slice_step'))
+zOffset = float(get_setting(config_path, 'GCoder', 'zoffset'))
 
 # пути по умолчанию для dxf, облака точек и видео соответственно
 DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')
