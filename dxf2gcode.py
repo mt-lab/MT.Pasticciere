@@ -165,7 +165,7 @@ def adjustPath(path, offset=(0, 0), pathToPly=PCD_PATH):
     # add volume to dxf, also add offset
     for element in path:
         element.setOffset(offset)
-        element.addZ(pcd_xy, pcd_z)
+        element.addZ(pcd_xy, pcd_z, pcd)
 
 
 def writeGcode(gcodeInstructions, filename='cookie.gcode'):

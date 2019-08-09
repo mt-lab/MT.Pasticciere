@@ -53,7 +53,7 @@ def avg(*arg):
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
-def distance(p1, p2=(0, 0)):
+def distance(p1, p2=(0, 0), simple=False):
     """ Calculate distance between 2 points either 2D or 3D """
     p1 = list(p1)
     p2 = list(p2)
@@ -61,7 +61,68 @@ def distance(p1, p2=(0, 0)):
         p1.append(0)
     if len(p2) < 3:
         p2.append(0)
+    if simple:
+        return abs(p1[X] - p2[X]) + abs(p1[Y] - p2[Y]) + abs(p1[Z] - p2[Z])
     return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
+
+
+def triangleArea(p1, p2, p3):
+    A = np.asarray([p1, p2, p3])
+    detA = np.linalg.det(A)
+    return abs(detA)
+
+def insideTriangle(p, a, b, c):
+    S = triangleArea(a, b, c)
+    Spab = triangleArea(p, a, b)
+    Spbc = triangleArea(p, b, c)
+    Spca = triangleArea(p, c, a)
+    if Spab + Spbc + Spca == S:
+        return True
+    return False
+
+def heightByTrigon(p=(0,0), a=(0,0,0), b=(0,0,0), c=(0,0,0)):
+    axy = np.asarray(a)
+    bxy = np.asarray(b)
+    cxy = np.asarray(c)
+    pxy = np.r_[p, 1]
+    axy[Z] = 1
+    bxy[Z] = 1
+    cxy[Z] = 1
+    S = triangleArea(axy, bxy, cxy)
+    S1 = triangleArea(pxy, axy, bxy)
+    S2 = triangleArea(pxy, bxy, cxy)
+    S3 = triangleArea(pxy, cxy, axy)
+    height = c[Z]*S1/S+a[Z]*S2/S+b[Z]*S3/S
+    return height
+
+def apprxPointHeight(point, *arg):
+    if len(point)<2:
+        return None
+    if len(arg) != 3:
+        if len(arg[0]) == 3:
+            arg = arg[0]
+        else:
+            return None
+    arg = sorted(arg, key=lambda p: distance(p[:2]))
+    det_values = np.zeros(len(arg))
+    points = np.asarray(arg)
+    matrix = np.asarray([points[0][:2],points[1][:2],points[2][:2]])
+    matrix = np.c_[matrix, np.ones(3)]
+    area = np.linalg.det(matrix)
+    for i, p1 in enumerate(points):
+        j = i +1 if i < len(points)-1 else 0
+        k = i +2 if i < len(points)-2 else i + 1 -(len(points)-1)
+        p2 = points[j]
+        matrix = np.asarray([point[:2],p1[:2], p2[:2]])
+        matrix = np.c_[matrix, np.ones(3)]
+        det = np.linalg.det(matrix)
+        det_values[k] = det
+    if area == det_values.sum():
+        det_values = abs(det_values)
+        a_values = det_values/det_values.sum()
+        height = np.multiply(a_values, points[:,2]).sum()
+        return height
+    return None
 
 
 def lineFrom2points(p1=(0,0), p2=(0,0)):
@@ -95,11 +156,12 @@ def readPointCloud(path=PCD_PATH):
     return pcd, pcd_xy, pcd_z
 
 
-def findPointInCloud(point, pcd_xy, pcd_z, offset=(0, 0)):
+def findPointInCloud(point, pcd_xy, pcd_z, pcd=None):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
+    closest_points = sorted(pcd, key=lambda p:distance(p, point[:2]))[:3]
     # point[X] += offset[X] #-50
     # point[Y] += offset[Y] #120
-    z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
+    z = apprxPointHeight(point, closest_points)
     # point.append(z if z else 0)
     return z if z else 0

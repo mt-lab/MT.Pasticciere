@@ -96,7 +96,7 @@ class Element:
                     p = p[:3]
                 self.sliced.append(p)
 
-    def addZ(self, pcd_xy, pcd_z):
+    def addZ(self, pcd_xy, pcd_z, pcd=None):
         """
         Добавить координату Z к элементу
         :param pcd_xy: часть облака точек с X и Y координатами
@@ -107,10 +107,10 @@ class Element:
         #       весами сделать расстояние до соседей
         if len(self.sliced) != 0:
             for p in self.sliced:
-                p[Z] = findPointInCloud(p, pcd_xy, pcd_z, self.offset)
+                p[Z] = findPointInCloud(p, pcd_xy, pcd_z,pcd)
         elif len(self.points) != 0:
             for p in self.points:
-                p.append(findPointInCloud(p, pcd_xy, pcd_z, self.offset))
+                p.append(findPointInCloud(p, pcd_xy, pcd_z, pcd))
 
 
 class Point(Element):
