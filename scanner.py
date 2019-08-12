@@ -32,8 +32,8 @@ Kx = 1 / 3  # мм/кадр // уточнить коэффициент, по х�
 # ширина изображения для обработки, пиксели
 Xnull = 0
 Xend = 639
-Ynull = 240
-Yend = 479
+Ynull = 100
+Yend = 400
 startMask = cv2.imread('startMask.png', 0)
 cos_alpha = cos(cameraAngle)
 tan_alpha = tan(cameraAngle)
@@ -610,17 +610,18 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 _, mask = cv2.threshold(blur, 5, 255, cv2.THRESH_BINARY)  # + cv2.THRESH_OTSU)
             derivative = cv2.bitwise_and(derivative, derivative, mask=mask)
             apprxLaserCenter = np.argmax(derivative, axis=0)
-            apprxLaserCenter[apprxLaserCenter + Ynull < frame.shape[0] / 2] = 0
+            apprxLaserCenter[apprxLaserCenter > (Yend-Ynull-1)] = 0
             fineLaserCenter = np.zeros(apprxLaserCenter.shape)
             for column, row in enumerate(apprxLaserCenter):
                 if row == 0:
                     continue
                 prevRow = row - 1
-                nextRow = row + 1 if row < frame.shape[0] - 1 else frame.shape[0] - 1
+                nextRow = row + 1 if row < derivative.shape[0] - 1 else derivative.shape[0] - 1
                 p1 = (1.0 * prevRow, derivative[prevRow, column])
                 p2 = (1.0 * row, derivative[row, column])
                 p3 = (1.0 * nextRow, derivative[nextRow, column])
                 fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0] + Ynull
+            fineLaserCenter[fineLaserCenter > Yend -1] = Yend
             zeroLevel = np.zeros(fineLaserCenter.shape)
             nzIdc = np.nonzero(fineLaserCenter)
             # zeroLevel = sorted(zeroLevel)
@@ -630,22 +631,26 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx])/(lnzIdx-fnzIdx)
                 for column, _ in enumerate(zeroLevel):
                     zeroLevel[column] = (column-fnzIdx)*tangent + fineLaserCenter[fnzIdx]
+                    zeroLevel[zeroLevel < Ynull] = Ynull
+                    zeroLevel[zeroLevel > Yend - 1] = Yend - 1
                     if fineLaserCenter[column] < zeroLevel[column]:
                         fineLaserCenter[column] = zeroLevel[column]
             else:
-                zeroLevel = 239
+                zeroLevel = int(frame.shape[0]/2-1)
                 fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
             #####################################################
-            # for column, row in enumerate(fineLaserCenter):
-            #     frame[int(row), column] = (0, 255, 0)
-            #     if isinstance(zeroLevel, int):
-            #         frame[zeroLevel, column] = (255, 0, 0)
-            #     else:
-            #         frame[int(zeroLevel[column]), column] = (255, 0, 0)
-            # frame[int(fineLaserCenter.max())] = (0, 0, 255)
-            # cv2.imshow('frame', frame)
-            # cv2.imshow('mask', mask)
-            # cv2.waitKey(15)
+            for column, row in enumerate(fineLaserCenter):
+                if row >= 479:
+                    cv2.waitKey(1)
+                frame[int(row), column] = (0, 255, 0)
+                if isinstance(zeroLevel, int):
+                    frame[zeroLevel, column] = (255, 0, 0)
+                else:
+                    frame[int(zeroLevel[column]), column] = (255, 0, 0)
+            frame[int(fineLaserCenter.max())] = (0, 0, 255)
+            cv2.imshow('frame', frame)
+            cv2.imshow('mask', mask)
+            cv2.waitKey(15)
             #####################################################
 
             max_height = 0
