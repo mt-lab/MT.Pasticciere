@@ -191,3 +191,21 @@ def findCameraAngle(viewWidth:'in mm', frameWidth:'in pxls'=640, cameraHeight:'i
     cos_cameraAngle = 2*cameraHeight/viewWidth*tan(viewAngle/2)
     cameraAngle = arccos(cos_cameraAngle)
     return cameraAngle
+
+
+def saveHeightMap(heightMap:np.ndarray, filename='heightMap.txt'):
+    with open(filename, 'w') as outfile:
+        outfile.write('{0}\n'.format(heightMap.shape))
+        outfile.write('# Data starts here\n')
+        for dimension in heightMap:
+            np.savetxt(outfile, dimension, fmt='%-7.3f')
+            outfile.write('# New dimension\n')
+
+def readHeightMap(filename='heightMap.txt'):
+    with open(filename, 'r') as infile:
+        shape = infile.readline()
+        shape = shape[1:-2]
+        shape = [int(shape.split(', ')[i]) for i in range(3)]
+        heightMap = np.loadtxt(filename, skiprows=1, dtype=np.float16)
+        heightMap = heightMap.reshape(shape)
+        return heightMap
