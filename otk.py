@@ -236,7 +236,8 @@ def getMask():
         threshlevel = cv2.getTrackbarPos('Tlevel', 'threshholding')
         median = getPattern(gray,threshlevel)
         cv2.imshow("threshholding", median)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        k = cv2.waitKey(1) & 0xFF
+        if  (k == ord('q')) | (k == 27):
             break
     cv2.destroyAllWindows()
     cv2.imwrite("mask.png", median)
