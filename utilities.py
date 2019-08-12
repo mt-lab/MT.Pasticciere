@@ -38,7 +38,7 @@ def diap(start, end, step=1):
         step_x = round(step_x, 3)
         step_y = round(step_y, 3)
     d = distance(start, end)
-    number_of_slices = floor(d / step)
+    number_of_slices = int(floor(d / step))
     for i in range(number_of_slices):
         x += step_x
         y += step_y
