@@ -1,8 +1,8 @@
 from itertools import tee
 from functools import reduce
-from configValues import PCD_PATH
-from math import cos, sin, atan, sqrt, floor
+from configValues import PCD_PATH, focal, pxlSize, cameraHeight
 import numpy as np
+from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
 
 """ Some tools for convenience """
 
@@ -32,9 +32,9 @@ def diap(start, end, step=1):
     else:  # любая другая линия
         # step_[x, y] = step * (sign determiner) * abs(share of step)
         step_x = step * (end[X] - start[X]) / abs(end[X] - start[X]) * abs(cos(
-            atan((end[Y] - start[Y]) / (end[X] - start[X]))))
+            arctan((end[Y] - start[Y]) / (end[X] - start[X]))))
         step_y = step * (end[Y] - start[Y]) / abs(end[Y] - start[Y]) * abs(
-            sin(atan((end[Y] - start[Y]) / (end[X] - start[X]))))
+            sin(arctan((end[Y] - start[Y]) / (end[X] - start[X]))))
         step_x = round(step_x, 3)
         step_y = round(step_y, 3)
     d = distance(start, end)
@@ -166,3 +166,28 @@ def findPointInCloud(point, pcd_xy, pcd_z, pcd=None):
     z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
     # point.append(z if z else 0)
     return z if z else 0
+
+def findAngleOfView(range:'in pxls'=640, focal: 'in mm'=focal, pxlSize: 'in mm'=pxlSize):
+    """
+
+    :param range: длинна обзора в пикселях
+    :param focal: фокусное расстояние
+    :param pxlSize: размер пикселя на матрице
+    :return: угол в радианах
+    """
+    return 2 * arctan(range*pxlSize/2/focal)
+
+def findCameraAngle(viewWidth:'in mm', frameWidth:'in pxls'=640, cameraHeight:'in mm'=cameraHeight, focal:'in mm'=focal, pxlSize:'in mm'=pxlSize):
+    """
+
+    :param viewWidth: ширина обзора по центру кадра в мм
+    :param frameWidth: ширина кадра в пикселях
+    :param cameraHeight: высота камеры над поверхностью в мм
+    :param focal: фокусное расстояние линзы
+    :param pxlSize: размер пикселя на матрице в мм
+    :return: угол наклона камеры в радианах
+    """
+    viewAngle = findAngleOfView(frameWidth, focal,pxlSize)
+    cos_cameraAngle = 2*cameraHeight/viewWidth*tan(viewAngle/2)
+    cameraAngle = arccos(cos_cameraAngle)
+    return cameraAngle
