@@ -227,13 +227,15 @@ def getScan():
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_auto=0')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=focus_absolute=9')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=brightness=30')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=67')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=contrast=7')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=saturation=0')
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
-                         --set-ctrl=white_balance_temperature=2800')
-    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure=156')
+                         --set-ctrl=white_balance_temperature=6166')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure_auto=1')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure_absolute=9')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=sharpness=0')
-    client.exec_command('v4l2-ctl -d /dev/video2 -p 15')
+    client.exec_command('v4l2-ctl -d /dev/video2 -p 30')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-fmt-video=width=640,height=480')
 
     console = client.invoke_shell()
     console.keep_this = client
@@ -245,14 +247,14 @@ def getScan():
     time.sleep(1)
     console.send('G0 F2000 Z33\n')
     time.sleep(1)
-    console.send('G0 X188 Y89\n')
-    time.sleep(10)
-    client.exec_command(r'ffmpeg -y -f video4linux2 -r 15 -s 640x480 \
-                        -i /dev/video2 -t 00:00:20 -vcodec mpeg4 \
+    console.send('G0 X150 Y90.5\n')
+    time.sleep(5)
+    client.exec_command(r'ffmpeg -y -f video4linux2 -r 30 -video_size 640x480 \
+                        -i /dev/video2 -t 00:00:30 -vcodec mpeg4 \
                         -y scanner.mp4')
-    time.sleep(1)
+    time.sleep(3)
     console.send('G0 F300 X286\n')
-    time.sleep(25)
+    time.sleep(20)
     console.send('G0 F2000\n')
     console.send('home\n')
     console.send('exit\n')
