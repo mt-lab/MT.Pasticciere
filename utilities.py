@@ -1,5 +1,6 @@
 from itertools import tee
 from functools import reduce
+from os.path import isfile
 from configValues import PCD_PATH, focal, pxlSize, cameraHeight
 import numpy as np
 from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
@@ -202,10 +203,12 @@ def saveHeightMap(heightMap:np.ndarray, filename='heightMap.txt'):
             outfile.write('# New dimension\n')
 
 def readHeightMap(filename='heightMap.txt'):
-    with open(filename, 'r') as infile:
-        shape = infile.readline()
-        shape = shape[1:-2]
-        shape = [int(shape.split(', ')[i]) for i in range(3)]
-        heightMap = np.loadtxt(filename, skiprows=1, dtype=np.float16)
-        heightMap = heightMap.reshape(shape)
-        return heightMap
+    if isfile(filename):
+        with open(filename, 'r') as infile:
+            shape = infile.readline()
+            shape = shape[1:-2]
+            shape = [int(shape.split(', ')[i]) for i in range(3)]
+            heightMap = np.loadtxt(filename, skiprows=1, dtype=np.float16)
+            heightMap = heightMap.reshape(shape)
+            return heightMap
+    return None
