@@ -54,19 +54,24 @@ Z0 = float(get_setting(config_path, 'Table','Z0'))
 focal = float(get_setting(config_path, 'Camera','focalLength'))
 pxlSize = float(get_setting(config_path, 'Camera','pixelSize'))
 cameraAngle = radians(float(get_setting(config_path, 'Camera', 'angle')))
-distanceToLaser = float(get_setting(config_path, 'Camera','distanceToLaser'))
+cameraHeight = float(get_setting(config_path, 'Camera', 'cameraHeight'))
+cameraShift = float(get_setting(config_path, 'Camera', 'cameraShift'))
 
 # параметры фильтра для сканера (предположительно свои для каждого принтера)
-hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')[1:-1]  # строка
-hsvUpperBoundString = get_setting(config_path, 'Scanner', 'hsv_max')[1:-1]  # строка
-hsvLowerBound = [int(hsvLowerBoundString.split(', ')[i]) for i in range(len(hsvLowerBoundString.split(', ')))]  # список
-hsvUpperBound = [int(hsvUpperBoundString.split(', ')[i]) for i in range(len(hsvUpperBoundString.split(', ')))]  # список
+hsvLowerBoundString = get_setting(config_path, 'Scanner', 'hsv_min')  # строка
+hsvUpperBoundString = get_setting(config_path, 'Scanner', 'hsv_max')  # строка
+hsvLowerBound = [int(hsvLowerBoundString.split(', ')[i]) for i in range(3)]  # список
+hsvUpperBound = [int(hsvUpperBoundString.split(', ')[i]) for i in range(3)]  # список
+markPicture = get_setting(config_path, 'Scanner', 'markpic')  # path to mark picture
+markCenterString = get_setting(config_path, 'Scanner', 'markcenter')
+markCenter = [int(markCenterString.split(', ')[i]) for i in range(2)]  # where mark shoul be in the frame
 
 # окрестность в пределах которой точки считаются совпадающими
 accuracy = float(get_setting(config_path, 'GCoder', 'accuracy'))
 
 # шаг нарезки рисунка
 sliceStep = float(get_setting(config_path, 'GCoder', 'slice_step'))
+zOffset = float(get_setting(config_path, 'GCoder', 'zoffset'))
 
 # пути по умолчанию для dxf, облака точек и видео соответственно
 DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')
