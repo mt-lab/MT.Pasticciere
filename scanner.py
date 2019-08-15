@@ -587,6 +587,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
     Kx = calibrateKx(cap.get(cv2.CAP_PROP_FPS))
     ksize = 29
     sigma = 4.45
+    laserAngle = [0, 0]
     distanceToLaser = cameraHeight / cos(cameraAngle)
     start = time.time()
     while cap.isOpened():
@@ -625,33 +626,48 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 fineLaserCenter[column] = findLaserCenter(p1, p2, p3)[0] + Ynull
             fineLaserCenter[fineLaserCenter > Yend - 1] = Yend
             ########################################################################################
-            zeroLevel = fineLaserCenter[fineLaserCenter > Ynull]
-            if len(zeroLevel) != 0:
-                zeroLevel = zeroLevel[0]
+            # zeroLevel = fineLaserCenter[fineLaserCenter > Ynull]
+            # if len(zeroLevel) != 0:
+            #     zeroLevel = zeroLevel[0]
             ########################################################################################
-            # zeroLevel = np.zeros(fineLaserCenter.shape)
-            # nzIdc = np.nonzero(fineLaserCenter)
-            # if len(nzIdc[0]) != 0:
-            #     fnzIdx = nzIdc[0][0]
-            #     lnzIdx = nzIdc[0][-1]
-            #     tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx]) / (lnzIdx - fnzIdx)
-            #     for column, _ in enumerate(zeroLevel):
-            #         zeroLevel[column] = (column - fnzIdx) * tangent + fineLaserCenter[fnzIdx]
-            #         zeroLevel[zeroLevel < Ynull] = Ynull
-            #         zeroLevel[zeroLevel > Yend - 1] = Yend - 1
-            #         if fineLaserCenter[column] < zeroLevel[column]:
-            #             fineLaserCenter[column] = zeroLevel[column]
+            zeroLevel = np.zeros(fineLaserCenter.shape)
+
+            nzIdc = np.nonzero(fineLaserCenter)
+            if len(nzIdc[0]) != 0:
+                fnzIdx = nzIdc[0][0]
+                # lnzIdx = fnzIdx + 70
+                lnzIdx = nzIdc[0][-1]
+                cv2.circle(frame, (fnzIdx, int(fineLaserCenter[fnzIdx])), 5, (127,0,127), -1)
+                cv2.circle(frame, (lnzIdx, int(fineLaserCenter[lnzIdx])), 5, (127,0,127), -1)
+                tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx]) / (lnzIdx - fnzIdx)
+                if laserAngle[1] >= cap.get(cv2.CAP_PROP_FPS):
+                    lA = laserAngle[0]
+                elif abs(laserAngle[0] - tangent) < pi*3/180:
+                    lA = (laserAngle[0]*laserAngle[1] + tangent) / (laserAngle[1] + 1)
+                    if lA == np.inf:
+                        lA = 0
+                    laserAngle[0] = lA
+                    laserAngle[1] += 1
+                else:
+                    laserAngle = [0, 0]
+                    lA = 0
+                for column, _ in enumerate(zeroLevel):
+                    zeroLevel[column] = (column - fnzIdx) * lA + fineLaserCenter[fnzIdx]
+                    zeroLevel[zeroLevel < Ynull] = Ynull
+                    zeroLevel[zeroLevel > Yend - 1] = Yend - 1
+                    if fineLaserCenter[column] < zeroLevel[column]:
+                        fineLaserCenter[column] = zeroLevel[column]
             ########################################################################################
             else:
                 zeroLevel = int(frame.shape[0] / 2 - 1)
                 fineLaserCenter[fineLaserCenter < zeroLevel] = zeroLevel
-            #####################################################
+            ########################################################################################
             # for column, row in enumerate(fineLaserCenter):
             #     if row >= 479:
             #         cv2.waitKey(1)
             #     frame[int(row), column] = (0, 255, 0)
-            #     if isinstance(zeroLevel, int):
-            #         frame[zeroLevel, column] = (255, 0, 0)
+            #     if isinstance(zeroLevel, int) or isinstance(zeroLevel, float):
+            #         frame[int(zeroLevel), column] = (255, 0, 0)
             #     else:
             #         frame[int(zeroLevel[column]), column] = (255, 0, 0)
             # frame[int(fineLaserCenter.max())] = (0, 0, 255)
@@ -662,7 +678,12 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
 
             max_height = 0
             for column, row in enumerate(fineLaserCenter):
-                width, height = calculateYZCoordinates(frameIdx, (row, column), zeroLevel)
+                if isinstance(zeroLevel, int) or isinstance(zeroLevel, float):
+
+                    zL = int(zeroLevel)
+                else:
+                    zL = zeroLevel[column]
+                width, height = calculateYZCoordinates(frameIdx, (row, column), zL)
                 max_height = max(height, max_height)
                 if width >= 0 and width <= tableWidth:
                     heightMap[frameIdx, column, X] = length
