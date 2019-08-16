@@ -6,7 +6,7 @@ Author: bedlamzd of MT.lab
 генерация gcode в соответствующий файл
 """
 import ezdxf as ez
-from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset
+from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient
 from elements import *
 from utilities import readPointCloud
 import globalValues
@@ -17,7 +17,7 @@ from scanner import findCookies
 Z_max = 30
 Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 # TODO: написать динамический коэффициент с учетом специфики насоса
-extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
+# extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
 
 
 # when path is a set of elements
