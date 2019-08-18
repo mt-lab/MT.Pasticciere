@@ -6,7 +6,7 @@ Author: bedlamzd of MT.lab
 генерация gcode в соответствующий файл
 """
 import ezdxf as ez
-from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient
+from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient, retractAmount
 from elements import *
 from utilities import readPointCloud
 import globalValues
@@ -57,7 +57,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
                 E += round(extrusionCoefficient * distance(last_point, point), 3)
                 gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
                 last_point = point
-            E -= extrusionCoefficient*5
+            E -= retractAmount
             last_point = way[-1]
         gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
