@@ -12,6 +12,7 @@ from configValues import focal, pxlSize, cameraAngle, cameraHeight, cameraShift,
     X0, Y0, Z0, hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
 from utilities import X, Y, Z, distance
 import globalValues
+from utilities import saveHeightMap
 from cookie import *
 import time
 import imutils
@@ -757,6 +758,7 @@ def scan(pathToVideo=VID_PATH, sensitivity=104, tolerance=0.1, colored=False, th
 
     # сохранить карты
     cv2.imwrite('height_map.png', heightMap8bit)
+    saveHeightMap(heightMap)
     cv2.imwrite('cookies.png', detectedContours)
 
     # сгенерировать файл облака точек
