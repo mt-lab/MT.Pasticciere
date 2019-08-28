@@ -66,6 +66,41 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     return gcode
 
 
+def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0,0), retract=0):
+    dxf = ez.readfile(pathToDxf)
+    msp = dxf.modelspace()
+    elementsHeap = dxfReader(dxf, msp)
+    path = organizePath(elementsHeap)
+    slicePath(path, sliceStep)
+    gcode = []
+    last_point = (0, 0, 0)  # начало в нуле
+    E = 0  # начальное значение выдавливания глазури (положение мешалки)
+    gcode.append('G28')  # домой
+    for idx, element in enumerate(path, 1):
+        way = element.getSlicedPoints()
+        gcode.append(f'; {idx:3d} element')  # коммент с номером элемента
+        if distance(last_point, way[0]) > accuracy:
+            # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
+            E -= retract
+            gcode.append(f'G0 E{E:3.3f}')
+            gcode.append(f'G1 F3000')
+            gcode.append(f'G0 Z{Z_up:3.3f}')
+            gcode.append(f'G0 X{way[0][X] + center[X]:3.3f} Y{way[0][Y]+center[Y]:3.3f}')
+            gcode.append(f'G0 Z{height:3.3f}')
+            gcode.append(f'G1 F{F:3d}')
+            last_point = way[0]  # обновить предыдущую точку
+        for point in way[1:]:
+            E += round(dE * distance(last_point, point), 3)
+            gcode.append(f'G1 X{point[X]+center[X]:3.3f} Y{point[Y]+center[Y]:3.3f} Z{height:3.3f} E{E:3.3f}')
+            last_point = point
+        last_point = way[-1]
+    gcode.append(f'G1 F3000')
+    gcode.append(f'G0 Z{Z_up:3.3f}')
+    gcode.append(f'G0 Z{Z_up:3.3f}')  # в конце поднять
+    gcode.append('G28')  # и увести домой
+    writeGcode(gcode)
+
+
 def dxfReader(dxf, modelspace, elementsHeap=None):  # at first input is modelspace
     """
     Рекуррентная функция
