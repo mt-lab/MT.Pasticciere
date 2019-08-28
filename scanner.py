@@ -636,10 +636,11 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
             nzIdc = np.nonzero(fineLaserCenter)
             if len(nzIdc[0]) != 0:
                 fnzIdx = nzIdc[0][0]
-                # lnzIdx = fnzIdx + 70
                 lnzIdx = nzIdc[0][-1]
-                cv2.circle(frame, (fnzIdx, int(fineLaserCenter[fnzIdx])), 5, (127,0,127), -1)
-                cv2.circle(frame, (lnzIdx, int(fineLaserCenter[lnzIdx])), 5, (127,0,127), -1)
+                ####################################################################################
+                # cv2.circle(frame, (fnzIdx, int(fineLaserCenter[fnzIdx])), 5, (127,0,127), -1)
+                # cv2.circle(frame, (lnzIdx, int(fineLaserCenter[lnzIdx])), 5, (127,0,127), -1)
+                ####################################################################################
                 tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx]) / (lnzIdx - fnzIdx)
                 if laserAngle[1] >= cap.get(cv2.CAP_PROP_FPS):
                     lA = laserAngle[0]
