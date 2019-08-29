@@ -107,7 +107,7 @@ class Element:
         :return: None
         """
         # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
-        #       весами сделать расстояние до соседей
+        #       весами сделать расстояние до соседей и проверить скорость вычислений
         if len(self.sliced) != 0:
             for p in self.sliced:
                 p[Z] = findPointInCloud(p, pcd_xy, pcd_z, pcd)
@@ -145,7 +145,8 @@ class Spline(Element):
     Подкласс для объека Сплайн
     """
 
-    # TODO: написать обработку сплайнов для нарезки (использовать чужой dxf2gcode)
+    # TODO: написать обработку сплайнов для нарезки
+    #   прочитать книгу о NURBS, доработать алгоритм Антона
     def __init__(self, spline):
         super().__init__(spline)
         self.points = [point for point in spline.control_points]

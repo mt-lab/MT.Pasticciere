@@ -168,7 +168,6 @@ def calibrateKx(videoFPS: 'frame per sec', printerVelocity: 'mm per minute' = 30
 
 
 def generatePly(pointsArray, filename='cloud.ply'):
-    # TODO: заменить на генерацию CSV
     """
     Генерирует файл облака точек
 
@@ -245,7 +244,6 @@ def getMask(img, zero_level=0):
 
 
 def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(cameraAngle)):
-    # TODO: пофиксить чтобы использовалось некоторое сохранённое облако (CSV), если в памяти нет карты высот
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
