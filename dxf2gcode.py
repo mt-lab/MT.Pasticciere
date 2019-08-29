@@ -6,7 +6,8 @@ Author: bedlamzd of MT.lab
 генерация gcode в соответствующий файл
 """
 import ezdxf as ez
-from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient, retractAmount
+from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient, retractAmount, p0, p1, \
+    p2
 from elements import *
 from utilities import readPointCloud
 import globalValues
@@ -16,8 +17,66 @@ from scanner import findCookies
 
 Z_max = 30
 Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
-# TODO: написать динамический коэффициент с учетом специфики насоса
-# extrusionCoefficient = 0.41  # коэффицент экструзии, поворот/мм(?)
+
+
+def gcodeGenerator(dwg, cookies, preGcode=None, postGcode=None) -> list:
+    """
+    Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
+    :param Drawing dwg: рисунок для печати
+    :param list of Cookie cookies: список печенек на которые наносится рисунок
+    :param list preGcode: gcode для вставки перед сгенерированными командами
+    :param list postGcode: gcode для вставки после сгенерированных команд
+    :return list gcode: список команд для принтера
+    """
+    # проверка наличия пре-кода и пост-кода
+    if preGcode is None:
+        preGcode = []
+    if postGcode is None:
+        postGcode = []
+    gcode = []
+    pcd, pcd_xy, pcd_z = readPointCloud(PCD_PATH) # начало в нуле
+    E = 0  # начальное значение выдавливания глазури (положение мешалки)
+    last_point = (0,0,0)
+    gcode.append('G28')  # домой
+    gcode.append(f'G0 Z{Z_max}')
+    gcode += preGcode
+    # для каждой печеньки в списке
+    for count, cookie in enumerate(cookies, 1):
+        Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
+        gcode.append(f'; {count:3d} cookie')
+        # подгонка рисунка для печенья
+        dwg.slice(sliceStep)
+        dwg.setOffset(cookie.center)
+        dwg.setRotation(cookie.rotation)
+        dwg.addZ(pcd_xy, pcd_z)
+        for index, contour in enumerate(dwg.contours, 1):
+            printed_length = 0
+            dE = extrusionCoefficient*p1/p0
+            gcode.append(f';    {index:3d} contour in drawing')
+            gcode.append(f'G0 X{contour.firstPoint()[X]:3.3f} Y{contour.firstPoint()[Y]:3.3f} Z{Z_up:3.3f}')
+            gcode.append(f'G0 Z{contour.firstPoint()[Z]:3.3f}')
+            for idx, element in enumerate(contour.elements, 1):
+                gcode.append(f';        {idx:3d} element in contour')
+                for point in element.getSlicedPoints()[1:]:
+                    dL = distance(last_point, point)
+                    E += round(dE * dL, 3)
+                    gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
+                    printed_length += dL
+                    last_point = point
+                    if printed_length/contour.length < p0:
+                        dE = p1/p0*extrusionCoefficient
+                    elif printed_length/contour.length < p1:
+                        dE = 0
+                    elif printed_length/contour.length < p2:
+                        dE = extrusionCoefficient
+                    else:
+                        dE = 0
+                gcode.append(f'G0 Z{Z_up:3.3f}')
+    gcode += postGcode
+    gcode.append(f'G0 Z{Z_max:3.3f}')
+    gcode.append('G28')
+    print('Команды для принтера сгенерированы.')
+    return gcode
 
 
 # when path is a set of elements
@@ -66,7 +125,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     return gcode
 
 
-def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0,0), retract=0):
+def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0):
     dxf = ez.readfile(pathToDxf)
     msp = dxf.modelspace()
     elementsHeap = dxfReader(dxf, msp)
@@ -85,13 +144,13 @@ def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0,0),
             gcode.append(f'G0 E{E:3.3f}')
             gcode.append(f'G1 F3000')
             gcode.append(f'G0 Z{Z_up:3.3f}')
-            gcode.append(f'G0 X{way[0][X] + center[X]:3.3f} Y{way[0][Y]+center[Y]:3.3f}')
+            gcode.append(f'G0 X{way[0][X] + center[X]:3.3f} Y{way[0][Y] + center[Y]:3.3f}')
             gcode.append(f'G0 Z{height:3.3f}')
             gcode.append(f'G1 F{F:3d}')
             last_point = way[0]  # обновить предыдущую точку
         for point in way[1:]:
             E += round(dE * distance(last_point, point), 3)
-            gcode.append(f'G1 X{point[X]+center[X]:3.3f} Y{point[Y]+center[Y]:3.3f} Z{height:3.3f} E{E:3.3f}')
+            gcode.append(f'G1 X{point[X] + center[X]:3.3f} Y{point[Y] + center[Y]:3.3f} Z{height:3.3f} E{E:3.3f}')
             last_point = point
         last_point = way[-1]
     gcode.append(f'G1 F3000')
@@ -185,9 +244,6 @@ def slicePath(path, step=1.0):
     Обработка элементов рисунка, их нарезка (slicing), смещение и добавление координаты по Z
 
     :param path: массив элементов
-    :param offset: смещение
-    :param pathToPly: путь до облака точек
-    :return: None
     """
     # slice dxf
     for element in path:
@@ -208,11 +264,11 @@ def writeGcode(gcodeInstructions, filename='cookie.gcode'):
 
     :param gcodeInstructions: массив строк с командами для принтера
     :param filename: имя файла для записи команд
-    :return: None
     """
     with open(filename, 'w+') as gcode:
         for line in gcodeInstructions:
             gcode.write(line + '\n')
+    print('Команды для принтера сохранены.')
 
 
 def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
@@ -221,32 +277,53 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
 
     :param pathToDxf: путь до рисунка
     :param pathToPly: путь до облака точек
-    :param offset: смещение рисунка
     :return: None
     """
 
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
-    # пространство элементов модели
-    msp = dxf.modelspace()
-    # получить все элементы из рисунка
-    elementsHeap = dxfReader(dxf, msp)
-    print('dxf прочтён')
-
-    # сформировать порядок элементов для печати
-    path = organizePath(elementsHeap)
-    print('Сформирован порядок печати')
-
-    # нарезать рисунок
-    slicePath(path, sliceStep)
-    print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
-
-    # сгенерировать инструкции для принтера
-    cookies, _ = findCookies('height_map.png', globalValues.heightMap, globalValues.distanceToLaser)  # найти положения объектов на столе
-    print('Положения печенек найдены')
-    gcodeInstructions = gcode_generator(path, cookies, pathToPly)
-    print('Инструкции сгенерированы')
-
-    # записать инструкции в текстовый файл
+    ####################################################################################################################
+    dwg = Drawing(dxf)
+    print(dwg)
+    if globalValues.cookies is None:
+        cookies, _ = findCookies('height_map.png', globalValues.heightMap,
+                                 globalValues.distanceToLaser)  # найти положения объектов на столе
+        if len(cookies) != 0:
+            globalValues.cookies = cookies
+            print(f'Объектов найдено: {len(cookies):{3}}')
+            print('#############################################')
+            for i, cookie in enumerate(cookies, 1):
+                print(f'Объект №{i:3d}')
+                print('#############################################')
+                print(cookie)
+                print('#############################################')
+            print()
+    else:
+        cookies = globalValues.cookies
+    gcodeInstructions = gcodeGenerator(dwg, cookies)
     writeGcode(gcodeInstructions)
-    print('Gcode сгенерирован')
+    ####################################################################################################################
+    # # пространство элементов модели
+    # msp = dxf.modelspace()
+    # # получить все элементы из рисунка
+    # elementsHeap = dxfReader(dxf, msp)
+    # print('dxf прочтён')
+    #
+    # # сформировать порядок элементов для печати
+    # path = organizePath(elementsHeap)
+    # print('Сформирован порядок печати')
+    #
+    # # нарезать рисунок
+    # slicePath(path, sliceStep)
+    # print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
+    #
+    # # сгенерировать инструкции для принтера
+    # cookies, _ = findCookies('height_map.png', globalValues.heightMap,
+    #                          globalValues.distanceToLaser)  # найти положения объектов на столе
+    # print('Положения печенек найдены')
+    # gcodeInstructions = gcode_generator(path, cookies, pathToPly)
+    # print('Инструкции сгенерированы')
+    #
+    # # записать инструкции в текстовый файл
+    # writeGcode(gcodeInstructions)
+    # print('Gcode сгенерирован')
