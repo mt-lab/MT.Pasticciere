@@ -16,4 +16,5 @@ class Cookie:
                f'    X: {self.center[0]: 4.2f} мм\n' + \
                f'    Y: {self.center[1]: 4.2f} мм\n' + \
                f'    Z: {self.centerHeight: 4.2f} мм\n' + \
-               f'Поворот: {self.rotation * 180 / pi:4.2f} градусов'
+               f'Поворот: {self.rotation * 180 / pi:4.2f} градусов\n' + \
+               f'Максимальная высота: {self.maxHeight:4.2f} мм'
