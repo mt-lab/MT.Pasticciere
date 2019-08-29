@@ -74,6 +74,9 @@ sliceStep = float(get_setting(config_path, 'GCoder', 'slice_step'))
 zOffset = float(get_setting(config_path, 'GCoder', 'zoffset'))
 extrusionCoefficient = float(get_setting(config_path, 'GCoder', 'extrusionCoefficient'))
 retractAmount = float(get_setting(config_path, 'GCoder', 'retractamount'))
+p0 = float(get_setting(config_path, 'GCoder', 'p0'))
+p1 = float(get_setting(config_path, 'GCoder', 'p1'))
+p2 = float(get_setting(config_path, 'GCoder', 'p2'))
 
 # пути по умолчанию для dxf, облака точек и видео соответственно
 DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')
