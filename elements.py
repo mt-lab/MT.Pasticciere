@@ -5,6 +5,8 @@ Author: bedlamzd of MT.lab
 Классы для переопределения элементов в dxf для удобства использования,
 т.к. ezdxf не предоставляет методов необходимых для решения задачи.
 """
+# TODO Переписать ВСЁ используя библиотеки для работы с геометрией (pyeuclid)
+#   или написать класс vector3d с необходимыми операциями
 
 import ezdxf as ez
 import numpy as np
@@ -23,17 +25,30 @@ class Element:
         Конструктор объекта
 
         :param entity: элемент из dxf
-        :param first: первая точка элемента
-        :param last: последняя точка элемента
         """
         self.entity = entity
         self.points = []
-        self.first = first
-        self.last = last
         self.sliced = []
         self.backwards = False
         self.offset = (0, 0)
         self.length = 0
+        self.flatLength = 0
+
+    def firstPoint(self):
+        if len(self.sliced) != 0:
+            return self.sliced[0] if not self.backwards else self.sliced[-1]
+        elif len(self.points) != 0:
+            return self.points[0] if not self.backwards else self.points[-1]
+        else:
+            return None
+
+    def lastPoint(self):
+        if len(self.sliced) != 0:
+            return self.sliced[-1] if not self.backwards else self.sliced[0]
+        elif len(self.points) != 0:
+            return self.points[-1] if not self.backwards else self.points[0]
+        else:
+            return None
 
     def setOffset(self, offset=(0, 0)):
         """
@@ -59,8 +74,8 @@ class Element:
         :param point: точка от которой считается расстояние
         :return: минимальное расстояние до одного из концов объекта
         """
-        dist2first = sqrt(abs(self.first[X] - point[X]) ** 2 + abs(self.first[Y] - point[Y]) ** 2)
-        dist2last = sqrt(abs(self.last[X] - point[X]) ** 2 + abs(self.last[Y] - point[Y]) ** 2)
+        dist2first = sqrt(abs(self.firstPoint()[X] - point[X]) ** 2 + abs(self.firstPoint()[Y] - point[Y]) ** 2)
+        dist2last = sqrt(abs(self.lastPoint()[X] - point[X]) ** 2 + abs(self.lastPoint()[Y] - point[Y]) ** 2)
         self.backwards = dist2last < dist2first
         return min(dist2first, dist2last)
 
@@ -80,9 +95,12 @@ class Element:
         """
         Рассчитать длину элемента
         """
-        for p1, p2 in pairwise(self.sliced):
-            self.length += distance(p1, p2)
-        return self.length
+        if len(self.sliced) != 0:
+            for p1, p2 in pairwise(self.sliced):
+                self.length += distance(p1, p2)
+        elif len(self.points) != 0:
+            for p1, p2 in pairwise(self.points):
+                self.flatLength += distance(p1, p2)
 
     def slice(self, step=1):
         """
@@ -228,37 +246,118 @@ class Ellipse(Element):
 
 
 class Contour:
-    def __init__(self):
-        self.elements = []
-        self.n_elements = 0
-        self.length = 0
+    def __init__(self, elements=None):
+        """
+        :param list of Element elements: элементы составляющие контур
+        """
+        if elements is None:
+            self.elements = []
+            self.n_elements = 0
+            self.first = (0, 0)
+            self.last = (0, 0)
+            self.flatLength = 0
+            self.length = 0
+            self.closed = None
+        else:
+            self.elements = elements
+            self.n_elements = len(elements)
+            self.first = elements[0].firstPoint()
+            self.last = elements[-1].lastPoint()
+            self.flatLength = 0
+            self.length = 0
+            self.calculateLength()
+            if distance(self.first, self.last) < accuracy:
+                self.closed = True
+            else:
+                self.closed = False
 
     def addElement(self, element):
+        """
+        Добавить элемент в конец контура
+        :param Element element: элементр контура
+        """
         self.elements.append(element)
+        self.calculateLength()
+        self.last = element.lastPoint()
 
-    def length(self):
+    def calculateLength(self):
+        if self.n_elements == 1:
+            self.elements[0].calculateLength()
+            self.flatLength = self.elements[0].flatLength
+            self.length = self.elements[0].length
+        elif self.n_elements > 1:
+            for element in self.elements:
+                element.calculateLength()
+                self.flatLength = element.flatLength
+                self.length += element.length
+        else:
+            self.flatLength = 0
+            self.length = 0
+
+    def getPoints(self):
+        points = []
         for element in self.elements:
-            self.length += element.length
-        return self.length
+            points += element.getPoints()
+        return points
+
+    def getSlicedPoints(self):
+        points = []
+        for element in self.elements:
+            points += element.getSlicedPoints()
+        return points
+
+    def firstPoint(self):
+        return self.elements[0].firstPoint()
+
+    def lastPoint(self):
+        return self.elements[0].lastPoint()
 
 
 class Drawing:
-    #TODO: шаблон dxf по которому рисунок делится на слои:
+    # TODO: шаблон dxf по которому рисунок делится на слои:
     #   0 - общий контур печенья, по которому найти центр и поворот рисунка
     #   1 - самый внешний/важный контур
     #   ...
     #   last - элементы для печати в конце
-    def __init__(self, dxf, offset=(0, 0), rotation=0):
-        self.dxf = dxf
-        self.modelspace = self.dxf.modelspace()
-        self.elements = []
-        self.contours = []
-        self.readDxf(self.modelspace)
-        self.center = (0,0)
-        self.offset = offset
-        self.rotation = rotation
-        self.path = ()
-        self.organizePath()
+    def __init__(self, dxf=None, offset=(0, 0), rotation=0):
+        """
+        :param dxf: открытый библиотекой рисунок
+        :param offset: смещение центра рисунка
+        :param rotation: угол поворота рисунка (его ориентация)
+        """
+        if dxf is None:
+            self.dxf = None
+            self.modelspace = None
+            self.elements = []
+            self.contours = []
+            self.length = 0
+            self.flatLength = 0
+            self.center = (0, 0)
+            self.offs = offset
+            self.rotation = rotation
+            self.path = ()
+        else:
+            self.dxf = dxf
+            self.modelspace = self.dxf.modelspace()
+            self.elements = []
+            self.contours = []
+            self.length = 0
+            self.flatLength = 0
+            self.center = (0, 0)
+            self.offs = offset
+            self.rotation = rotation
+            self.path = ()
+            self.readDxf(self.modelspace)
+            self.organizePath()
+            self.findContours()
+            self.findCenter()
+            self.findRotation()
+            self.calculateLength()
+
+    def __str__(self):
+        return f'Геометрический центр рисунка: X: {self.center[X]:4.2f} Y: {self.center[Y]:4.2f} мм\n' + \
+               f'Ориентация рисунка: {self.rotation * 180 / pi: 4.2f} градуса\n' + \
+               f'Общая плоская длина рисунка: {self.flatLength: 4.2f} мм'
 
     def readDxf(self, root):
         for element in root:
@@ -267,12 +366,15 @@ class Drawing:
                 self.readDxf(block)
             elif elementRedef(element):
                 self.elements.append(elementRedef(element))
+        print('dxf прочтён.')
 
     def slice(self, step=1.0):
         for element in self.elements:
             element.slice(step)
+        print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
     def findCenter(self):
+        # TODO: расчёт центра рисунка
         """
         Расчитывает геометрический центр рисунка
         :return:
@@ -280,14 +382,15 @@ class Drawing:
         pass
 
     def setOffset(self, offset=(0, 0)):
-        self.offset = offset
+        self.offs = offset
         self.offset()
 
     def offset(self):
         for element in self.path:
-            element.setOffset(self.offset)
+            element.setOffset(self.offs)
 
     def findRotation(self):
+        # TODO: расчёт ориентации рисунка
         """
         Расчитывает поворот рисунка
         :return:
@@ -299,10 +402,13 @@ class Drawing:
         self.rotate()
 
     def rotate(self):
+        # TODO: функция поворота рисунка
         pass
 
-    def addZ(self):
-        pass
+    def addZ(self, pcd_xy, pcd_z):
+        for element in self.elements:
+            element.addZ(pcd_xy, pcd_z)
+        self.calculateLength()
 
     # def adjustPath(self, offset=(0, 0), pathToPly=PCD_PATH):
     #     pcd, pcd_xy, pcd_z = readPointCloud(pathToPly)
@@ -311,11 +417,15 @@ class Drawing:
     #         element.setOffset(offset)
     #         element.addZ(pcd_xy, pcd_z, pcd)
 
+    def calculateLength(self):
+        for contour in self.contours:
+            contour.calculateLength()
+            self.length += contour.length
+            self.flatLength += contour.flatLength
+
     def organizePath(self, start_point=(0, 0)):
         """
         Сортирует и ориентирует элементы друг за другом относительно данной точки
-
-        :param elements: элементы, которые необходимо сориентировать и сортировать
         :param start_point: точка, относительно которой выбирается первый элемент
         :return path: отсортированный и ориентированный массив элементов
         """
@@ -333,18 +443,22 @@ class Drawing:
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
             elements.sort(key=lambda x: x.bestDistance(current.getPoints()[-1]))
         self.path = path
+        print('Сформирована очередность элементов.')
 
     def findContours(self):
-        contour = []
+        elements = []
         for e1, e2 in pairwise(self.path):
-            contour.append(e1)
+            elements.append(e1)
             d = distance(e1.last, e2.first)
             if d > accuracy:
+                contour = Contour(elements)
                 self.contours.append(contour)
-                contour = [e2]
+                elements = [e2]
             else:
-                contour.append(e2)
+                elements.append(e2)
+        contour = Contour(elements)
         self.contours.append(contour)
+        print('Найдены контуры.')
 
 
 def elementRedef(element):
