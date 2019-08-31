@@ -19,7 +19,7 @@ Z_max = 30
 Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 
 
-def gcodeGenerator(dwg, cookies, preGcode=None, postGcode=None) -> list:
+def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None) -> list:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
     :param Drawing dwg: рисунок для печати
@@ -34,7 +34,7 @@ def gcodeGenerator(dwg, cookies, preGcode=None, postGcode=None) -> list:
     if postGcode is None:
         postGcode = []
     gcode = []
-    pcd, pcd_xy, pcd_z = readPointCloud(PCD_PATH) # начало в нуле
+    pcd, pcd_xy, pcd_z = readPointCloud(path2ply) # начало в нуле
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
     last_point = (0,0,0)
     gcode.append('G28')  # домой
@@ -300,7 +300,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
             print()
     else:
         cookies = globalValues.cookies
-    gcodeInstructions = gcodeGenerator(dwg, cookies)
+    gcodeInstructions = gcodeGenerator(dwg, cookies, pathToPly)
     writeGcode(gcodeInstructions)
     ####################################################################################################################
     # # пространство элементов модели

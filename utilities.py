@@ -54,11 +54,11 @@ def avg(*arg):
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
-def distance(p1, p2=(.0, .0, .0), simple=False):
+def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
     """
         Calculate distance between 2 points either 2D or 3D
-        :param tuple of float p1: точка от которой считается расстояние
-        :param tuple of float p2: точка до которой считается расстояние
+        :param list of float p1: точка от которой считается расстояние
+        :param list of float p2: точка до которой считается расстояние
         :param bool simple: if True то оценочный расчёт расстояния без использования sqrt
     """
     p1 = list(p1)

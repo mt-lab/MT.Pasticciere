@@ -8,8 +8,10 @@ Author: bedlamzd of MT.lab
 # TODO Переписать ВСЁ используя библиотеки для работы с геометрией (pyeuclid)
 #   или написать класс vector3d с необходимыми операциями
 
+from typing import List, Optional
 import ezdxf as ez
 import numpy as np
+# from tkinter import *
 from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance
 from numpy import sqrt, cos, sin, pi
 from configValues import accuracy
@@ -20,7 +22,7 @@ class Element:
     Общий класс с функциями общими для всех элементов, многие оверрайдятся в конкретных случаях
     """
 
-    def __init__(self, entity, first=(0, 0), last=(0, 0)):
+    def __init__(self, entity, first=(.0, .0), last=(.0, .0)):
         """
         Конструктор объекта
 
@@ -28,26 +30,38 @@ class Element:
         """
         self.entity = entity
         self.points = []
-        self.sliced = []
+        self.sliced = [] # type: List[List[float]]
         self.backwards = False
+        self.first = (.0, .0, .0)
+        self.last = (.0, .0, .0)
         self.offset = (0, 0)
         self.length = 0
         self.flatLength = 0
 
+    def __str__(self):
+        return f'first: {self.firstPoint()}\n' + \
+               f'last: {self.lastPoint()}'
+
     def firstPoint(self):
         if len(self.sliced) != 0:
-            return self.sliced[0] if not self.backwards else self.sliced[-1]
+            self.first = self.sliced[0] if not self.backwards else self.sliced[-1]
+            return self.first
         elif len(self.points) != 0:
-            return self.points[0] if not self.backwards else self.points[-1]
+            self.first = self.points[0] if not self.backwards else self.points[-1]
+            return self.first
         else:
+            self.first = 0
             return None
 
     def lastPoint(self):
         if len(self.sliced) != 0:
-            return self.sliced[-1] if not self.backwards else self.sliced[0]
+            self.last = self.sliced[-1] if not self.backwards else self.sliced[0]
+            return self.last
         elif len(self.points) != 0:
-            return self.points[-1] if not self.backwards else self.points[0]
+            self.last = self.points[-1] if not self.backwards else self.points[0]
+            return self.last
         else:
+            self.last = 0
             return None
 
     def setOffset(self, offset=(0, 0)):
@@ -74,8 +88,10 @@ class Element:
         :param point: точка от которой считается расстояние
         :return: минимальное расстояние до одного из концов объекта
         """
-        dist2first = sqrt(abs(self.firstPoint()[X] - point[X]) ** 2 + abs(self.firstPoint()[Y] - point[Y]) ** 2)
-        dist2last = sqrt(abs(self.lastPoint()[X] - point[X]) ** 2 + abs(self.lastPoint()[Y] - point[Y]) ** 2)
+        dist2first = distance(self.points[0], point)
+        dist2last = distance(self.points[-1], point)
+        # dist2first = sqrt(abs(self.firstPoint()[X] - point[X]) ** 2 + abs(self.firstPoint()[Y] - point[Y]) ** 2)
+        # dist2last = sqrt(abs(self.lastPoint()[X] - point[X]) ** 2 + abs(self.lastPoint()[Y] - point[Y]) ** 2)
         self.backwards = dist2last < dist2first
         return min(dist2first, dist2last)
 
@@ -105,7 +121,7 @@ class Element:
     def slice(self, step=1):
         """
         Нарезать элемент на более менее линии с заданным шагом
-        :param step: шаг нарезки
+        :param float step: шаг нарезки
         :return:
         """
         for start, end in pairwise(self.points):
@@ -158,6 +174,12 @@ class LWPolyline(Polyline):
     pass
 
 
+# root = Tk()#Создаем окно
+# canv = Canvas(root, width=1400,height=750)#Создаем полотно для рисования
+# canv.pack()
+# canv.create_line(0, 0, 1400, 0, fill='blue', arrow=LAST)#Рисуем оси со стрелочками направления
+# canv.create_line(0, 0, 0, 1400, fill='blue', arrow=LAST)
+
 class Spline(Element):
     """
     Подкласс для объека Сплайн
@@ -171,6 +193,48 @@ class Spline(Element):
         self.first = spline.control_points[0]
         self.last = spline.control_points[-1]
         self.sliced = []
+    # def slice(self, st=1):
+    # u = 10
+    # x1, y1 = 0, 0
+    # x2, y2 = 0, 0
+    # x, y = 0, 0
+    # count = len(self.points)
+    # ngr = 4
+    # step = count//ngr
+    # first = count%ngr
+    # for j in range(first, count+1, step if step > 0 else 1):
+    #     if j <= count:
+    #         if j == first:
+    #             c = first
+    #         else:
+    #             c = step + 1
+    #         for t in range(0, 1000, 1):
+    #             t = t/1000
+    #             if (c-1 >= 0):
+    #                 a = t**(c-1)
+    #             if t == 0:
+    #                 (x, y) = 0, 0
+    #             else:
+    #                 k = c - 1
+    #                 while k > - 1:
+    #                     x = x + self.points[j-(c-k)][X] * a
+    #                     y = y + self.points[j-(c-k)][Y] * a
+    #                     a = a * k * (1 - t) / ((c - 1 - k + 1) * t)
+    #                     k -= 1
+    #             #canv.create_oval(u * x - u * 100 + 200, u * y + u * 100 + 400, u * x - u * 100 + 200+1, u * y + u * 100 + 400+1)
+    #
+    #             #Разбиваем сплайн на отрезки не больше заданной длины
+    #             if (sqrt((x-x1)**2 + (y-y1)**2) <= st) :
+    #                 (x2,y2) = (x, y)
+    #             else:
+    #                 if (x1,y1) != (0, 0):
+    #                     g = 500
+    #                     b = 600
+    #                     canv.create_line(u*x1-u*100+g, u*y1+u*100+b, u*x2-u*100+g, u*y2+u*100+b)
+    #                     self.sliced.append([x2, y2, 0])
+    #                 print(x1, y1)
+    #                 x1, y1 = x, y
+    #             x, y = 0, 0
 
 
 class Line(Element):
@@ -239,6 +303,10 @@ class Arc(Circle):
         self.sliced = []
         self.length = 0
 
+    def __str__(self):
+        super().__str__()
+        return 'Arc object: ' + super().__str__()
+
 
 class Ellipse(Element):
     # TODO: написать обработку эллипсов
@@ -278,6 +346,7 @@ class Contour:
         """
         self.elements.append(element)
         self.calculateLength()
+        self.n_elements += 1
         self.last = element.lastPoint()
 
     def calculateLength(self):
@@ -339,14 +408,14 @@ class Drawing:
         else:
             self.dxf = dxf
             self.modelspace = self.dxf.modelspace()
-            self.elements = []
-            self.contours = []
+            self.elements = []  # type: List[Element]
+            self.contours = []  # type: List[Contour]
             self.length = 0
             self.flatLength = 0
             self.center = (0, 0)
             self.offs = offset
             self.rotation = rotation
-            self.path = ()
+            self.path = []  # type: List[Element]
             self.readDxf(self.modelspace)
             self.organizePath()
             self.findContours()
@@ -427,7 +496,7 @@ class Drawing:
         """
         Сортирует и ориентирует элементы друг за другом относительно данной точки
         :param start_point: точка, относительно которой выбирается первый элемент
-        :return path: отсортированный и ориентированный массив элементов
+        :return list of Element path: отсортированный и ориентированный массив элементов
         """
         path = []
         elements = self.elements.copy()
@@ -441,22 +510,20 @@ class Drawing:
             # убрать этот элемент из неотсортированного списка
             elements.pop(0)
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
-            elements.sort(key=lambda x: x.bestDistance(current.getPoints()[-1]))
+            elements.sort(key=lambda x: x.bestDistance(current.lastPoint()))
         self.path = path
         print('Сформирована очередность элементов.')
 
     def findContours(self):
-        elements = []
-        for e1, e2 in pairwise(self.path):
-            elements.append(e1)
-            d = distance(e1.last, e2.first)
-            if d > accuracy:
-                contour = Contour(elements)
-                self.contours.append(contour)
-                elements = [e2]
+        path = self.path.copy()
+        contour = Contour([path[0]])
+        for e1, e2 in pairwise(path):
+            d = distance(e1.lastPoint(), e2.firstPoint(), True)
+            if d < accuracy**2:
+                contour.addElement(e2)
             else:
-                elements.append(e2)
-        contour = Contour(elements)
+                self.contours.append(contour)
+                contour = Contour([e2])
         self.contours.append(contour)
         print('Найдены контуры.')
 
