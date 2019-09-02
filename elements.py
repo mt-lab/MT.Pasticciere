@@ -30,7 +30,7 @@ class Element:
         """
         self.entity = entity
         self.points = []
-        self.sliced = [] # type: List[List[float]]
+        self.sliced = []  # type: List[List[float]]
         self.backwards = False
         self.first = (.0, .0, .0)
         self.last = (.0, .0, .0)
@@ -135,15 +135,21 @@ class Element:
                 sliced.append(p)
         self.sliced = sliced
 
-    def addZ(self, pcd_xy, pcd_z, pcd=None):
+    def addZ(self, pcd_xy=None, pcd_z=None, pcd=None, constantShift=None):
         """
         Добавить координату Z к элементу
         :param pcd_xy: часть облака точек с X и Y координатами
         :param pcd_z: часть облака точек с Z координатами
+        :param float constantShift: для задания одной высоты всем точкам
         :return: None
         """
         # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
         #       весами сделать расстояние до соседей и проверить скорость вычислений
+        if constantShift is not None:
+            if len(self.sliced) !=0:
+                for p in self.sliced:
+                    p[Z] = constantShift
+            return None
         if len(self.sliced) != 0:
             for p in self.sliced:
                 p[Z] = findPointInCloud(p, pcd_xy, pcd_z, pcd)
@@ -476,7 +482,12 @@ class Drawing:
         # TODO: функция поворота рисунка
         pass
 
-    def addZ(self, pcd_xy, pcd_z):
+    def addZ(self, pcd_xy=None, pcd_z=None, constantShift=None):
+        if constantShift is not None:
+            for element in self.elements:
+                element.addZ(constantShift=constantShift)
+            self.calculateLength()
+            return None
         for element in self.elements:
             element.addZ(pcd_xy, pcd_z)
         self.calculateLength()
@@ -521,7 +532,7 @@ class Drawing:
         contour = Contour([path[0]])
         for e1, e2 in pairwise(path):
             d = distance(e1.lastPoint(), e2.firstPoint(), True)
-            if d < accuracy**2:
+            if d < accuracy ** 2:
                 contour.addElement(e2)
             else:
                 self.contours.append(contour)

@@ -12,6 +12,7 @@ from elements import *
 from utilities import readPointCloud
 import globalValues
 from scanner import findCookies
+from cookie import Cookie
 
 # TODO: написать логи
 
@@ -19,7 +20,8 @@ Z_max = 30
 Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 
 
-def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None) -> list:
+def gcodeGenerator(dwg, cookies=None, path2ply=PCD_PATH, preGcode=None, postGcode=None, ke=extrusionCoefficient, p_0=p0,
+                   p_1=p1, p_2=p2, *args) -> list:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
     :param Drawing dwg: рисунок для печати
@@ -28,17 +30,27 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
     :param list postGcode: gcode для вставки после сгенерированных команд
     :return list gcode: список команд для принтера
     """
+    if cookies is None:
+        cookies = [Cookie(center=args[0], maxHeight=args[1])]
+        pcd, pcd_xy, pcd_z = None, None, None
+        F0 = args[2]
+        F1 = args[3]
+    else:
+        pcd, pcd_xy, pcd_z = readPointCloud(path2ply)
+        args = [None, None, None, None]
+        F0 = args[2]
+        F1 = args[3]
     # проверка наличия пре-кода и пост-кода
     if preGcode is None:
         preGcode = []
     if postGcode is None:
         postGcode = []
     gcode = []
-    pcd, pcd_xy, pcd_z = readPointCloud(path2ply) # начало в нуле
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
-    last_point = (0,0,0)
     gcode.append('G28')  # домой
     gcode.append(f'G0 Z{Z_max}')
+    if F0:
+        gcode.append(f'G0 F{F0}')
     gcode += preGcode
     # для каждой печеньки в списке
     for count, cookie in enumerate(cookies, 1):
@@ -47,13 +59,14 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
         # подгонка рисунка для печенья
         dwg.setOffset(cookie.center)
         dwg.setRotation(cookie.rotation)
-        dwg.addZ(pcd_xy, pcd_z)
+        dwg.addZ(pcd_xy, pcd_z, constantShift=args[1])
         for index, contour in enumerate(dwg.contours, 1):
             printed_length = 0
-            dE = extrusionCoefficient*p1/p0
+            dE = ke * p_1 / p_0
             gcode.append(f';    {index:3d} contour in drawing')
             gcode.append(f'G0 X{contour.firstPoint()[X]:3.3f} Y{contour.firstPoint()[Y]:3.3f} Z{Z_up:3.3f}')
-            gcode.append(f'G0 Z{contour.firstPoint()[Z]:3.3f}')
+            gcode.append(f'G0 Z{contour.firstPoint()[Z] + zOffset:3.3f}')
+            gcode.append(f'G1 F{F1}')
             last_point = contour.firstPoint()
             for idx, element in enumerate(contour.elements, 1):
                 gcode.append(f';        {idx:3d} element in contour')
@@ -63,14 +76,15 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
                     gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
                     printed_length += dL
                     last_point = point
-                    if printed_length/contour.length < p0:
-                        dE = p1/p0*extrusionCoefficient
-                    elif printed_length/contour.length < p1:
+                    if printed_length / contour.length < p_0:
+                        dE = p_1 / p_0 * ke
+                    elif printed_length / contour.length < p_1:
                         dE = 0
-                    elif printed_length/contour.length < p2:
-                        dE = extrusionCoefficient
+                    elif printed_length / contour.length < p_2:
+                        dE = ke
                     else:
                         dE = 0
+            gcode.append(f'G0 F{F0}')
             gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
     gcode.append(f'G0 Z{Z_max:3.3f}')
@@ -125,38 +139,54 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     return gcode
 
 
-def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0):
+def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0, dynamicE=False, *args):
+    if dynamicE:
+        if len(args) != 0:
+            p_0 = args[0]
+            p_1 = args[1]
+            p_2 = args[2]
+        else:
+            p_0 = p0
+            p_1 = p1
+            p_2 = p2
+    else:
+        p_0 = 0
+        p_1 = 0
+        p_2 = 0
     dxf = ez.readfile(pathToDxf)
-    msp = dxf.modelspace()
-    elementsHeap = dxfReader(dxf, msp)
-    path = organizePath(elementsHeap)
-    slicePath(path, sliceStep)
-    gcode = []
-    last_point = (0, 0, 0)  # начало в нуле
-    E = 0  # начальное значение выдавливания глазури (положение мешалки)
-    gcode.append('G28')  # домой
-    for idx, element in enumerate(path, 1):
-        way = element.getSlicedPoints()
-        gcode.append(f'; {idx:3d} element')  # коммент с номером элемента
-        if distance(last_point, way[0]) > accuracy:
-            # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
-            E -= retract
-            gcode.append(f'G0 E{E:3.3f}')
-            gcode.append(f'G1 F3000')
-            gcode.append(f'G0 Z{Z_up:3.3f}')
-            gcode.append(f'G0 X{way[0][X] + center[X]:3.3f} Y{way[0][Y] + center[Y]:3.3f}')
-            gcode.append(f'G0 Z{height:3.3f}')
-            gcode.append(f'G1 F{F:3d}')
-            last_point = way[0]  # обновить предыдущую точку
-        for point in way[1:]:
-            E += round(dE * distance(last_point, point), 3)
-            gcode.append(f'G1 X{point[X] + center[X]:3.3f} Y{point[Y] + center[Y]:3.3f} Z{height:3.3f} E{E:3.3f}')
-            last_point = point
-        last_point = way[-1]
-    gcode.append(f'G1 F3000')
-    gcode.append(f'G0 Z{Z_up:3.3f}')
-    gcode.append(f'G0 Z{Z_up:3.3f}')  # в конце поднять
-    gcode.append('G28')  # и увести домой
+    dwg = Drawing(dxf)
+    dwg.slice()
+    gcode = gcodeGenerator(dwg, None, None, None, None, dE, p_0, p_1, p_2, center, height, 3000, F)
+    # msp = dxf.modelspace()
+    # elementsHeap = dxfReader(dxf, msp)
+    # path = organizePath(elementsHeap)
+    # slicePath(path, sliceStep)
+    # gcode = []
+    # last_point = (0, 0, 0)  # начало в нуле
+    # E = 0  # начальное значение выдавливания глазури (положение мешалки)
+    # gcode.append('G28')  # домой
+    # for idx, element in enumerate(path, 1):
+    #     way = element.getSlicedPoints()
+    #     gcode.append(f'; {idx:3d} element')  # коммент с номером элемента
+    #     if distance(last_point, way[0]) > accuracy:
+    #         # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
+    #         E -= retract
+    #         gcode.append(f'G0 E{E:3.3f}')
+    #         gcode.append(f'G1 F3000')
+    #         gcode.append(f'G0 Z{Z_up:3.3f}')
+    #         gcode.append(f'G0 X{way[0][X] + center[X]:3.3f} Y{way[0][Y] + center[Y]:3.3f}')
+    #         gcode.append(f'G0 Z{height:3.3f}')
+    #         gcode.append(f'G1 F{F:3d}')
+    #         last_point = way[0]  # обновить предыдущую точку
+    #     for point in way[1:]:
+    #         E += round(dE * distance(last_point, point), 3)
+    #         gcode.append(f'G1 X{point[X] + center[X]:3.3f} Y{point[Y] + center[Y]:3.3f} Z{height:3.3f} E{E:3.3f}')
+    #         last_point = point
+    #     last_point = way[-1]
+    # gcode.append(f'G1 F3000')
+    # gcode.append(f'G0 Z{Z_up:3.3f}')
+    # gcode.append(f'G0 Z{Z_up:3.3f}')  # в конце поднять
+    # gcode.append('G28')  # и увести домой
     writeGcode(gcode)
 
 
