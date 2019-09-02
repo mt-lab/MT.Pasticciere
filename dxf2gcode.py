@@ -45,7 +45,6 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
         Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
         gcode.append(f'; {count:3d} cookie')
         # подгонка рисунка для печенья
-        dwg.slice(sliceStep)
         dwg.setOffset(cookie.center)
         dwg.setRotation(cookie.rotation)
         dwg.addZ(pcd_xy, pcd_z)
@@ -55,6 +54,7 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
             gcode.append(f';    {index:3d} contour in drawing')
             gcode.append(f'G0 X{contour.firstPoint()[X]:3.3f} Y{contour.firstPoint()[Y]:3.3f} Z{Z_up:3.3f}')
             gcode.append(f'G0 Z{contour.firstPoint()[Z]:3.3f}')
+            last_point = contour.firstPoint()
             for idx, element in enumerate(contour.elements, 1):
                 gcode.append(f';        {idx:3d} element in contour')
                 for point in element.getSlicedPoints()[1:]:
@@ -71,7 +71,7 @@ def gcodeGenerator(dwg, cookies,path2ply=PCD_PATH, preGcode=None, postGcode=None
                         dE = extrusionCoefficient
                     else:
                         dE = 0
-                gcode.append(f'G0 Z{Z_up:3.3f}')
+            gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
     gcode.append(f'G0 Z{Z_max:3.3f}')
     gcode.append('G28')
@@ -284,6 +284,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     dxf = ez.readfile(pathToDxf)
     ####################################################################################################################
     dwg = Drawing(dxf)
+    dwg.slice(sliceStep)
     print(dwg)
     if globalValues.cookies is None:
         cookies, _ = findCookies('height_map.png', globalValues.heightMap,

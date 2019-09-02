@@ -124,6 +124,7 @@ class Element:
         :param float step: шаг нарезки
         :return:
         """
+        sliced = []
         for start, end in pairwise(self.points):
             for p in diap(start, end, step):
                 p = list(p)
@@ -131,7 +132,8 @@ class Element:
                     p.append(0)
                 elif len(p) > 3:
                     p = p[:3]
-                self.sliced.append(p)
+                sliced.append(p)
+        self.sliced = sliced
 
     def addZ(self, pcd_xy, pcd_z, pcd=None):
         """
@@ -271,17 +273,15 @@ class Circle(Element):
         self.length = 0
 
     def slice(self, step=1):
+        sliced = []
         angle_step = step / self.radius * (self.endAngle - self.startAngle) / abs(
             self.endAngle - self.startAngle)  # в радианах с учетом знака
         for angle in np.arange(self.startAngle, self.endAngle, angle_step):
             p = [self.radius * cos(angle) + self.center[X], self.radius * sin(angle) + self.center[Y], 0]
-            self.sliced.append(p)
-        last = list(self.last)
-        if len(last) < 3:
-            last.append(0)
-        else:
-            last = last[:2]
-        self.sliced.append(last)  # дбавление конечной точки в массив нарезанных точек
+            sliced.append(p)
+        last = [self.radius * cos(self.endAngle) + self.center[X], self.radius * sin(self.endAngle) + self.center[Y], 0]
+        sliced.append(last)  # дбавление конечной точки в массив нарезанных точек
+        self.sliced = sliced
 
 
 class Arc(Circle):
@@ -376,10 +376,12 @@ class Contour:
         return points
 
     def firstPoint(self):
-        return self.elements[0].firstPoint()
+        self.first = self.elements[0].firstPoint()
+        return self.first
 
     def lastPoint(self):
-        return self.elements[0].lastPoint()
+        self.last = self.elements[-1].lastPoint()
+        return self.last
 
 
 class Drawing:
