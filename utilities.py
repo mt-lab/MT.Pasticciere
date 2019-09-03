@@ -55,6 +55,7 @@ def avg(*arg):
 
 
 def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
+    # TODO: вынести в geometry
     """
         Calculate distance between 2 points either 2D or 3D
         :param list of float p1: точка от которой считается расстояние
@@ -73,12 +74,14 @@ def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
 
 
 def triangleArea(p1, p2, p3):
+    # TODO: вынести в geometry
     A = np.asarray([p1, p2, p3])
     detA = np.linalg.det(A)
     return abs(detA)
 
 
 def insideTriangle(p, a, b, c):
+    # TODO: вынести в geometry
     S = triangleArea(a, b, c)
     Spab = triangleArea(p, a, b)
     Spbc = triangleArea(p, b, c)
@@ -89,6 +92,7 @@ def insideTriangle(p, a, b, c):
 
 
 def heightByTrigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
+    # TODO: вынести в geometry
     axy = np.asarray(a)
     bxy = np.asarray(b)
     cxy = np.asarray(c)
@@ -135,18 +139,21 @@ def apprxPointHeight(point, *arg):
 
 
 def lineFrom2points(p1=(0, 0), p2=(0, 0)):
+    # TODO: вынести в geometry
     k = (p2[X] - p1[X]) / (p2[Y] - p1[Y])
     b = p1[Y] - k * p1[X]
     return k, b
 
 
 def perpendicular2line(p=(0, 0), k=1, b=0):
+    # TODO: вынести в geometry
     pk = 1 / k
     pb = p[X] / k + p[Y]
     return pk, pb
 
 
 def crossectionOfLines(k1=1, b1=0, k2=1, b2=0):
+    # TODO: вынести в geometry
     x = (b2 - b1) / (k1 - k2)
     y = k1 * x + b1
     return (x, y)
