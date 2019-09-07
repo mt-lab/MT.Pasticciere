@@ -8,8 +8,11 @@ Author: bedlamzd of MT.lab
 # TODO Переписать ВСЁ используя библиотеки для работы с геометрией (pyeuclid)
 #   или написать класс vector3d с необходимыми операциями
 
-from typing import List, Optional
+from typing import List
 import ezdxf as ez
+import ezdxf.math as geom
+from ezdxf.math.vector import Vector, NULLVEC
+from ezdxf.math.bspline import BSpline
 import numpy as np
 # from tkinter import *
 from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance
@@ -17,87 +20,90 @@ from numpy import sqrt, cos, sin, pi
 from configValues import accuracy
 
 
-class Element:
+class Element():
     """
     Общий класс с функциями общими для всех элементов, многие оверрайдятся в конкретных случаях
     """
 
-    def __init__(self, entity, first=(.0, .0), last=(.0, .0)):
+    def __init__(self, entity, points: List['Vector'] = None):
         """
         Конструктор объекта
 
         :param entity: элемент из dxf
         """
         self.entity = entity
-        self.points = []
-        self.sliced = []  # type: List[List[float]]
+        self.points = points  # type: List[Vector]
+        self.sliced = False
+        self.withZ = False
         self.backwards = False
-        self.first = (.0, .0, .0)
-        self.last = (.0, .0, .0)
-        self.offset = (0, 0)
-        self.length = 0
-        self.flatLength = 0
+
+    @property
+    def first(self):
+        return self.points[0] if not self.backwards else self.points[-1]
+
+    @property
+    def last(self):
+        return self.points[-1] if not self.backwards else self.points[0]
+
+    @property
+    def length(self):
+        try:
+            return self._length
+        except AttributeError:
+            length = 0
+            for v1, v2 in pairwise(self.points):
+                length += v1.distance(v2)
+            self._length = length
+            return length
+
+    @property
+    def flatLength(self):
+        try:
+            return self._length
+        except AttributeError:
+            flatLength = 0
+            for v1, v2 in pairwise(self.points):
+                flatLength += v1.vec2.distance(v2.vec2)
+            self._flatLength = flatLength
+            return flatLength
 
     def __str__(self):
-        return f'first: {self.firstPoint()}\n' + \
-               f'last: {self.lastPoint()}'
+        return f'Element: {self.entity.dxftype()}\n ' + \
+               f'first point: {self.first}\n ' + \
+               f'last point: {self.last}'
 
-    def firstPoint(self):
-        if len(self.sliced) != 0:
-            self.first = self.sliced[0] if not self.backwards else self.sliced[-1]
-            return self.first
-        elif len(self.points) != 0:
-            self.first = self.points[0] if not self.backwards else self.points[-1]
-            return self.first
-        else:
-            self.first = 0
-            return None
+    def __repr__(self):
+        return f'Element: {self.entity.dxftype()}\n ' + \
+               f'first point: {self.first}\n ' + \
+               f'last point: {self.last}'
 
-    def lastPoint(self):
-        if len(self.sliced) != 0:
-            self.last = self.sliced[-1] if not self.backwards else self.sliced[0]
-            return self.last
-        elif len(self.points) != 0:
-            self.last = self.points[-1] if not self.backwards else self.points[0]
-            return self.last
-        else:
-            self.last = 0
-            return None
-
-    def setOffset(self, offset=(0, 0)):
+    def translate(self, vector: 'Vector' = NULLVEC):
         """
         Задать смещение для рисунка (добавить к нарезанным координатам смещение)
 
-        :param offset: величина смещение
+        :param vector: величина смещение
         :return: None
         """
-        if len(self.sliced) != 0:
-            for point in self.sliced:
-                point[X] -= self.offset[X]
-                point[X] += offset[X]
-                point[Y] -= self.offset[Y]
-                point[Y] += offset[Y]
-            self.offset = offset
-        else:
-            print('nothing to offset')
+        self.points = [v + vector for v in self.points]
 
-    def bestDistance(self, point):
+    def rotate(self, angle: float):
+        self.points = [v.rotate(angle) for v in self.points]
+
+    def bestDistance(self, point: 'Vector' = NULLVEC):
         """
         Вычисляет с какой стороны точка находится ближе к элементу и ориентирует его соответственно
 
         :param point: точка от которой считается расстояние
         :return: минимальное расстояние до одного из концов объекта
         """
-        dist2first = distance(self.points[0], point)
-        dist2last = distance(self.points[-1], point)
-        # dist2first = sqrt(abs(self.firstPoint()[X] - point[X]) ** 2 + abs(self.firstPoint()[Y] - point[Y]) ** 2)
-        # dist2last = sqrt(abs(self.lastPoint()[X] - point[X]) ** 2 + abs(self.lastPoint()[Y] - point[Y]) ** 2)
+        dist2first = self.points[0].distance(point)
+        dist2last = self.points[-1].distance(point)
         self.backwards = dist2last < dist2first
         return min(dist2first, dist2last)
 
     def getPoints(self):
         """
-        Возвращает точки как из dxf
+        Возвращает точки
         """
         return self.points if not self.backwards else self.points[::-1]
 
@@ -105,18 +111,10 @@ class Element:
         """
         Возвращает нарезанные координаты
         """
-        return self.sliced if not self.backwards else self.sliced[::-1]
-
-    def calculateLength(self):
-        """
-        Рассчитать длину элемента
-        """
-        if len(self.sliced) != 0:
-            for p1, p2 in pairwise(self.sliced):
-                self.length += distance(p1, p2)
-        elif len(self.points) != 0:
-            for p1, p2 in pairwise(self.points):
-                self.flatLength += distance(p1, p2)
+        if self.sliced:
+            return self.points if not self.backwards else self.points[::-1]
+        else:
+            return None
 
     def slice(self, step=1):
         """
@@ -126,14 +124,19 @@ class Element:
         """
         sliced = []
         for start, end in pairwise(self.points):
-            for p in diap(start, end, step):
-                p = list(p)
-                if len(p) != 3:
-                    p.append(0)
-                elif len(p) > 3:
-                    p = p[:3]
-                sliced.append(p)
-        self.sliced = sliced
+            dist = start.distance(end)
+            n_steps = int(dist / step)
+            param_step = step / dist
+            for i in range(n_steps + 1):
+                v = start.lerp(end, param_step)
+                sliced.append(v)
+            sliced.append(end)
+        self.points = sliced
+        self.sliced = True
+        try:
+            del self._length
+        except AttributeError:
+            pass
 
     def addZ(self, pcd_xy=None, pcd_z=None, pcd=None, constantShift=None):
         """
@@ -145,17 +148,22 @@ class Element:
         """
         # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
         #       весами сделать расстояние до соседей и проверить скорость вычислений
+        # TODO: переделать под новое облако точек
         if constantShift is not None:
-            if len(self.sliced) !=0:
-                for p in self.sliced:
-                    p[Z] = constantShift
+            self.points = [v.replace(z=constantShift) for v in self.points]
             return None
-        if len(self.sliced) != 0:
-            for p in self.sliced:
-                p[Z] = findPointInCloud(p, pcd_xy, pcd_z, pcd)
-        elif len(self.points) != 0:
-            for p in self.points:
-                p.append(findPointInCloud(p, pcd_xy, pcd_z, pcd))
+        else:
+            if pcd_z is None or pcd_xy is None:
+                if pcd is None:
+                    raise Exception('Point cloud is needed.')
+                else:
+                    pcd_xy, pcd_z = np.split(pcd, [Z], axis=1)
+            self.points = [v.replace(z=findPointInCloud(v.xyz, pcd_xy, pcd_z)) for v in self.points]
+            self.withZ = True
+        try:
+            del self._length
+        except AttributeError:
+            pass
 
 
 class Point(Element):
@@ -169,12 +177,8 @@ class Polyline(Element):
     """
 
     def __init__(self, polyline):
-        super().__init__(polyline)
-        self.points = [point for point in polyline.points()]
-        self.first = self.points[0]
-        self.last = self.points[-1]
-        self.sliced = []
-        self.length = 0
+        points = [Vector(point) for point in polyline.points()]
+        super().__init__(polyline, points)
 
 
 class LWPolyline(Polyline):
@@ -182,13 +186,7 @@ class LWPolyline(Polyline):
     pass
 
 
-# root = Tk()#Создаем окно
-# canv = Canvas(root, width=1400,height=750)#Создаем полотно для рисования
-# canv.pack()
-# canv.create_line(0, 0, 1400, 0, fill='blue', arrow=LAST)#Рисуем оси со стрелочками направления
-# canv.create_line(0, 0, 0, 1400, fill='blue', arrow=LAST)
-
-class Spline(Element):
+class Spline(Element, BSpline):
     """
     Подкласс для объека Сплайн
     """
@@ -196,53 +194,17 @@ class Spline(Element):
     # TODO: написать обработку сплайнов для нарезки
     #   прочитать книгу о NURBS, доработать алгоритм Антона
     def __init__(self, spline):
-        super().__init__(spline)
-        self.points = [point for point in spline.control_points]
-        self.first = spline.control_points[0]
-        self.last = spline.control_points[-1]
-        self.sliced = []
-    # def slice(self, st=1):
-    # u = 10
-    # x1, y1 = 0, 0
-    # x2, y2 = 0, 0
-    # x, y = 0, 0
-    # count = len(self.points)
-    # ngr = 4
-    # step = count//ngr
-    # first = count%ngr
-    # for j in range(first, count+1, step if step > 0 else 1):
-    #     if j <= count:
-    #         if j == first:
-    #             c = first
-    #         else:
-    #             c = step + 1
-    #         for t in range(0, 1000, 1):
-    #             t = t/1000
-    #             if (c-1 >= 0):
-    #                 a = t**(c-1)
-    #             if t == 0:
-    #                 (x, y) = 0, 0
-    #             else:
-    #                 k = c - 1
-    #                 while k > - 1:
-    #                     x = x + self.points[j-(c-k)][X] * a
-    #                     y = y + self.points[j-(c-k)][Y] * a
-    #                     a = a * k * (1 - t) / ((c - 1 - k + 1) * t)
-    #                     k -= 1
-    #             #canv.create_oval(u * x - u * 100 + 200, u * y + u * 100 + 400, u * x - u * 100 + 200+1, u * y + u * 100 + 400+1)
-    #
-    #             #Разбиваем сплайн на отрезки не больше заданной длины
-    #             if (sqrt((x-x1)**2 + (y-y1)**2) <= st) :
-    #                 (x2,y2) = (x, y)
-    #             else:
-    #                 if (x1,y1) != (0, 0):
-    #                     g = 500
-    #                     b = 600
-    #                     canv.create_line(u*x1-u*100+g, u*y1+u*100+b, u*x2-u*100+g, u*y2+u*100+b)
-    #                     self.sliced.append([x2, y2, 0])
-    #                 print(x1, y1)
-    #                 x1, y1 = x, y
-    #             x, y = 0, 0
+        control_points = [Vector(point) for point in spline.control_points]
+        knots = [knot for knot in spline.knots]
+        weights = [weight for weight in spline.weights]
+        order = spline.dxf.degree + 1
+        BSpline.__init__(self, control_points, order, knots, weights)
+        points = [point for point in self.approximate()]
+        Element.__init__(self, spline, points)
+
+    def slice(self, step=1):
+        # TODO: использовать функции бибилиотеки ezdxf для нарезки сплайна
+        pass
 
 
 class Line(Element):
@@ -251,12 +213,8 @@ class Line(Element):
     """
 
     def __init__(self, line):
-        super().__init__(line)
-        self.points = [line.dxf.start, line.dxf.end]
-        self.first = self.points[0]
-        self.last = self.points[-1]
-        self.sliced = []
-        self.length = 0
+        points = [Vector(line.dxf.start), Vector(line.dxf.end)]
+        super().__init__(line, points)
 
 
 class Circle(Element):
@@ -266,28 +224,40 @@ class Circle(Element):
 
     def __init__(self, circle):
         super().__init__(circle)
-        self.center = circle.dxf.center
-        self.radius = circle.dxf.radius
-        self.startAngle = 0
-        self.endAngle = 2 * pi
-        self.first = (
-            self.center[X] + self.radius * cos(self.startAngle), self.center[Y] + self.radius * sin(self.startAngle))
-        self.last = (
-            self.center[X] + self.radius * cos(self.endAngle), self.center[Y] + self.radius * sin(self.endAngle))
+        self.center = circle.dxf.center  # type: Vector
+        self.radius = circle.dxf.radius  # type: float
         self.points = [self.first, self.last]
-        self.sliced = []
-        self.length = 0
+
+    @property
+    def first(self):
+        return self.center.replace(x=self.center.x + self.radius)
+
+    @property
+    def last(self):
+        return self.first
+
+    @property
+    def flatLength(self):
+        try:
+            return self._flatLength
+        except AttributeError:
+            flatLength = 2 * pi * self.radius
+            self._flatLength = flatLength
+            return flatLength
 
     def slice(self, step=1):
+        n_steps = int(self.flatLength / step)
+        angle_step = pi / n_steps
         sliced = []
-        angle_step = step / self.radius * (self.endAngle - self.startAngle) / abs(
-            self.endAngle - self.startAngle)  # в радианах с учетом знака
-        for angle in np.arange(self.startAngle, self.endAngle, angle_step):
-            p = [self.radius * cos(angle) + self.center[X], self.radius * sin(angle) + self.center[Y], 0]
-            sliced.append(p)
-        last = [self.radius * cos(self.endAngle) + self.center[X], self.radius * sin(self.endAngle) + self.center[Y], 0]
-        sliced.append(last)  # дбавление конечной точки в массив нарезанных точек
-        self.sliced = sliced
+        for i in range(n_steps + 1):
+            sliced.append(self.first.rotate(angle_step * i))
+        sliced.append(self.last)
+        self.points = sliced
+        self.sliced = True
+        try:
+            del self._length
+        except AttributeError:
+            pass
 
 
 class Arc(Circle):
@@ -301,13 +271,41 @@ class Arc(Circle):
         self.endAngle = arc.dxf.end_angle * pi / 180  # в радианах
         if self.startAngle > self.endAngle:
             self.endAngle += 2 * pi
-        self.first = (
-            self.center[X] + self.radius * cos(self.startAngle), self.center[Y] + self.radius * sin(self.startAngle))
-        self.last = (
-            self.center[X] + self.radius * cos(self.endAngle), self.center[Y] + self.radius * sin(self.endAngle))
         self.points = [self.first, self.last]
-        self.sliced = []
-        self.length = 0
+
+    @property
+    def first(self):
+        return Vector.from_angle(self.startAngle,
+                                 self.radius) + self.center if not self.backwards else Vector.from_angle(self.endAngle,
+                                                                                                         self.radius) + self.center
+
+    @property
+    def last(self):
+        return Vector.from_angle(self.endAngle, self.radius) + self.center if not self.backwards else Vector.from_angle(
+            self.startAngle, self.radius) + self.center
+
+    @property
+    def flatLength(self):
+        try:
+            return self._flatLength
+        except AttributeError:
+            flatLength = (self.endAngle - self.startAngle) * self.radius
+            self._flatLength = flatLength
+            return flatLength
+
+    def slice(self, step=1):
+        n_steps = int(self.flatLength / step)
+        angle_step = (self.endAngle - self.startAngle) / n_steps
+        sliced = []
+        for i in range(n_steps + 1):
+            sliced.append(self.first.rotate(i * angle_step))
+        sliced.append(self.last)
+        self.sliced = True
+        self.points = sliced
+        try:
+            del self._length
+        except AttributeError:
+            pass
 
     def __str__(self):
         super().__str__()
@@ -320,30 +318,39 @@ class Ellipse(Element):
 
 
 class Contour:
-    def __init__(self, elements=None):
+    def __init__(self, elements: List[Element] = None):
         """
-        :param list of Element elements: элементы составляющие контур
+        :param elements: элементы составляющие контур
         """
         if elements is None:
             self.elements = []
             self.n_elements = 0
-            self.first = (0, 0)
-            self.last = (0, 0)
-            self.flatLength = 0
-            self.length = 0
-            self.closed = None
+            self.closed = False
+            self.backwards = False
         else:
             self.elements = elements
             self.n_elements = len(elements)
-            self.first = elements[0].firstPoint()
-            self.last = elements[-1].lastPoint()
-            self.flatLength = 0
-            self.length = 0
-            self.calculateLength()
+            self.backwards = False
             if distance(self.first, self.last) < accuracy:
                 self.closed = True
             else:
                 self.closed = False
+
+    @property
+    def firstElement(self):
+        return self.elements[0] if not self.backwards else self.elements[-1]
+
+    @property
+    def lastElement(self):
+        return self.elements[-1] if not self.backwards else self.elements[0]
+
+    @property
+    def firstPoint(self):
+        return self.firstElement.first
+
+    @property
+    def lastPoint(self):
+        return self.lastElement.last
 
     def addElement(self, element):
         """
@@ -351,23 +358,7 @@ class Contour:
         :param Element element: элементр контура
         """
         self.elements.append(element)
-        self.calculateLength()
         self.n_elements += 1
-        self.last = element.lastPoint()
-
-    def calculateLength(self):
-        if self.n_elements == 1:
-            self.elements[0].calculateLength()
-            self.flatLength = self.elements[0].flatLength
-            self.length = self.elements[0].length
-        elif self.n_elements > 1:
-            for element in self.elements:
-                element.calculateLength()
-                self.flatLength = element.flatLength
-                self.length += element.length
-        else:
-            self.flatLength = 0
-            self.length = 0
 
     def getPoints(self):
         points = []
