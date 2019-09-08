@@ -8,7 +8,8 @@ Author: bedlamzd of MT.lab
 # TODO Переписать ВСЁ используя библиотеки для работы с геометрией (pyeuclid)
 #   или написать класс vector3d с необходимыми операциями
 
-from typing import List
+from typing import List, Union, Any, Optional
+import math
 import ezdxf as ez
 import ezdxf.math as geom
 from ezdxf.math.vector import Vector, NULLVEC
@@ -324,61 +325,149 @@ class Contour:
         """
         if elements is None:
             self.elements = []
-            self.n_elements = 0
             self.closed = False
-            self.backwards = False
         else:
             self.elements = elements
-            self.n_elements = len(elements)
-            self.backwards = False
-            if distance(self.first, self.last) < accuracy:
+            if self.firstPoint == self.lastPoint:
                 self.closed = True
             else:
                 self.closed = False
 
-    @property
-    def firstElement(self):
-        return self.elements[0] if not self.backwards else self.elements[-1]
+    def __add__(self, other: Union['Contour', Element]) -> 'Contour':
+        if isinstance(other, Contour):
+            if self.closed or other.closed:
+                raise Exception('Cannot add closed contours.')
+            """
+             1. end to start
+              c1 + c2
+            2. end to end
+              c1 + c2.reversed
+            3. start to end
+              c2 + c1
+            4. start to start
+              c2.reversed + c1
+            """
+            if self.lastPoint == other.firstPoint:
+                elements = self.elements + other.elements
+                # return Contour(elements)
+            elif self.lastPoint == other.lastPoint:
+                elements = self.elements + other.elements.reverse()
+                # return Contour(elements)
+            elif self.firstPoint == other.lastPoint:
+                elements = other.elements + self.elements
+                # return Contour(elements)
+            elif self.firstPoint == other.firstPoint:
+                elements = other.elements.reverse() + self.elements
+                # return Contour(elements)
+            else:
+                raise Exception('Contours not connected.')
+            # return Contour(elements)
+        elif isinstance(other, Element):
+            if self.lastPoint == other.first:
+                elements = self.elements + [other]
+                # return Contour(elements)
+            elif self.lastPoint == other.last:
+                elements = self.elements + [other]
+                other.backwards = not other.backwards
+                # return Contour(elements)
+            elif self.firstPoint == other.last:
+                elements = [other] + self.elements
+                # return Contour(elements)
+            elif self.firstPoint == other.first:
+                elements = [other] + self.elements
+                other.backwards = not other.backwards
+                # return Contour(elements)
+            else:
+                raise Exception('Shapes not connected.')
+        else:
+            raise TypeError('Can add only Contour or Element')
+        try:
+            del self._length
+            del self._flatLength
+        except AttributeError:
+            pass
+        return Contour(elements)
+
+    def __len__(self):
+        return len(self.elements)
+
+    def __getitem__(self, item: Union[int, slice]) -> Element:
+        return self.elements[item]
+
+    def __reversed__(self):
+        for element in self.elements[::-1]:
+            yield element
 
     @property
-    def lastElement(self):
-        return self.elements[-1] if not self.backwards else self.elements[0]
+    def firstElement(self) -> Element:
+        return self.elements[0]
 
     @property
-    def firstPoint(self):
+    def lastElement(self) -> Element:
+        return self.elements[-1]
+
+    @property
+    def firstPoint(self) -> Vector:
         return self.firstElement.first
 
     @property
-    def lastPoint(self):
+    def flatLength(self) -> float:
+        try:
+            return self._flatLength
+        except AttributeError:
+            flatLength = 0
+            for element in self.elements:
+                flatLength += element.flatLength
+            self._flatLength = flatLength
+            return flatLength
+
+    @property
+    def length(self) -> float:
+        try:
+            return self._length
+        except AttributeError:
+            length = 0
+            for element in self.elements:
+                length += element.length
+            self._length = length
+            return length
+
+    @property
+    def lastPoint(self) -> Vector:
         return self.lastElement.last
 
-    def addElement(self, element):
-        """
-        Добавить элемент в конец контура
-        :param Element element: элементр контура
-        """
-        self.elements.append(element)
-        self.n_elements += 1
+    def isclose(self, other: Union[Vector, Element, "Contour"], abs_tol: float = 1e-12) -> bool:
+        if isinstance(other, Vector):
+            close2first = self.firstPoint.isclose(other, abs_tol)
+            close2last = self.lastPoint.isclose(other, abs_tol)
+            return close2first or close2last
+        elif isinstance(other, Element):
+            close2first = self.firstPoint.isclose(other.first, abs_tol) or self.firstPoint.isclose(other.last, abs_tol)
+            close2last = self.lastPoint.isclose(other.first, abs_tol) or self.lastPoint.isclose(other.last, abs_tol)
+            return close2first or close2last
+        elif isinstance(other, Contour):
+            close2first = self.firstPoint.isclose(other.firstPoint, abs_tol) or self.firstPoint.isclose(other.lastPoint, abs_tol)
+            close2last = self.lastPoint.isclose(other.firstPoint, abs_tol) or self.lastPoint.isclose(other.lastPoint, abs_tol)
+            return close2first or close2last
+        else:
+            raise TypeError('Should be Vector or Element or Contour.')
 
-    def getPoints(self):
+    def bestDistance(self, point: Vector = NULLVEC) -> float:
+        dist2first = 0 if self.firstPoint == point else self.firstPoint.distance(point)
+        dist2last = 0 if self.lastPoint == point else self.lastPoint.distance(point)
+        return min(dist2first, dist2last)
+
+    def getPoints(self) -> List[Vector]:
         points = []
         for element in self.elements:
             points += element.getPoints()
         return points
 
-    def getSlicedPoints(self):
+    def getSlicedPoints(self) -> List[Vector]:
         points = []
         for element in self.elements:
             points += element.getSlicedPoints()
         return points
-
-    def firstPoint(self):
-        self.first = self.elements[0].firstPoint()
-        return self.first
-
-    def lastPoint(self):
-        self.last = self.elements[-1].lastPoint()
-        return self.last
 
 
 class Drawing:
@@ -514,7 +603,7 @@ class Drawing:
             # убрать этот элемент из неотсортированного списка
             elements.pop(0)
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
-            elements.sort(key=lambda x: x.bestDistance(current.lastPoint()))
+            elements.sort(key=lambda x: x.bestDistance(current.last))
         self.path = path
         print('Сформирована очередность элементов.')
 
@@ -524,7 +613,7 @@ class Drawing:
         for e1, e2 in pairwise(path):
             d = distance(e1.lastPoint(), e2.firstPoint(), True)
             if d < accuracy ** 2:
-                contour.addElement(e2)
+                contour += e2
             else:
                 self.contours.append(contour)
                 contour = Contour([e2])
@@ -532,7 +621,7 @@ class Drawing:
         print('Найдены контуры.')
 
 
-def elementRedef(element):
+def elementRedef(element) -> Optional[Element]:
     """
     Функция для переопределения полученного элемента в соответствующий подкласс класса Element
 
@@ -556,5 +645,5 @@ def elementRedef(element):
     elif element.dxftype() == 'POINT':
         pass
     else:
-        print('Unknown element')
+        print('Unknown element.')
         return None
