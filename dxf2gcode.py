@@ -22,7 +22,7 @@ Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас эт
 
 
 def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PATH, preGcode: Optional[List[str]] = None,
-                   postGcode: Optional[List[str]] = None, ke=extrusionCoefficient, p_0=p0, p_1=p1, p_2=p2, *args) -> List[str]:
+                   postGcode: Optional[List[str]] = None, ke=extrusionCoefficient, k=1, p_0=p0, p_1=p1, p_2=p2, *args) -> List[str]:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
     :param Drawing dwg: рисунок для печати
