@@ -232,12 +232,10 @@ def getScan():
     client.exec_command(r'v4l2-ctl -d /dev/video2 \
                          --set-ctrl=white_balance_temperature=6166')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure_auto=1')
-    client.exec_command(r'v4l2-ctl -d /dev/video2 \
-                         --set-ctrl=exposure_absolute=9')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=exposure_absolute=9')
     client.exec_command('v4l2-ctl -d /dev/video2 --set-ctrl=sharpness=0')
     client.exec_command('v4l2-ctl -d /dev/video2 -p 30')
-    client.exec_command(r'v4l2-ctl -d /dev/video2 \
-                        --set-fmt-video=width=640,height=480')
+    client.exec_command('v4l2-ctl -d /dev/video2 --set-fmt-video=width=640,height=480')
 
     console = client.invoke_shell()
     console.keep_this = client
@@ -336,87 +334,19 @@ def gcodesetdiag():
     Задание точности построения gcode (минимальной длины линии)
     Содержит вложенную функцию записи значения в конфигурационный файл
     """
-    def accuracySet():
-        update_setting(path, "GCoder", "accuracy", accuracyForm.get())
-        gcodesetwin.destroy()
-
-    def zoffsetSet():
-        update_setting(path, "GCoder", "zoffset", zoffsetForm.get())
-        gcodesetwin.destroy()
-
-    def extcoeffSet():
-        update_setting(path, "GCoder", "extrusioncoefficient",
-                       extcoeffForm.get())
-        gcodesetwin.destroy()
-
-    def retractSet():
-        update_setting(path, "GCoder", "retractamount", retractForm.get())
-        gcodesetwin.destroy()
-
-    def p0Set():
-        update_setting(path, "GCoder", "p0", p0Form.get())
-        gcodesetwin.destroy()
-
-    def p1Set():
-        update_setting(path, "GCoder", "p1", p1Form.get())
-        gcodesetwin.destroy()
-
-    def p2Set():
-        update_setting(path, "GCoder", "p2", p2Form.get())
+    def gcodeset():
+        update_setting(path, "GCoder", "accuracy", stepform.get())
         gcodesetwin.destroy()
 
     gcodesetwin = Toplevel(window)
     gcodesetwin.title("Настройка gcode")
-    gcodesetwin.minsize(width=170, height=500)
-
-    accuracyLabel = tk.Label(gcodesetwin, text="Размер шага (мм):")
-    accuracyLabel.grid(row=0, column=0)
-    accuracyForm = tk.Entry(gcodesetwin)
-    accuracyForm.grid(row=1, column=0)
-    accuracyButton = tk.Button(gcodesetwin, text="Задать", command=accuracySet)
-    accuracyButton.grid(row=1, column=1)
-
-    zoffsetLabel = tk.Label(gcodesetwin, text="Смещение по Z (мм):")
-    zoffsetLabel.grid(row=2, column=0)
-    zoffsetForm = tk.Entry(gcodesetwin)
-    zoffsetForm.grid(row=3, column=0)
-    zoffsetButton = tk.Button(gcodesetwin, text="Задать", command=zoffsetSet)
-    zoffsetButton.grid(row=3, column=1)
-
-    extcoeffLabel = tk.Label(gcodesetwin, text="Коэффициент экструзии:")
-    extcoeffLabel.grid(row=4, column=0)
-    extcoeffForm = tk.Entry(gcodesetwin)
-    extcoeffForm.grid(row=5, column=0)
-    extcoeffButton = tk.Button(gcodesetwin, text="Задать", command=extcoeffSet)
-    extcoeffButton.grid(row=5, column=1)
-
-    retractLabel = tk.Label(gcodesetwin, text="Подсос:")
-    retractLabel.grid(row=6, column=0)
-    retractForm = tk.Entry(gcodesetwin)
-    retractForm.grid(row=7, column=0)
-    retractButton = tk.Button(gcodesetwin, text="Задать", command=retractSet)
-    retractButton.grid(row=7, column=1)
-
-    p0Label = tk.Label(gcodesetwin, text="P0:")
-    p0Label.grid(row=8, column=0)
-    p0Form = tk.Entry(gcodesetwin)
-    p0Form.grid(row=9, column=0)
-    p0Button = tk.Button(gcodesetwin, text="Задать", command=p0Set)
-    p0Button.grid(row=9, column=1)
-
-    p1Label = tk.Label(gcodesetwin, text="P1:")
-    p1Label.grid(row=10, column=0)
-    p1Form = tk.Entry(gcodesetwin)
-    p1Form.grid(row=11, column=0)
-    p1Button = tk.Button(gcodesetwin, text="Задать", command=p1Set)
-    p1Button.grid(row=11, column=1)
-
-    p2Label = tk.Label(gcodesetwin, text="P2:")
-    p2Label.grid(row=12, column=0)
-    p2Form = tk.Entry(gcodesetwin)
-    p2Form.grid(row=13, column=0)
-    p2Button = tk.Button(gcodesetwin, text="Задать", command=p2Set)
-    p2Button.grid(row=13, column=1)
+    gcodesetwin.minsize(width=180, height=100)
+    steplabel = tk.Label(gcodesetwin, text="Размер шага (мм)")
+    steplabel.grid(row=0, column=0)
+    stepform = tk.Entry(gcodesetwin)
+    stepform.grid(row=1, column=0)
+    stepbutton = tk.Button(gcodesetwin, text="Задать", command=gcodeset)
+    stepbutton.grid(row=2, column=0)
 
 
 def addressCutter(address):
@@ -440,61 +370,27 @@ def getstatus():
     statuswin = Toplevel(window)
     statuswin.title("Текущие параметры")
     statuswin.minsize(width=400, height=400)
-    stepLabel = tk.Label(statuswin, text="Размер шага:")
-    stepLabel.grid(row=0, column=0)
-    stepValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
+    steplabel = tk.Label(statuswin, text="Размер шага:")
+    steplabel.grid(row=0, column=0)
+    stepvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                      "accuracy")+" мм")
-    stepValue.grid(row=1, column=0)
-
-    zoffsetLabel = tk.Label(statuswin, text="Смещение по Z:")
-    zoffsetLabel.grid(row=2, column=0)
-    zoffsetValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                        "zoffset")+" мм")
-    zoffsetValue.grid(row=3, column=0)
-
-    excoefLabel = tk.Label(statuswin, text="Коэффициент экструзии:")
-    excoefLabel.grid(row=4, column=0)
-    excoefValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                       "extrusioncoefficient"))
-    excoefValue.grid(row=5, column=0)
-
-    retractLabel = tk.Label(statuswin, text="Подсос:")
-    retractLabel.grid(row=6, column=0)
-    retractValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                        "retractamount"))
-    retractValue.grid(row=7, column=0)
-
-    p0Label = tk.Label(statuswin, text="P0:")
-    p0Label.grid(row=8, column=0)
-    p0Value = tk.Label(statuswin, text=get_setting(path, "GCoder", "p0"))
-    p0Value.grid(row=9, column=0)
-
-    p1Label = tk.Label(statuswin, text="P1:")
-    p1Label.grid(row=10, column=0)
-    p1Value = tk.Label(statuswin, text=get_setting(path, "GCoder", "p1"))
-    p1Value.grid(row=11, column=0)
-
-    p2Label = tk.Label(statuswin, text="P2:")
-    p2Label.grid(row=12, column=0)
-    p2Value = tk.Label(statuswin, text=get_setting(path, "GCoder", "p2"))
-    p2Value.grid(row=13, column=0)
-
+    stepvalue.grid(row=1, column=0)
     videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
-    videolabel.grid(row=14, column=0)
+    videolabel.grid(row=2, column=0)
     videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "videoforpointcloud"))
-    videovalue.grid(row=15, column=0)
+    videovalue.grid(row=3, column=0)
     cloudlabel = tk.Label(statuswin, text="Путь к облаку точек:")
-    cloudlabel.grid(row=16, column=0)
+    cloudlabel.grid(row=4, column=0)
     cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "pointcloudpath"))
-    cloudvalue.grid(row=17, column=0)
+    cloudvalue.grid(row=5, column=0)
     dxflabel = tk.Label(statuswin, text="Путь к dxf-файлу:")
-    dxflabel.grid(row=18, column=0)
+    dxflabel.grid(row=6, column=0)
     dxfvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "dxfpath"))
-    dxfvalue.grid(row=19, column=0)
+    dxfvalue.grid(row=7, column=0)
     stepbutton = tk.Button(statuswin, text="Ok", command=statuswin.destroy)
-    stepbutton.grid(row=20, column=0)
+    stepbutton.grid(row=8, column=0)
 
 
 lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
