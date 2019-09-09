@@ -18,7 +18,6 @@ import otk
 import dxf2gcode
 import paramiko
 import time
-import os
 
 logger = logging.getLogger("pasticciere")
 logger.setLevel(logging.INFO)
@@ -498,16 +497,6 @@ def getstatus():
     stepbutton.grid(row=20, column=0)
 
 
-def fixIni():
-    osCommandString = "notepad.exe settings.ini"
-    os.system(osCommandString)
-
-
-def fixGcode():
-    osCommandString = "notepad.exe cookie.gcode"
-    os.system(osCommandString)
-
-
 lname = tk.Label(window, height=1, text=get_setting(path, "network", "ip1"))
 lname.grid(row=1, column=0)
 lstat = tk.Button(window, text="Статус", command=getstatus)
@@ -535,10 +524,6 @@ pointcloudb = tk.Button(window, text="Опознание рельефа", comman
 pointcloudb.grid(row=1, column=11)
 getprinted = tk.Button(window, text="Печать", command=getPrinted)
 getprinted.grid(row=1, column=12)
-fixIni = tk.Button(window, text="Правка конфига", command=fixIni)
-fixIni.grid(row=1, column=13)
-fixGcode = tk.Button(window, text="Правка gcode", command=fixGcode)
-fixGcode.grid(row=1, column=14)
 
 
 # Конец отрисовки интерфейса
