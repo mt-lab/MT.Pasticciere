@@ -87,8 +87,12 @@ class Element():
         """
         self.points = [v + vector for v in self.points]
 
-    def rotate(self, angle: float):
+    def rotate(self, angle: float, center: Vector = None):
+        if center is not None:
+            self.translate(-center)
         self.points = [v.rotate(angle) for v in self.points]
+        if center is not None:
+            self.translate(center)
 
     def bestDistance(self, point: 'Vector' = NULLVEC):
         """
@@ -248,10 +252,13 @@ class Circle(Element):
 
     def slice(self, step=1):
         n_steps = int(self.flatLength / step)
-        angle_step = pi / n_steps
+        angle_step = 2 * pi / n_steps
         sliced = []
         for i in range(n_steps + 1):
-            sliced.append(self.first.rotate(angle_step * i))
+            v = self.first - self.center
+            v = v.rotate(i * angle_step)
+            v += self.center
+            sliced.append(v)
         sliced.append(self.last)
         self.points = sliced
         self.sliced = True
@@ -267,12 +274,11 @@ class Arc(Circle):
     """
 
     def __init__(self, arc):
-        super().__init__(arc)
         self.startAngle = arc.dxf.start_angle * pi / 180  # в радианах
         self.endAngle = arc.dxf.end_angle * pi / 180  # в радианах
         if self.startAngle > self.endAngle:
             self.endAngle += 2 * pi
-        self.points = [self.first, self.last]
+        super().__init__(arc)
 
     @property
     def first(self):
@@ -299,7 +305,10 @@ class Arc(Circle):
         angle_step = (self.endAngle - self.startAngle) / n_steps
         sliced = []
         for i in range(n_steps + 1):
-            sliced.append(self.first.rotate(i * angle_step))
+            v = self.first - self.center
+            v = v.rotate(i * angle_step)
+            v += self.center
+            sliced.append(v)
         sliced.append(self.last)
         self.sliced = True
         self.points = sliced
@@ -411,6 +420,10 @@ class Contour:
         return self.firstElement.first
 
     @property
+    def lastPoint(self) -> Vector:
+        return self.lastElement.last
+
+    @property
     def flatLength(self) -> float:
         try:
             return self._flatLength
@@ -432,10 +445,6 @@ class Contour:
             self._length = length
             return length
 
-    @property
-    def lastPoint(self) -> Vector:
-        return self.lastElement.last
-
     def isclose(self, other: Union[Vector, Element, "Contour"], abs_tol: float = 1e-12) -> bool:
         if isinstance(other, Vector):
             close2first = self.firstPoint.isclose(other, abs_tol)
@@ -446,8 +455,10 @@ class Contour:
             close2last = self.lastPoint.isclose(other.first, abs_tol) or self.lastPoint.isclose(other.last, abs_tol)
             return close2first or close2last
         elif isinstance(other, Contour):
-            close2first = self.firstPoint.isclose(other.firstPoint, abs_tol) or self.firstPoint.isclose(other.lastPoint, abs_tol)
-            close2last = self.lastPoint.isclose(other.firstPoint, abs_tol) or self.lastPoint.isclose(other.lastPoint, abs_tol)
+            close2first = self.firstPoint.isclose(other.firstPoint, abs_tol) or self.firstPoint.isclose(other.lastPoint,
+                                                                                                        abs_tol)
+            close2last = self.lastPoint.isclose(other.firstPoint, abs_tol) or self.lastPoint.isclose(other.lastPoint,
+                                                                                                     abs_tol)
             return close2first or close2last
         else:
             raise TypeError('Should be Vector or Element or Contour.')
@@ -487,8 +498,7 @@ class Drawing:
             self.modelspace = None
             self.elements = []
             self.contours = []
-            self.length = 0
-            self.flatLength = 0
+            self.layers = []
             self.center = (0, 0)
             self.offs = offset
             self.rotation = rotation
@@ -498,18 +508,16 @@ class Drawing:
             self.modelspace = self.dxf.modelspace()
             self.elements = []  # type: List[Element]
             self.contours = []  # type: List[Contour]
-            self.length = 0
-            self.flatLength = 0
             self.center = (0, 0)
             self.offs = offset
             self.rotation = rotation
             self.path = []  # type: List[Element]
             self.readDxf(self.modelspace)
+            print('dxf прочтён.')
             self.organizePath()
             self.findContours()
             self.findCenter()
             self.findRotation()
-            self.calculateLength()
 
     def __str__(self):
         return f'Геометрический центр рисунка: X: {self.center[X]:4.2f} Y: {self.center[Y]:4.2f} мм\n' + \
@@ -523,7 +531,28 @@ class Drawing:
                 self.readDxf(block)
             elif elementRedef(element):
                 self.elements.append(elementRedef(element))
-        print('dxf прочтён.')
+
+    @property
+    def length(self):
+        try:
+            return self._length
+        except AttributeError:
+            length = 0
+            for contour in self.contours:
+                length += contour.length
+            self._length = length
+            return length
+
+    @property
+    def flatLength(self):
+        try:
+            return self._flatLength
+        except AttributeError:
+            flatLength = 0
+            for contour in self.contours:
+                flatLength += contour.flatLength
+            self._flatLength = flatLength
+            return flatLength
 
     def slice(self, step=1.0):
         for element in self.elements:
@@ -581,7 +610,6 @@ class Drawing:
 
     def calculateLength(self):
         for contour in self.contours:
-            contour.calculateLength()
             self.length += contour.length
             self.flatLength += contour.flatLength
 
@@ -611,7 +639,7 @@ class Drawing:
         path = self.path.copy()
         contour = Contour([path[0]])
         for e1, e2 in pairwise(path):
-            d = distance(e1.lastPoint(), e2.firstPoint(), True)
+            d = e1.last.distance(e2.first)
             if d < accuracy ** 2:
                 contour += e2
             else:
