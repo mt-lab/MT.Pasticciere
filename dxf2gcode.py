@@ -49,7 +49,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
     gcode = []
     E = 0  # начальное значение выдавливания глазури (положение мешалки)
     gcode.append('G28')  # домой
-    gcode.append(f'G0 Z{Z_max}')
+    gcode.append(f'G0 Z{Z_max} F3000')
     if F0:
         gcode.append(f'G0 F{F0}')
     gcode += preGcode
@@ -63,7 +63,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
         dwg.addZ(pcd_xy, pcd_z, constantShift=args[1])
         for index, contour in enumerate(dwg.contours, 1):
             printed_length = 0
-            dE = ke * p_1 / p_0
+            dE = ke * k
             gcode.append(f';    {index:3d} contour in drawing')
             gcode.append(f'G0 X{contour.firstPoint[X]:3.3f} Y{contour.firstPoint[Y]:3.3f} Z{Z_up:3.3f}')
             gcode.append(f'G0 Z{contour.firstPoint[Z] + zOffset:3.3f}')
@@ -78,7 +78,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
                     printed_length += dL
                     last_point = point
                     if printed_length / contour.length < p_0:
-                        dE = p_1 / p_0 * ke
+                        dE = k * ke
                     elif printed_length / contour.length < p_1:
                         dE = 0
                     elif printed_length / contour.length < p_2:
@@ -140,24 +140,31 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     return gcode
 
 
-def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0, dynamicE=False, *args):
+def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0, dynamicE=False, *args,
+              **kwargs):
     if dynamicE:
-        if len(args) != 0:
-            p_0 = args[0]
-            p_1 = args[1]
-            p_2 = args[2]
-        else:
+        k = kwargs.get('k')
+        p_0 = kwargs.get('p0')
+        p_1 = kwargs.get('p1')
+        p_2 = kwargs.get('p2')
+        if p_0 is None:
             p_0 = p0
+        if p_1 is None:
             p_1 = p1
+        if p_2 is None:
             p_2 = p2
+        if k is None:
+            k = p_1 / p_0
     else:
+        k = 1
         p_0 = 0
         p_1 = 0
         p_2 = 0
     dxf = ez.readfile(pathToDxf)
     dwg = Drawing(dxf)
     dwg.slice()
-    gcode = gcodeGenerator(dwg, None, None, None, None, dE, p_0, p_1, p_2, center, height, 3000, F)
+    preGcode = ['G0 E1 F300', 'G92 E0', 'G0 F3000']
+    gcode = gcodeGenerator(dwg, None, None, preGcode, None, dE,k, p_0, p_1, p_2, center, height, 3000, F)
     writeGcode(gcode)
 
 
