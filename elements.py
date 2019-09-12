@@ -5,10 +5,8 @@ Author: bedlamzd of MT.lab
 Классы для переопределения элементов в dxf для удобства использования,
 т.к. ezdxf не предоставляет методов необходимых для решения задачи.
 """
-# TODO Переписать ВСЁ используя библиотеки для работы с геометрией (pyeuclid)
-#   или написать класс vector3d с необходимыми операциями
 
-from typing import List, Union, Any, Optional
+from typing import List, Union, Any, Optional, Tuple
 import math
 import ezdxf as ez
 import ezdxf.math as geom
@@ -196,8 +194,6 @@ class Spline(Element, BSpline):
     Подкласс для объека Сплайн
     """
 
-    # TODO: написать обработку сплайнов для нарезки
-    #   прочитать книгу о NURBS, доработать алгоритм Антона
     def __init__(self, spline):
         control_points = [Vector(point) for point in spline.control_points]
         knots = [knot for knot in spline.knots]
@@ -318,7 +314,6 @@ class Arc(Circle):
             pass
 
     def __str__(self):
-        super().__str__()
         return 'Arc object: ' + super().__str__()
 
 
@@ -336,7 +331,7 @@ class Contour:
             self.elements = []
             self.closed = False
         else:
-            self.elements = elements
+            self.elements = list(elements)
             if self.firstPoint == self.lastPoint:
                 self.closed = True
             else:
@@ -404,6 +399,24 @@ class Contour:
         except AttributeError:
             pass
         return Contour(elements)
+
+    def addElement(self, element: Element):
+        if element in self.elements:
+            raise Exception('Element is in contour already.')
+        if not isinstance(element, Element):
+            raise TypeError('Adding object should be Element.')
+        if self.firstPoint == element.last:
+            self.elements = [element] + self.elements
+        elif self.lastPoint == element.first:
+            self.elements += [element]
+        elif self.firstPoint == element.first:
+            element.backwards = not element.backwards
+            self.elements = [element] + self.elements
+        elif self.lastPoint == element.last:
+            element.backwards = not element.backwards
+            self.elements += [element]
+        else:
+            raise Exception('Element does not connected to contour.')
 
     def __len__(self):
         return len(self.elements)
@@ -544,7 +557,8 @@ class Drawing:
         return NULLVEC
 
     @center.setter
-    def center(self, center: Vector):
+    def center(self, center: Union[Vector, List[float], Tuple[float]]):
+        center = Vector(center)
         self.translate(center - self._center)
         self._center = center
 
@@ -657,23 +671,27 @@ class Drawing:
         print('Сформирована очередность элементов.')
 
     def findContours(self):
+        # TODO: исправить неверный реверс элементов
         contour = Contour([self.elements[0]])
         contours = []
-        for element in self.elements:
+        for element in self.elements[1:]:
             if contour.isclose(element):
                 contour += element
             else:
                 contours.append(contour)
                 contour = Contour([element])
         contours.append(contour)
-        new_contours = []
-        for contour in contours:
-            new_contour = Contour() + contour
-            for contour2 in contours:
-                if contour.isclose(contour2) and not (contour is contour2):
-                    new_contour += contour2
-            new_contours.append(new_contour)
-        self.contours = new_contours
+        i = -1
+        while i < len(contours) - 1:
+            if contours[i].isclose(contours[i+1]):
+                if i == -1:
+                    contours[i+1] = contours[i] + contours[i+1]
+                    del contours[i]
+                else:
+                    contours[i:i+2] = [contours[i] + contours[i+1]]
+            else:
+                i+=1
+        self.contours = contours
         print('Найдены контуры.')
 
 

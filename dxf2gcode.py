@@ -58,8 +58,8 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
         Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
         gcode.append(f'; {count:3d} cookie')
         # подгонка рисунка для печенья
-        dwg.setOffset(cookie.center)
-        dwg.setRotation(cookie.rotation)
+        dwg.center=cookie.center
+        dwg.rotation=cookie.rotation
         dwg.addZ(pcd_xy, pcd_z, constantShift=args[1])
         for index, contour in enumerate(dwg.contours, 1):
             printed_length = 0
