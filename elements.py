@@ -45,6 +45,17 @@ class Element():
         return self.points[-1] if not self.backwards else self.points[0]
 
     @property
+    def centroid(self):
+        try:
+            return self._centroid
+        except AttributeError:
+            centroid = NULLVEC
+            for p1, p2 in pairwise(self.points):
+                centroid += p1.lerp(p2)
+            self._centroid = centroid
+            return centroid
+
+    @property
     def length(self):
         try:
             return self._length
@@ -125,15 +136,20 @@ class Element():
         :param float step: шаг нарезки
         :return:
         """
-        sliced = []
+        sliced = [self.points[0]]
         for start, end in pairwise(self.points):
             dist = start.distance(end)
             n_steps = int(dist / step)
-            param_step = step / dist
-            for i in range(n_steps + 1):
-                v = start.lerp(end, param_step * i)
+            try:
+                param_step = step / dist
+            except ZeroDivisionError:
+                continue
+            v = Vector()
+            for i in range(n_steps):
+                v = start.lerp(end, param_step * (i + 1))
                 sliced.append(v)
-            sliced.append(end)
+            if v.isclose(end) != True:
+                sliced.append(end)
         self.points = sliced
         self.sliced = True
         try:
@@ -183,6 +199,41 @@ class Polyline(Element):
         points = [Vector(point) for point in polyline.points()]
         super().__init__(polyline, points)
 
+    @property
+    def centroid(self):
+        try:
+            return self._centroid
+        except AttributeError:
+            points = [Vector(point) for point in self.entity.points()]
+            centroid = NULLVEC
+            for p1, p2 in pairwise(points):
+                centroid += p1.lerp(p2)
+            self._centroid = centroid
+            return centroid
+
+    def slice(self, step=1):
+        points = [Vector(point) for point in self.entity.points()]
+        sliced = [points[0]]
+        for start, end in pairwise(points):
+            dist = start.distance(end)
+            n_steps = int(dist / step)
+            try:
+                param_step = step / dist
+            except ZeroDivisionError:
+                continue
+            v = Vector()
+            for i in range(n_steps):
+                v = start.lerp(end, param_step * (i + 1))
+                sliced.append(v)
+            if v.isclose(end) != True:
+                sliced.append(end)
+        self.points = sliced
+        self.sliced = True
+        try:
+            del self._length
+        except AttributeError:
+            pass
+
 
 class LWPolyline(Polyline):
     # TODO: написать обработку LW полилиний
@@ -197,15 +248,47 @@ class Spline(Element, BSpline):
     def __init__(self, spline):
         control_points = [Vector(point) for point in spline.control_points]
         knots = [knot for knot in spline.knots]
-        weights = [weight for weight in spline.weights]
+        weights = [weight for weight in spline.weights] if spline.weights else None
         order = spline.dxf.degree + 1
         BSpline.__init__(self, control_points, order, knots, weights)
         points = [point for point in self.approximate()]
         Element.__init__(self, spline, points)
 
+    @property
+    def first(self):
+        return self.point(0) if not self.backwards else self.point(self.max_t)
+
+    @property
+    def last(self):
+        return self.point(self.max_t) if not self.backwards else self.point(0)
+
     def slice(self, step=1):
-        # TODO: использовать функции бибилиотеки ezdxf для нарезки сплайна
-        pass
+        t = 0
+        dt = 1
+        prev = self.point(0)
+        sliced = [prev]
+        while t <= self.max_t:
+            p = self.point(t)
+            if p.distance(prev) > step:
+                t -= dt
+                dt = dt/2
+                t += dt
+                continue
+            elif p.distance(prev) < 0.8*step:
+                dt = dt*2
+                t += dt
+                continue
+            sliced.append(p)
+            prev = p
+            t += dt
+        if self.point(self.max_t).isclose(prev) != True:
+            sliced.append(self.point(self.max_t))
+        self.sliced = True
+        self.points = sliced
+        try:
+            del self._length
+        except AttributeError:
+            pass
 
 
 class Line(Element):
@@ -217,6 +300,37 @@ class Line(Element):
         points = [Vector(line.dxf.start), Vector(line.dxf.end)]
         super().__init__(line, points)
 
+    @property
+    def centroid(self):
+        try:
+            return self._centroid
+        except AttributeError:
+            self._centroid = Vector(self.entity.dxf.start).lerp(self.entity.dxf.end)
+            return self._centroid
+
+    def slice(self, step=1):
+        points = [Vector(self.entity.dxf.start), Vector(self.entity.dxf.end)]
+        sliced = [points[0]]
+        for start, end in pairwise(points):
+            dist = start.distance(end)
+            n_steps = int(dist / step)
+            try:
+                param_step = step / dist
+            except ZeroDivisionError:
+                continue
+            v = Vector()
+            for i in range(n_steps):
+                v = start.lerp(end, param_step * (i + 1))
+                sliced.append(v)
+            if v.isclose(end) != True:
+                sliced.append(end)
+        self.points = sliced
+        self.sliced = True
+        try:
+            del self._length
+        except AttributeError:
+            pass
+
 
 class Circle(Element):
     """
@@ -224,18 +338,11 @@ class Circle(Element):
     """
 
     def __init__(self, circle):
-        super().__init__(circle)
         self.center = circle.dxf.center  # type: Vector
         self.radius = circle.dxf.radius  # type: float
-        self.points = [self.first, self.last]
-
-    @property
-    def first(self):
-        return self.center.replace(x=self.center.x + self.radius)
-
-    @property
-    def last(self):
-        return self.first
+        points = [self.center.replace(x=self.center.x + self.radius),
+                  self.center.replace(x=self.center.x + self.radius)]
+        super().__init__(circle, points=points)
 
     @property
     def flatLength(self):
@@ -250,12 +357,14 @@ class Circle(Element):
         n_steps = int(self.flatLength / step)
         angle_step = 2 * pi / n_steps
         sliced = []
+        v = Vector()
         for i in range(n_steps + 1):
             v = self.first - self.center
             v = v.rotate(i * angle_step)
             v += self.center
             sliced.append(v)
-        sliced.append(self.last)
+        if v.isclose(self.last) != True:
+            sliced.append(self.last)
         self.points = sliced
         self.sliced = True
         try:
@@ -263,29 +372,36 @@ class Circle(Element):
         except AttributeError:
             pass
 
+    @property
+    def centroid(self):
+        return self.center
 
-class Arc(Circle):
+
+class Arc(Element):
     """
     Подклас для объекта Дуга
     """
 
     def __init__(self, arc):
+        self.center = arc.dxf.center  # type: Vector
+        self.radius = arc.dxf.radius  # type: float
         self.startAngle = arc.dxf.start_angle * pi / 180  # в радианах
         self.endAngle = arc.dxf.end_angle * pi / 180  # в радианах
         if self.startAngle > self.endAngle:
             self.endAngle += 2 * pi
-        super().__init__(arc)
+        points = [Vector.from_angle(self.startAngle, self.radius) + self.center,
+                  Vector.from_angle(self.endAngle, self.radius) + self.center]
+        super().__init__(arc, points=points)
 
     @property
-    def first(self):
-        return Vector.from_angle(self.startAngle,
-                                 self.radius) + self.center if not self.backwards else Vector.from_angle(self.endAngle,
-                                                                                                         self.radius) + self.center
-
-    @property
-    def last(self):
-        return Vector.from_angle(self.endAngle, self.radius) + self.center if not self.backwards else Vector.from_angle(
-            self.startAngle, self.radius) + self.center
+    def centroid(self):
+        try:
+            return self._centroid
+        except AttributeError:
+            centroid_x = self.radius/self.flatLength * (sin(self.endAngle) - sin(self.startAngle)) + self.center.x
+            centroid_y = self.radius/self.flatLength * (cos(self.startAngle) - cos(self.endAngle)) + self.center.y
+            self._centroid = Vector(centroid_x, centroid_y, 0)
+            return self._centroid
 
     @property
     def flatLength(self):
@@ -300,12 +416,14 @@ class Arc(Circle):
         n_steps = int(self.flatLength / step)
         angle_step = (self.endAngle - self.startAngle) / n_steps
         sliced = []
+        v = Vector()
         for i in range(n_steps + 1):
             v = self.first - self.center
             v = v.rotate(i * angle_step)
             v += self.center
             sliced.append(v)
-        sliced.append(self.last)
+        if v.isclose(self.last) != True:
+            sliced.append(self.last)
         self.sliced = True
         self.points = sliced
         try:
@@ -683,14 +801,14 @@ class Drawing:
         contours.append(contour)
         i = -1
         while i < len(contours) - 1:
-            if contours[i].isclose(contours[i+1]):
+            if contours[i].isclose(contours[i + 1]):
                 if i == -1:
-                    contours[i+1] = contours[i] + contours[i+1]
+                    contours[i + 1] = contours[i] + contours[i + 1]
                     del contours[i]
                 else:
-                    contours[i:i+2] = [contours[i] + contours[i+1]]
+                    contours[i:i + 2] = [contours[i] + contours[i + 1]]
             else:
-                i+=1
+                i += 1
         self.contours = contours
         print('Найдены контуры.')
 
