@@ -53,6 +53,11 @@ def diap(start, end, step=1):
 def avg(*arg):
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
+def generate_ordered_numbers(number: int = 0) -> int:
+    """ n -> n, n+1, n+2 ... """
+    while True:
+        yield number
+        number += 1
 
 def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
     # TODO: вынести в elements
