@@ -420,12 +420,12 @@ class Arc(Element):
         sliced = []
         v = Vector()
         for i in range(n_steps + 1):
-            v = self.first - self.center
+            v = self.points[0] - self.center
             v = v.rotate(i * angle_step)
             v += self.center
             sliced.append(v)
-        if not v.isclose(self.last):
-            sliced.append(self.last)
+        if not v.isclose(self.points[-1]):
+            sliced.append(self.points[-1])
         self.sliced = True
         self.points = sliced
         try:
@@ -635,6 +635,8 @@ class Layer:
             self.contours = contours
         elif isinstance(contours, Contour):
             self.contours = [contours]
+        elif contours is None:
+            self.contours = []
         self.number = next(Layer.number_generator)
         self.name = name if name is not None else f'Layer {self.number}'
         self.cookieContour = True if name == 'Contour' else False
@@ -654,6 +656,19 @@ class Layer:
 
 
 class Drawing:
+    """
+
+    Attributes:
+        dxf: An ezdxf Drawing which basically contains all the necessary data
+        modelspace: A dxf.modelspace(), only for a convenience
+        layers Dict[str, Layer] : A dict of [layer.name, layer]
+        elements List[Element]: Contains all graphic entities from dxf.
+        contours List[Contour]: Contains all contours found in layers.
+        center Vector: Drawing geometrical center.
+        rotation float: Drawing angle or orientation.
+        organized bool: True if elements are ordered and contours are constructed
+    """
+
     # TODO: шаблон dxf по которому рисунок делится на слои:
     #   0 - общий контур печенья, по которому найти центр и поворот рисунка
     #   1 - самый внешний/важный контур
@@ -662,34 +677,26 @@ class Drawing:
     def __init__(self, dxf=None, center: Vector = None, rotation: float = None):
         """
         :param dxf: открытый библиотекой рисунок
-        :param offset: смещение центра рисунка
+        :param center: смещение центра рисунка
         :param rotation: угол поворота рисунка (его ориентация)
+        lookup Drawing for more
         """
+        self.layers = {}  # type: Dict[str, Layer]
+        self.elements = []  # type: List[Element]
+        self.contours = []  # type: List[Contour]
+        self.organized = False  # type: bool
         if dxf is None:
             self.dxf = None
             self.modelspace = None
-            self.elements = []
-            self.contours = []
-            self.layers = {}
-            self._center = NULLVEC  # type: Vector
-            self._rotation = 0  # type: float
-            self.organized = False
         else:
             self.dxf = dxf
             self.modelspace = self.dxf.modelspace()
-            self.elements = []  # type: List[Element]
-            self.contours = []  # type: List[Contour]
-            self.layers = {}  # type: Dict[str, Layer]
-            self.readDxf(self.modelspace)
-            self._center = NULLVEC  # type: Vector
-            if center is not None:
-                self.center = center
-            self._rotation = 0  # type: float
-            if rotation is not None:
-                self.rotation = rotation
-            self.organized = False
-            self.organizeElements()
-            self.findContours()
+            self.readByLayer()
+        self._center, self._rotation = self.findCenterAndRotation()
+        if center is not None:
+            self.center = center
+        if rotation is not None:
+            self.rotation = rotation
 
     def __str__(self):
         return f'Геометрический центр рисунка: X: {self.center[X]:4.2f} Y: {self.center[Y]:4.2f} мм\n' + \
@@ -699,35 +706,6 @@ class Drawing:
     @property
     def center(self) -> Vector:
         return self._center
-
-    def findCenterAndRotation(self) -> Tuple[Vector, float]:
-        # TODO: расчёт центра рисунка
-        """
-        Расчитывает геометрический центр рисунка
-        :return:
-        """
-        cookie_contour_layer = self.layers.get('Contour')
-        if cookie_contour_layer is None:
-            # TODO: place warning here
-            self._center = NULLVEC
-            self._rotation = 0
-            return NULLVEC, 0
-        else:
-            points = []
-            for element in cookie_contour_layer.getElements():
-                element.slice(0.01)
-                points += element.getPoints()
-            points = [list(v.vec2) for v in points]
-            M = moments(points)
-            cx = M['m10'] / M['m00']
-            cy = M['m01'] / M['m00']
-            a = M['m20'] / M['m00'] - cx ** 2
-            b = 2 * (M['m11'] / M['m00'] - cx * cy)
-            c = M['m02'] / M['m00'] - cy ** 2
-            theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
-            self._center = Vector(cx, cy)
-            self._rotation = theta
-            return self._center, self._rotation
 
     @center.setter
     def center(self, center: Union[Vector, List[float], Tuple[float]]):
@@ -745,12 +723,36 @@ class Drawing:
 
     @rotation.setter
     def rotation(self, angle: float):
-        self.rotate(angle)
-        self._rotation += angle
+        self.rotate(angle - self._rotation)
+        self._rotation = angle
 
     def rotate(self, angle: float):
         for element in self.elements:
             element.rotate(angle)
+
+    def findCenterAndRotation(self) -> Tuple[Vector, float]:
+        """
+        Расчитывает геометрический центр рисунка
+        :return:
+        """
+        cookie_contour_layer = self.layers.get('Contour')
+        if cookie_contour_layer is None:
+            # TODO: place warning here
+            return NULLVEC, 0
+        else:
+            points = []
+            for element in cookie_contour_layer.getElements():
+                element.slice(0.01)
+                points += element.getPoints()
+            points = [list(v.vec2) for v in points]
+            M = moments(points)
+            cx = M['m10'] / M['m00']
+            cy = M['m01'] / M['m00']
+            a = M['m20'] / M['m00'] - cx ** 2
+            b = 2 * (M['m11'] / M['m00'] - cx * cy)
+            c = M['m02'] / M['m00'] - cy ** 2
+            theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
+            return Vector(cx, cy), theta
 
     @property
     def length(self) -> float:
@@ -791,26 +793,38 @@ class Drawing:
         for element in root:
             if element.dxftype() == 'INSERT':
                 block = self.dxf.blocks[element.dxf.name]
-                entities += self.readEntities(block, entities)
+                entities += self.readEntities(block)
             elif elementRedef(element):
-                entities.append(element)
+                entities.append(elementRedef(element))
+        print('элементы получены')
         return entities
 
     def readByLayer(self):
         layers = {}
+        elements = []
+        contours = []
         for layer in self.dxf.layers:
             name = layer.dxf.name
+            print(f'чтение слоя {name}')
             if name == 'Defpoints':
+                print('    пропуск')
                 continue
             priority = findall('\d+', name)
             priority = priority[0] if priority else None
-            entities_in_layer = self.modelspace().query(f'*[layer=="{name}"]')
+            entities_in_layer = self.modelspace.query(f'*[layer=="{name}"]')
             entities_in_layer = self.readEntities(entities_in_layer)
-            self.elements += entities_in_layer
+            if not entities_in_layer:
+                continue
+            entities_in_layer = self.organizeEntities(entities_in_layer)
+            elements += entities_in_layer
             contours_in_layer = self.makeContours(entities_in_layer)
-            self.contours += contours_in_layer
+            contours += contours_in_layer
             layers[name] = Layer(name, contours_in_layer, priority)
         self.layers = layers
+        self.elements = elements
+        self.contours = contours
+        self.organized = True
+        print('файл прочтён')
 
     def slice(self, step: float = 1.0):
         for element in self.elements:
@@ -849,14 +863,14 @@ class Drawing:
             elements.pop(0)
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
             elements.sort(key=lambda x: x.bestDistance(current.last))
+        print('элементы отсортированы')
         return path
 
     def makeContours(self, entities: List[Element]):
-        # TODO: исправить неверный реверс элементов
         contour = Contour([entities[0]])
         contours = []
         for element in entities[1:]:
-            if contour.isclose(element):
+            if contour.isclose(element) and not contour.closed:
                 contour += element
             else:
                 contours.append(contour)
@@ -864,7 +878,7 @@ class Drawing:
         contours.append(contour)
         i = -1
         while i < len(contours) - 1:
-            if contours[i].isclose(contours[i + 1]):
+            if contours[i].isclose(contours[i + 1]) and not contours[i].closed and not contours[i+1].closed:
                 if i == -1:
                     contours[i + 1] = contours[i] + contours[i + 1]
                     del contours[i]
@@ -872,6 +886,7 @@ class Drawing:
                     contours[i:i + 2] = [contours[i] + contours[i + 1]]
             else:
                 i += 1
+        print('контуры составлены')
         return contours
 
     def organizeElements(self, start_point=(0, 0)):
