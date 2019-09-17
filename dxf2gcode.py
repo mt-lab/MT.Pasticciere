@@ -290,7 +290,6 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
 
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
-    ####################################################################################################################
     dwg = Drawing(dxf)
     dwg.slice(sliceStep)
     print(dwg)
@@ -311,28 +310,3 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
         cookies = globalValues.cookies
     gcodeInstructions = gcodeGenerator(dwg, cookies, pathToPly)
     writeGcode(gcodeInstructions)
-    ####################################################################################################################
-    # # пространство элементов модели
-    # msp = dxf.modelspace()
-    # # получить все элементы из рисунка
-    # elementsHeap = dxfReader(dxf, msp)
-    # print('dxf прочтён')
-    #
-    # # сформировать порядок элементов для печати
-    # path = organizePath(elementsHeap)
-    # print('Сформирован порядок печати')
-    #
-    # # нарезать рисунок
-    # slicePath(path, sliceStep)
-    # print(f'Объекты нарезаны с шагом {sliceStep:2.1f} мм')
-    #
-    # # сгенерировать инструкции для принтера
-    # cookies, _ = findCookies('height_map.png', globalValues.heightMap,
-    #                          globalValues.distanceToLaser)  # найти положения объектов на столе
-    # print('Положения печенек найдены')
-    # gcodeInstructions = gcode_generator(path, cookies, pathToPly)
-    # print('Инструкции сгенерированы')
-    #
-    # # записать инструкции в текстовый файл
-    # writeGcode(gcodeInstructions)
-    # print('Gcode сгенерирован')

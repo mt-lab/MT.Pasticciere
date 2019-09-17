@@ -6,16 +6,18 @@ Author: bedlamzd of MT.lab
 т.к. ezdxf не предоставляет методов необходимых для решения задачи.
 """
 
-from typing import List, Union, Any, Optional, Tuple
+from typing import List, Union, Any, Optional, Tuple, Dict
+from cv2 import moments
 import math
 import ezdxf as ez
 import ezdxf.math as geom
 from ezdxf.math.vector import Vector, NULLVEC
 from ezdxf.math.bspline import BSpline
+from re import findall
 import numpy as np
 # from tkinter import *
-from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance
-from numpy import sqrt, cos, sin, pi
+from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance, generate_ordered_numbers
+from numpy import sqrt, cos, sin, pi, arctan
 from configValues import accuracy
 
 
@@ -148,7 +150,7 @@ class Element():
             for i in range(n_steps):
                 v = start.lerp(end, param_step * (i + 1))
                 sliced.append(v)
-            if v.isclose(end) != True:
+            if not v.isclose(end):
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
@@ -225,7 +227,7 @@ class Polyline(Element):
             for i in range(n_steps):
                 v = start.lerp(end, param_step * (i + 1))
                 sliced.append(v)
-            if v.isclose(end) != True:
+            if not v.isclose(end):
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
@@ -271,17 +273,17 @@ class Spline(Element, BSpline):
             p = self.point(t)
             if p.distance(prev) > step:
                 t -= dt
-                dt = dt/2
+                dt = dt / 2
                 t += dt
                 continue
-            elif p.distance(prev) < 0.8*step:
-                dt = dt*2
+            elif p.distance(prev) < 0.8 * step:
+                dt = dt * 2
                 t += dt
                 continue
             sliced.append(p)
             prev = p
             t += dt
-        if self.point(self.max_t).isclose(prev) != True:
+        if not self.point(self.max_t).isclose(prev):
             sliced.append(self.point(self.max_t))
         self.sliced = True
         self.points = sliced
@@ -322,7 +324,7 @@ class Line(Element):
             for i in range(n_steps):
                 v = start.lerp(end, param_step * (i + 1))
                 sliced.append(v)
-            if v.isclose(end) != True:
+            if not v.isclose(end):
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
@@ -363,7 +365,7 @@ class Circle(Element):
             v = v.rotate(i * angle_step)
             v += self.center
             sliced.append(v)
-        if v.isclose(self.last) != True:
+        if not v.isclose(self.last):
             sliced.append(self.last)
         self.points = sliced
         self.sliced = True
@@ -398,8 +400,8 @@ class Arc(Element):
         try:
             return self._centroid
         except AttributeError:
-            centroid_x = self.radius/self.flatLength * (sin(self.endAngle) - sin(self.startAngle)) + self.center.x
-            centroid_y = self.radius/self.flatLength * (cos(self.startAngle) - cos(self.endAngle)) + self.center.y
+            centroid_x = self.radius / self.flatLength * (sin(self.endAngle) - sin(self.startAngle)) + self.center.x
+            centroid_y = self.radius / self.flatLength * (cos(self.startAngle) - cos(self.endAngle)) + self.center.y
             self._centroid = Vector(centroid_x, centroid_y, 0)
             return self._centroid
 
@@ -422,7 +424,7 @@ class Arc(Element):
             v = v.rotate(i * angle_step)
             v += self.center
             sliced.append(v)
-        if v.isclose(self.last) != True:
+        if not v.isclose(self.last):
             sliced.append(self.last)
         self.sliced = True
         self.points = sliced
@@ -441,7 +443,7 @@ class Ellipse(Element):
 
 
 class Contour:
-    def __init__(self, elements: List[Element] = None):
+    def __init__(self, elements: Union[List[Element], Element] = None):
         """
         :param elements: элементы составляющие контур
         """
@@ -449,7 +451,12 @@ class Contour:
             self.elements = []
             self.closed = False
         else:
-            self.elements = list(elements)
+            if isinstance(elements, List):
+                self.elements = elements
+            elif isinstance(elements, Element):
+                self.elements = [elements]
+            else:
+                raise TypeError('Contour should be either List[Element] or Element.')
             if self.firstPoint == self.lastPoint:
                 self.closed = True
             else:
@@ -620,6 +627,32 @@ class Contour:
         return points
 
 
+class Layer:
+    number_generator = generate_ordered_numbers()
+
+    def __init__(self, name=None, contours: Union[List[Contour], Contour] = None, priority=None):
+        if isinstance(contours, List):
+            self.contours = contours
+        elif isinstance(contours, Contour):
+            self.contours = [contours]
+        self.number = next(Layer.number_generator)
+        self.name = name if name is not None else f'Layer {self.number}'
+        self.cookieContour = True if name == 'Contour' else False
+        self.priority = priority
+
+    def addContour(self, contours: Union[List[Contour], Contour]):
+        if isinstance(contours, List):
+            self.contours += contours
+        elif isinstance(contours, Contour):
+            self.contours += [contours]
+
+    def getElements(self):
+        elements = []
+        for contour in self.contours:
+            elements += contour.elements
+        return elements
+
+
 class Drawing:
     # TODO: шаблон dxf по которому рисунок делится на слои:
     #   0 - общий контур печенья, по которому найти центр и поворот рисунка
@@ -637,6 +670,7 @@ class Drawing:
             self.modelspace = None
             self.elements = []
             self.contours = []
+            self.layers = {}
             self._center = NULLVEC  # type: Vector
             self._rotation = 0  # type: float
             self.organized = False
@@ -645,6 +679,7 @@ class Drawing:
             self.modelspace = self.dxf.modelspace()
             self.elements = []  # type: List[Element]
             self.contours = []  # type: List[Contour]
+            self.layers = {}  # type: Dict[str, Layer]
             self.readDxf(self.modelspace)
             self._center = NULLVEC  # type: Vector
             if center is not None:
@@ -665,14 +700,34 @@ class Drawing:
     def center(self) -> Vector:
         return self._center
 
-    def findCenter(self) -> Vector:
+    def findCenterAndRotation(self) -> Tuple[Vector, float]:
         # TODO: расчёт центра рисунка
         """
         Расчитывает геометрический центр рисунка
         :return:
         """
-        self._center = NULLVEC
-        return NULLVEC
+        cookie_contour_layer = self.layers.get('Contour')
+        if cookie_contour_layer is None:
+            # TODO: place warning here
+            self._center = NULLVEC
+            self._rotation = 0
+            return NULLVEC, 0
+        else:
+            points = []
+            for element in cookie_contour_layer.getElements():
+                element.slice(0.01)
+                points += element.getPoints()
+            points = [list(v.vec2) for v in points]
+            M = moments(points)
+            cx = M['m10'] / M['m00']
+            cy = M['m01'] / M['m00']
+            a = M['m20'] / M['m00'] - cx ** 2
+            b = 2 * (M['m11'] / M['m00'] - cx * cy)
+            c = M['m02'] / M['m00'] - cy ** 2
+            theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
+            self._center = Vector(cx, cy)
+            self._rotation = theta
+            return self._center, self._rotation
 
     @center.setter
     def center(self, center: Union[Vector, List[float], Tuple[float]]):
@@ -687,15 +742,6 @@ class Drawing:
     @property
     def rotation(self) -> float:
         return self._rotation
-
-    def findRotation(self) -> float:
-        # TODO: расчёт ориентации рисунка
-        """
-        Расчитывает поворот рисунка
-        :return:
-        """
-        self._rotation = 0
-        return 0
 
     @rotation.setter
     def rotation(self, angle: float):
@@ -739,8 +785,32 @@ class Drawing:
         self.organized = False
         print('dxf прочтён.')
 
+    def readEntities(self, root, entities=None):
+        if entities is None:
+            entities = []
+        for element in root:
+            if element.dxftype() == 'INSERT':
+                block = self.dxf.blocks[element.dxf.name]
+                entities += self.readEntities(block, entities)
+            elif elementRedef(element):
+                entities.append(element)
+        return entities
+
     def readByLayer(self):
-        pass
+        layers = {}
+        for layer in self.dxf.layers:
+            name = layer.dxf.name
+            if name == 'Defpoints':
+                continue
+            priority = findall('\d+', name)
+            priority = priority[0] if priority else None
+            entities_in_layer = self.modelspace().query(f'*[layer=="{name}"]')
+            entities_in_layer = self.readEntities(entities_in_layer)
+            self.elements += entities_in_layer
+            contours_in_layer = self.makeContours(entities_in_layer)
+            self.contours += contours_in_layer
+            layers[name] = Layer(name, contours_in_layer, priority)
+        self.layers = layers
 
     def slice(self, step: float = 1.0):
         for element in self.elements:
@@ -764,6 +834,45 @@ class Drawing:
             del self._length
         except AttributeError:
             pass
+
+    def organizeEntities(self, entities: List[Element], start_point: Vector = NULLVEC):
+        path = []
+        elements = entities
+        # сортировать элементы по их удалению от точки
+        elements.sort(key=lambda x: x.bestDistance(start_point))
+        while len(elements) != 0:
+            # первый элемент в списке (ближайший к заданной точке) - текущий
+            current = elements[0]
+            # добавить его в сориентированный массив
+            path.append(current)
+            # убрать этот элемент из неотсортированного списка
+            elements.pop(0)
+            # отсортировать элементы по их удалению от последней точки предыдущего элемента
+            elements.sort(key=lambda x: x.bestDistance(current.last))
+        return path
+
+    def makeContours(self, entities: List[Element]):
+        # TODO: исправить неверный реверс элементов
+        contour = Contour([entities[0]])
+        contours = []
+        for element in entities[1:]:
+            if contour.isclose(element):
+                contour += element
+            else:
+                contours.append(contour)
+                contour = Contour([element])
+        contours.append(contour)
+        i = -1
+        while i < len(contours) - 1:
+            if contours[i].isclose(contours[i + 1]):
+                if i == -1:
+                    contours[i + 1] = contours[i] + contours[i + 1]
+                    del contours[i]
+                else:
+                    contours[i:i + 2] = [contours[i] + contours[i + 1]]
+            else:
+                i += 1
+        return contours
 
     def organizeElements(self, start_point=(0, 0)):
         """
