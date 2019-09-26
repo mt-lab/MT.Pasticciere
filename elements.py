@@ -15,8 +15,9 @@ from ezdxf.math.vector import Vector, NULLVEC
 from ezdxf.math.bspline import BSpline
 from re import findall
 import numpy as np
+from numpy import sign
 # from tkinter import *
-from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance, generate_ordered_numbers
+from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance, generate_ordered_numbers, apprxPointHeight
 from numpy import sqrt, cos, sin, pi, arctan
 from configValues import accuracy
 
@@ -39,15 +40,15 @@ class Element():
         self.backwards = False
 
     @property
-    def first(self):
+    def first(self) -> Vector:
         return self.points[0] if not self.backwards else self.points[-1]
 
     @property
-    def last(self):
+    def last(self) -> Vector:
         return self.points[-1] if not self.backwards else self.points[0]
 
     @property
-    def centroid(self):
+    def centroid(self) -> Vector:
         try:
             return self._centroid
         except AttributeError:
@@ -58,7 +59,7 @@ class Element():
             return centroid
 
     @property
-    def length(self):
+    def length(self) -> float:
         try:
             return self._length
         except AttributeError:
@@ -69,9 +70,9 @@ class Element():
             return length
 
     @property
-    def flatLength(self):
+    def flatLength(self) -> float:
         try:
-            return self._length
+            return self._flatLength
         except AttributeError:
             flatLength = 0
             for v1, v2 in pairwise(self.points):
@@ -79,12 +80,12 @@ class Element():
             self._flatLength = flatLength
             return flatLength
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'Element: {self.entity.dxftype()}\n ' + \
                f'first point: {self.first}\n ' + \
                f'last point: {self.last}'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Element: {self.entity.dxftype()}\n ' + \
                f'first point: {self.first}\n ' + \
                f'last point: {self.last}'
@@ -105,7 +106,7 @@ class Element():
         if center is not None:
             self.translate(center)
 
-    def bestDistance(self, point: 'Vector' = NULLVEC):
+    def bestDistance(self, point: 'Vector' = NULLVEC) -> float:
         """
         Вычисляет с какой стороны точка находится ближе к элементу и ориентирует его соответственно
 
@@ -117,13 +118,13 @@ class Element():
         self.backwards = dist2last < dist2first
         return min(dist2first, dist2last)
 
-    def getPoints(self):
+    def getPoints(self) -> List[Vector]:
         """
         Возвращает точки
         """
         return self.points if not self.backwards else self.points[::-1]
 
-    def getSlicedPoints(self):
+    def getSlicedPoints(self) -> List[Vector]:
         """
         Возвращает нарезанные координаты
         """
@@ -159,28 +160,38 @@ class Element():
         except AttributeError:
             pass
 
-    def addZ(self, pcd_xy=None, pcd_z=None, pcd=None, constantShift=None):
-        """
-        Добавить координату Z к элементу
-        :param pcd_xy: часть облака точек с X и Y координатами
-        :param pcd_z: часть облака точек с Z координатами
-        :param float constantShift: для задания одной высоты всем точкам
-        :return: None
-        """
-        # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
-        #       весами сделать расстояние до соседей и проверить скорость вычислений
-        # TODO: переделать под новое облако точек
-        if constantShift is not None:
-            self.points = [v.replace(z=constantShift) for v in self.points]
-            return None
-        else:
-            if pcd_z is None or pcd_xy is None:
-                if pcd is None:
-                    raise Exception('Point cloud is needed.')
-                else:
-                    pcd_xy, pcd_z = np.split(pcd, [Z], axis=1)
-            self.points = [v.replace(z=findPointInCloud(v.xyz, pcd_xy, pcd_z)) for v in self.points]
-            self.withZ = True
+    # def addZ(self, pcd_xy=None, pcd_z=None, pcd=None, constantShift=None):
+    #     """
+    #     Добавить координату Z к элементу
+    #     :param pcd_xy: часть облака точек с X и Y координатами
+    #     :param pcd_z: часть облака точек с Z координатами
+    #     :param float constantShift: для задания одной высоты всем точкам
+    #     :return: None
+    #     """
+    #     # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
+    #     #       весами сделать расстояние до соседей и проверить скорость вычислений
+    #     # TODO: переделать под новое облако точек
+    #     if constantShift is not None:
+    #         self.points = [v.replace(z=constantShift) for v in self.points]
+    #         return None
+    #     else:
+    #         if pcd_z is None or pcd_xy is None:
+    #             if pcd is None:
+    #                 raise Exception('Point cloud is needed.')
+    #             else:
+    #                 pcd_xy, pcd_z = np.split(pcd, [Z], axis=1)
+    #         self.points = [v.replace(z=findPointInCloud(v.xyz, pcd_xy, pcd_z)) for v in self.points]
+    #         self.withZ = True
+    #     try:
+    #         del self._length
+    #     except AttributeError:
+    #         pass
+
+    def addZ(self, height_map: Optional[np.ndarray] = None, constantShift=0):
+        if height_map is None:
+            pass
+        self.points = [v.replace(z=apprxPointHeight(v, height_map)) for v in self.points]
+        self.withZ = True
         try:
             del self._length
         except AttributeError:
@@ -258,35 +269,52 @@ class Spline(Element, BSpline):
 
     @property
     def first(self):
-        return self.point(0) if not self.backwards else self.point(self.max_t)
+        return self.points[0] if not self.backwards else self.points[-1]
 
     @property
     def last(self):
-        return self.point(self.max_t) if not self.backwards else self.point(0)
+        return self.points[-1] if not self.backwards else self.points[0]
 
     def slice(self, step=1):
-        t = 0
-        dt = 1
-        prev = self.point(0)
-        sliced = [prev]
-        while t <= self.max_t:
-            p = self.point(t)
-            if p.distance(prev) > step:
-                t -= dt
-                dt = dt / 2
-                t += dt
-                continue
-            elif p.distance(prev) < 0.8 * step:
-                dt = dt * 2
-                t += dt
-                continue
-            sliced.append(p)
-            prev = p
-            t += dt
-        if not self.point(self.max_t).isclose(prev):
-            sliced.append(self.point(self.max_t))
+        # n1, n2 = 0, 0
+        # t = 0.001
+        # dt = 0.0001
+        # prev_point = self.point(0)
+        # prev_e = 0
+        # sliced = [prev_point]
+        # while t < self.max_t:
+        #     n1 += 1
+        #     p = self.point(t + dt)
+        #     d = p.distance(prev_point)
+        #     e = step - d
+        #     while abs(e) > step * .2:
+        #         n2 += 1
+        #         if sign(prev_e * e) > 0:
+        #             dt += abs(dt) * sign(e)
+        #             p = self.point(t + dt)
+        #             d = p.distance(prev_point)
+        #             prev_e = e
+        #             e = step - d
+        #         elif sign(prev_e * e) < 0:
+        #             dt = 3 / 4 * abs(dt) * sign(e)
+        #             p = self.point(t + dt)
+        #             d = p.distance(prev_point)
+        #             e = step - d
+        #         elif prev_e == 0:
+        #             prev_e = e
+        #             continue
+        #         else:
+        #             raise Exception('wtf')
+        #         print(n1, n2, e, t, dt, p)
+        #     n2 = 0
+        #     sliced.append(p)
+        #     prev_point = p
+        #     t += dt
+        # if not self.point(self.max_t).isclose(prev_point):
+        #     sliced.append(self.point(self.max_t))
         self.sliced = True
-        self.points = sliced
+        points = [Vector(point) for point in self.approximate(int(self.max_t / step))]
+        self.points = points
         try:
             del self._length
         except AttributeError:
@@ -640,7 +668,7 @@ class Layer:
         self.number = next(Layer.number_generator)
         self.name = name if name is not None else f'Layer {self.number}'
         self.cookieContour = True if name == 'Contour' else False
-        self.priority = priority
+        self.priority = priority if priority is not None else 0
 
     def addContour(self, contours: Union[List[Contour], Contour]):
         if isinstance(contours, List):
@@ -728,7 +756,7 @@ class Drawing:
 
     def rotate(self, angle: float):
         for element in self.elements:
-            element.rotate(angle)
+            element.rotate(angle, self.center)
 
     def findCenterAndRotation(self) -> Tuple[Vector, float]:
         """
@@ -740,19 +768,21 @@ class Drawing:
             # TODO: place warning here
             return NULLVEC, 0
         else:
-            points = []
-            for element in cookie_contour_layer.getElements():
-                element.slice(0.01)
-                points += element.getPoints()
-            points = [list(v.vec2) for v in points]
-            M = moments(points)
-            cx = M['m10'] / M['m00']
-            cy = M['m01'] / M['m00']
-            a = M['m20'] / M['m00'] - cx ** 2
-            b = 2 * (M['m11'] / M['m00'] - cx * cy)
-            c = M['m02'] / M['m00'] - cy ** 2
-            theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
-            return Vector(cx, cy), theta
+            # points = []
+            # for element in cookie_contour_layer.getElements():
+            #     element.slice(0.1)
+            #     points += element.getPoints()
+            # points = np.asarray([list(v.vec2) for v in points])
+            # # TODO: Переделать, почему то cv2.moments не подходит
+            # M = moments(points)
+            # cx = M['m10'] / M['m00']
+            # cy = M['m01'] / M['m00']
+            # a = M['m20'] / M['m00'] - cx ** 2
+            # b = 2 * (M['m11'] / M['m00'] - cx * cy)
+            # c = M['m02'] / M['m00'] - cy ** 2
+            # theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
+            # return Vector(cx, cy), theta
+            return NULLVEC, 0
 
     @property
     def length(self) -> float:
@@ -810,7 +840,7 @@ class Drawing:
                 print('    пропуск')
                 continue
             priority = findall('\d+', name)
-            priority = priority[0] if priority else None
+            priority = int(priority[0]) if priority else None
             entities_in_layer = self.modelspace.query(f'*[layer=="{name}"]')
             entities_in_layer = self.readEntities(entities_in_layer)
             if not entities_in_layer:
@@ -835,15 +865,20 @@ class Drawing:
             pass
         print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
-    def addZ(self, pcd_xy=None, pcd_z=None, constantShift=None):
-        if constantShift is not None:
-            for element in self.elements:
-                element.addZ(constantShift=constantShift)
-        elif pcd_xy is not None and pcd_z is not None:
-            for element in self.elements:
-                element.addZ(pcd_xy, pcd_z)
-        else:
-            raise Exception('No height data.')
+    def addZ(self, height_map: np.ndarray, constantShift=0):
+        # def addZ(self, pcd_xy=None, pcd_z=None, constantShift=None):
+        # if constantShift is not None:
+        #     for element in self.elements:
+        #         element.addZ(constantShift=constantShift)
+        # elif pcd_xy is not None and pcd_z is not None:
+        #     for element in self.elements:
+        #         element.addZ(pcd_xy, pcd_z)
+        # else:
+        #     raise Exception('No height data.')
+        if height_map is None:
+            pass
+        for element in self.elements:
+            element.addZ(height_map, constantShift)
         try:
             del self._length
         except AttributeError:
@@ -878,7 +913,7 @@ class Drawing:
         contours.append(contour)
         i = -1
         while i < len(contours) - 1:
-            if contours[i].isclose(contours[i + 1]) and not contours[i].closed and not contours[i+1].closed:
+            if contours[i].isclose(contours[i + 1]) and not contours[i].closed and not contours[i + 1].closed:
                 if i == -1:
                     contours[i + 1] = contours[i] + contours[i + 1]
                     del contours[i]
