@@ -8,7 +8,8 @@ Author: bedlamzd of MT.lab
 import numpy as np
 from numpy import cos, sin, tan, sqrt, arctan, pi
 import cv2
-from configValues import focal, pxlSize, cameraAngle, cameraHeight, cameraShift, tableWidth, tableLength, tableHeight, \
+from configValues import focal, pxlSize, cameraAngle, cameraHeight, cameraShift, table_width, table_length, \
+    table_height, \
     X0, Y0, Z0, hsvLowerBound, hsvUpperBound, markPicture, markCenter, accuracy, VID_PATH
 from utilities import X, Y, Z, distance
 import globalValues
@@ -36,6 +37,12 @@ Yend = 400
 startMask = cv2.imread('startMask.png', 0)
 cos_alpha = cos(cameraAngle)
 tan_alpha = tan(cameraAngle)
+table_width = table_width()
+table_height = table_height()
+table_length = table_length()
+X0 = X0()
+Y0 = Y0()
+Z0 = Z0()
 
 
 def findDistanceToLaser(zeroLevel=239, column=319, rowMidPoint=239, columnMidPoint=319):
@@ -72,7 +79,7 @@ def calculateZ(pxl, rowMidPoint=239, columnMidPoint=319, zeroLevel=239, distance
     return height
 
 
-def calculateY(pxl, z=0.0, columnMidPoint=319, rowMidPoint=239, midWidth=tableWidth / 2, zeroLevel=239,
+def calculateY(pxl, z=0.0, columnMidPoint=319, rowMidPoint=239, midWidth=table_width / 2, zeroLevel=239,
                distanceToLaser=None, psi=None, tau=None):
     """
     Функция расчета положения точки по оси Y относительно середины обзора камеры (соответственно середины стола)
@@ -94,7 +101,7 @@ def calculateX(frameIdx):
 
 
 def calculateCoordinates(frameIdx=0, pixelCoordinate=(0, 0), rowMidPoint=239, columnMidPoint=319, zeroLevel=239,
-                         midWidth=tableWidth / 2, distanceToLaser=None, psi=None, tau=None):
+                         midWidth=table_width / 2, distanceToLaser=None, psi=None, tau=None):
     row = pixelCoordinate[0]
     column = pixelCoordinate[1]
 
@@ -119,10 +126,22 @@ def calculateYZCoordinates(frameIdx, pxlCoords=(0, 0), zeroLvlRow=239, frameShap
     tan_gamma = dpy0 / focal
     tan_theta = dpy / focal
     tan_rho = dpx / (focal * cos_alpha)
-    sin_thetaMgamma = 1 / (sqrt(1 + ((1 + tan_theta * tan_gamma) / (tan_theta - tan_gamma)) ** 2))
-    sin_alphaPtheta = 1 / (sqrt(1 + ((1 - tan_alpha * tan_theta) / (tan_alpha + tan_theta)) ** 2))
-    cos_alphaPgamma = 1 / (sqrt(1 + ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma)) ** 2))
-    z = cameraHeight * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)  # высота точки от нулевого уровня
+    try:
+        sin_thetaMgamma = 1 / (sqrt(1 + ((1 + tan_theta * tan_gamma) / (tan_theta - tan_gamma)) ** 2))
+    except ZeroDivisionError:
+        sin_thetaMgamma = 0
+    try:
+        sin_alphaPtheta = 1 / (sqrt(1 + ((1 - tan_alpha * tan_theta) / (tan_alpha + tan_theta)) ** 2))
+    except ZeroDivisionError:
+        sin_alphaPtheta = 0
+    try:
+        cos_alphaPgamma = 1 / (sqrt(1 + ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma)) ** 2))
+    except ZeroDivisionError:
+        cos_alphaPgamma = 0
+    try:
+        z = cameraHeight * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)  # высота точки от нулевого уровня
+    except ZeroDivisionError:
+        z = 0
     y = (cameraHeight - z) * tan_rho  # координата y точки относительно камеры
     y += cameraShift
     # x = calculateX(frameIdx) # координата x точки высчитанная по номеру кадра
@@ -178,7 +197,7 @@ def generatePly(pointsArray, filename='cloud.ply'):
     ply = []
     # если точка лежит по высоте за пределами рабочей зоны, включая нулевой уровень, то пропустить точку
     for count, point in enumerate(pointsArray, 1):
-        if point[Z] <= Z0 or point[Z] > (Z0 + tableHeight):
+        if point[Z] <= Z0 or point[Z] > (Z0 + table_height):
             continue
         ply.append(f'{point[X]:.3f} {point[Y]:.3f} {point[Z]:.3f}\n')
     with open(filename, 'w+') as cloud:
@@ -327,8 +346,8 @@ def findCookies(imgOrPath, heightMap=None, distanceToLaser=cameraHeight / cos(ca
         for point in tmp:
             px = int(point[0][1])
             py = int(point[0][0])
-            point[0][1] = heightMap[px, py, X] + X0
-            point[0][0] = heightMap[px, py, Y] + Y0
+            point[0][1] = heightMap[px, py, X]
+            point[0][0] = heightMap[px, py, Y]
         moments = cv2.moments(tmp)
         # найти центр контура и записать его в СК принтера
         M = cv2.moments(contour)
@@ -544,6 +563,7 @@ def detectStart3(cap, sensitivity=50):
             if lines is not None:
                 start = True
         while start:
+            print(f'{frameIdx + 1:{3}}/{frameCount:{3}} кадр. Начало сканирования')
             yield True
         print(f'{frameIdx + 1:{3}}/{frameCount:{3}} кадров пропущенно в ожидании точки старта')
         yield False
@@ -595,10 +615,10 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
         ret, frame = cap.read()
         # пока кадры есть - сканировать
         length = calculateX(frameIdx)  # координата x точки высчитанная по номеру кадра
-        if length <= 0:
+        if length < 0:
             frameIdx += 1
             continue
-        if length >= tableLength:
+        if length >= table_length:
             ret = False
         if ret == True:
             roi = frame[Ynull:Yend, :]
@@ -644,7 +664,7 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                 tangent = (fineLaserCenter[lnzIdx] - fineLaserCenter[fnzIdx]) / (lnzIdx - fnzIdx)
                 if laserAngle[1] >= cap.get(cv2.CAP_PROP_FPS):
                     lA = laserAngle[0]
-                elif abs(laserAngle[0] - tangent) < pi * 3 / 180:
+                elif abs(laserAngle[0] - tangent) < tan(pi * 3 / 180):
                     lA = (laserAngle[0] * laserAngle[1] + tangent) / (laserAngle[1] + 1)
                     if lA == np.inf:
                         lA = 0
@@ -687,18 +707,18 @@ def scanning(cap, initialFrameIdx=0, tolerance=0.1, colored=False):
                     zL = zeroLevel[column]
                 width, height = calculateYZCoordinates(frameIdx, (row, column), zL)
                 max_height = max(height, max_height)
-                if width >= 0 and width <= tableWidth:
-                    heightMap[frameIdx, column, X] = length
-                    heightMap[frameIdx, column, Y] = width
+                if width >= 0 and width <= table_width:
+                    heightMap[frameIdx, column, X] = length + X0
+                    heightMap[frameIdx, column, Y] = width + Y0
                     ply[pointNumber, X] = length + X0
                     ply[pointNumber, Y] = width + Y0
                 else:
                     continue
-                if height >= 0 and height <= tableHeight:
-                    heightMap[frameIdx, column, Z] = height
+                if height >= 0 and height <= table_height:
+                    heightMap[frameIdx, column, Z] = height + Z0
                     ply[pointNumber, Z] = height + Z0
-                elif height > tableHeight:
-                    ply[pointNumber, Z] = tableHeight
+                elif height > table_height:
+                    ply[pointNumber, Z] = table_height
                 else:
                     ply[pointNumber, Z] = Z0
                 pointNumber += 1
