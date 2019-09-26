@@ -7,6 +7,7 @@ Author: bedlamzd of MT.lab
 """
 import ezdxf as ez
 from typing import Union, Optional
+from gcodeGen import *
 from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient, retractAmount, p0, p1, \
     p2
 from elements import *
@@ -21,8 +22,64 @@ Z_max = 30
 Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 
 
+def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.ndarray = globalValues.heightMap,
+         preGcode: Optional[List[str]] = None,
+         postGcode: Optional[List[str]] = None, *args, **kwargs):
+    p = {'ke': extrusionCoefficient, 'em': 1, 'p_0': p0, 'p_1': p1, 'p_2': p2, 'F0': None, 'F1': None}
+    E = 0
+    for key in p:
+        value = kwargs.get(key)
+        p[key] = value if value is not None else p[key]
+    gcode = Gcode()
+    gcode += home()
+    gcode += move_Z(Z_max, p['F0'])
+    for count, cookie in enumerate(cookies, 1):
+        Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
+        gcode += gcode_comment(f'{count:3d} cookie')
+        dwg.center = cookie.center
+        dwg.rotation = cookie.rotation
+        dwg.addZ(height_map)  # TODO: ПЕРЕПИСАТЬ ЧАСТЬ С PLY
+        for layer_index, layer in enumerate(sorted(dwg.layers.values(), key=lambda x: x.priority)):
+            gcode += gcode_comment(f'{layer_index:3d} layer: {layer.name} in drawing')
+            if layer.name == 'Contour':  # or layer.priority == 0:
+                gcode += gcode_comment(f'    layer skiped')
+                print(f'Layer skipped. Name: {layer.name}; Priority: {layer.priority}')
+                continue
+            for contour_index, contour in enumerate(layer.contours):
+                printed_length = 0
+                dE = p['ke'] * p['em']
+                gcode += gcode_comment(f'    {contour_index:3d} contour in layer')
+                gcode += linear_move(X=contour.firstPoint.x, Y=contour.firstPoint.y, Z=Z_up)
+                gcode += move_Z(contour.firstPoint.z + zOffset)
+                gcode += linear_move('G1', F=p['F1'])
+                last_point = contour.firstPoint
+                for element_index, element in enumerate(contour.elements, 1):
+                    gcode += gcode_comment(f'        {element_index:3d} element in contour')
+                    for point in element.getPoints()[1:]:
+                        dL = point.distance(last_point)
+                        E += round(dE * dL, 3)
+                        gcode += linear_move('G1', X=point.x, Y=point.y, Z=point.z + zOffset, E=E)
+                        printed_length += dL
+                        last_point = point
+                        printed_percent = printed_length / contour.length
+                        if printed_percent < p['p_0']:
+                            dE = p['em'] * p['ke']
+                        elif printed_percent < p['p_1']:
+                            dE = 0
+                        elif printed_percent < p['p_2']:
+                            dE = p['ke']
+                        else:
+                            dE = 0
+                gcode += linear_move(F=p['F0'])
+                gcode += move_Z(Z_up)
+    gcode += move_Z(Z_max)
+    gcode += home()
+    print('Команды сгенерированы')
+    gcode.save()
+
 def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PATH, preGcode: Optional[List[str]] = None,
-                   postGcode: Optional[List[str]] = None, ke=extrusionCoefficient, k=1, p_0=p0, p_1=p1, p_2=p2, *args) -> List[str]:
+                   postGcode: Optional[List[str]] = None, ke=extrusionCoefficient, k=1, p_0=p0, p_1=p1, p_2=p2,
+                   *args) -> List[str]:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
     :param Drawing dwg: рисунок для печати
@@ -58,8 +115,8 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
         Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
         gcode.append(f'; {count:3d} cookie')
         # подгонка рисунка для печенья
-        dwg.center=cookie.center
-        dwg.rotation=cookie.rotation
+        dwg.center = cookie.center
+        dwg.rotation = cookie.rotation
         dwg.addZ(pcd_xy, pcd_z, constantShift=args[1])
         for index, contour in enumerate(dwg.contours, 1):
             printed_length = 0
@@ -164,7 +221,7 @@ def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0)
     dwg = Drawing(dxf)
     dwg.slice()
     preGcode = ['G0 E1 F300', 'G92 E0', 'G0 F3000']
-    gcode = gcodeGenerator(dwg, None, None, preGcode, None, dE,k, p_0, p_1, p_2, center, height, 3000, F)
+    gcode = gcodeGenerator(dwg, None, None, preGcode, None, dE, k, p_0, p_1, p_2, center, height, 3000, F)
     writeGcode(gcode)
 
 
@@ -308,5 +365,6 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
             print()
     else:
         cookies = globalValues.cookies
-    gcodeInstructions = gcodeGenerator(dwg, cookies, pathToPly)
-    writeGcode(gcodeInstructions)
+    # gcodeInstructions = gcodeGenerator(dwg, cookies, pathToPly)
+    # writeGcode(gcodeInstructions)
+    ggen(dwg, cookies, globalValues.heightMap)
