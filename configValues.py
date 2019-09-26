@@ -42,17 +42,36 @@ def get_setting(path, section, setting):
 
 
 config_path = 'settings.ini'
+
+
 # параметры рабочей области
-tableWidth = float(get_setting(config_path, 'Table','width'))
-tableLength = float(get_setting(config_path, 'Table','length'))
-tableHeight = float(get_setting(config_path, 'Table','height'))
-X0 = float(get_setting(config_path, 'Table','X0'))
-Y0 = float(get_setting(config_path, 'Table','Y0'))
-Z0 = float(get_setting(config_path, 'Table','Z0'))
+def table_width():
+    return float(get_setting(config_path, 'Table', 'width'))
+
+
+def table_length():
+    return float(get_setting(config_path, 'Table', 'length'))
+
+
+def table_height():
+    return float(get_setting(config_path, 'Table', 'height'))
+
+
+def X0():
+    return float(get_setting(config_path, 'Table', 'X0'))
+
+
+def Y0():
+    return float(get_setting(config_path, 'Table', 'Y0'))
+
+
+def Z0():
+    return float(get_setting(config_path, 'Table', 'Z0'))
+
 
 # характеристики камеры
-focal = float(get_setting(config_path, 'Camera','focalLength'))
-pxlSize = float(get_setting(config_path, 'Camera','pixelSize'))
+focal = float(get_setting(config_path, 'Camera', 'focalLength'))
+pxlSize = float(get_setting(config_path, 'Camera', 'pixelSize'))
 cameraAngle = radians(float(get_setting(config_path, 'Camera', 'angle')))
 cameraHeight = float(get_setting(config_path, 'Camera', 'cameraHeight'))
 cameraShift = float(get_setting(config_path, 'Camera', 'cameraShift'))
