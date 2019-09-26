@@ -1,9 +1,11 @@
+from typing import List, Optional, Union
 from itertools import tee
 from functools import reduce
 from os.path import isfile
 from configValues import PCD_PATH, focal, pxlSize, cameraHeight
 import numpy as np
 from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
+from ezdxf.math.vector import Vector, NULLVEC
 
 """ Some tools for convenience """
 
@@ -17,6 +19,11 @@ def pairwise(iterable):
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
+
+
+def closed(iterable):
+    """ ABCD -> A, B, C, D, A """
+    return [item for item in iterable] + [iterable[0]]
 
 
 def diap(start, end, step=1):
@@ -80,20 +87,50 @@ def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
     return sqrt((p1[X] - p2[X]) ** 2 + (p1[Y] - p2[Y]) ** 2 + (p1[Z] - p2[Z]) ** 2)
 
 
-def triangleArea(p1, p2, p3):
-    # TODO: вынести в elements
-    A = np.asarray([p1, p2, p3])
-    detA = np.linalg.det(A)
-    return abs(detA) / 2
+def line_side(m: Vector, p1: Vector = (0, 0, 0), p2: Vector = (1, 1, 0)) -> Union['-1', '0', '1']:
+    """
+    check to which side of the line (p1,p2) the point m is
+    :param m: point to check
+    :param p1: first point of the line
+    :param p2: second point of the line
+    :return: -1 if on the left side, 0 on line, 1 on the right side
+    """
+    p1, p2 = (p1, p2) if p1[Y] > p2[Y] else (p2, p1)
+    pos = np.sign((p2[X] - p1[X]) * (m[Y] - p1[Y]) - (p2[Y] - p1[Y]) * (m[X] - p1[X]))
+    return pos
 
+
+def triangleArea(A, B, C):
+    # TODO: вынести в elements
+    area = (A[X] * (B[Y] - C[Y]) + B[X] * (C[Y] - A[Y]) + C[X] * (A[Y] - B[Y])) / 2
+    return abs(area)
+
+
+def polygon_area(*args: List[List[float]]):
+    area = 0
+    for v1, v2 in pairwise(closed(args)):
+        area += (v1[X] * v2[Y] - v1[Y] * v2[X]) / 2
+    return abs(area)
+
+
+def inside_polygon(p, *args: List[List[float]]):
+    p = [round(coord, 2) for coord in p]
+    boundary_area = round(polygon_area(*args))
+    partial_area = 0
+    for v1, v2 in pairwise(closed(args)):
+        partial_area += round(triangleArea(p, v1, v2))
+    if boundary_area - partial_area > boundary_area * 0.01:
+        return False
+    return True
 
 def insideTriangle(p, a, b, c):
     # TODO: вынести в elements
-    S = triangleArea(a, b, c)
+    S = round(triangleArea(a, b, c), 3)
     Spab = triangleArea(p, a, b)
     Spbc = triangleArea(p, b, c)
     Spca = triangleArea(p, c, a)
-    if Spab + Spbc + Spca == S:
+    partial_area = round(Spab + Spbc + Spca, 3)
+    if partial_area == S:
         return True
     return False
 
@@ -111,38 +148,52 @@ def heightByTrigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
     S1 = triangleArea(pxy, axy, bxy)
     S2 = triangleArea(pxy, bxy, cxy)
     S3 = triangleArea(pxy, cxy, axy)
+    # TODO: add check on insideTriangle to escape unnecessary calcs
     height = c[Z] * S1 / S + a[Z] * S2 / S + b[Z] * S3 / S
     return height
 
 
-def apprxPointHeight(point, *arg):
-    if len(point) < 2:
-        return None
-    if len(arg) != 3:
-        if len(arg[0]) == 3:
-            arg = arg[0]
-        else:
-            return None
-    arg = sorted(arg, key=lambda p: distance(p[:2]))
-    det_values = np.zeros(len(arg))
-    points = np.asarray(arg)
-    matrix = np.asarray([points[0][:2], points[1][:2], points[2][:2]])
-    matrix = np.c_[matrix, np.ones(3)]
-    area = np.linalg.det(matrix)
-    for i, p1 in enumerate(points):
-        j = i + 1 if i < len(points) - 1 else 0
-        k = i + 2 if i < len(points) - 2 else i + 1 - (len(points) - 1)
-        p2 = points[j]
-        matrix = np.asarray([point[:2], p1[:2], p2[:2]])
-        matrix = np.c_[matrix, np.ones(3)]
-        det = np.linalg.det(matrix)
-        det_values[k] = det
-    if area == det_values.sum():
-        det_values = abs(det_values)
-        a_values = det_values / det_values.sum()
-        height = np.multiply(a_values, points[:, 2]).sum()
+def apprxPointHeight(point: Vector, height_map: np.ndarray, *arg):
+    # find closest point in height_map(ndarray)
+    # determine if given point above or below closest, take corresponding upper/lower point in map
+    # determine side on which given point is relative to 2 points from map
+    # take corresponding left or right points
+    # check if point inside the triangle formed by founded 3 points
+    # calculate height for a point
+    if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
+                          height_map[-1, 0, :2]):
+        print(f'point {point} not in the area')
+        return 0
+    sub = height_map[:, :, :2] - point[:2]
+    abs_sub = np.abs(sub)
+    sum_abs = np.sum(abs_sub, axis=2)
+    idx_first = sum_abs.argmin()
+    idx_first = np.unravel_index(idx_first, height_map.shape[:2])
+    # idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(), height_map.shape)[:2]
+    first = Vector(height_map[idx_first])
+    above = point[Y] > first[Y]
+    # TODO: fix out of bound
+    idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
+    try:
+        second = Vector(height_map[idx_second])
+    except IndexError:
+        return first.z
+    first2second = first.distance(second)
+    side = line_side(point, first, second)
+    if side == 0:
+        height = first.lerp(second, point.distance(first) / first2second).z
+        # height = point.distance(first)/first2second * first.z + point.distance(second)/first2second * second.z
         return height
-    return None
+    else:
+        idx_third = (idx_first[X] + int(side), idx_first[Y])
+    try:
+        third = height_map[idx_third]
+    except IndexError:
+        return first.z
+    if insideTriangle(point, first, second, third):
+        height = heightByTrigon(point, first, second, third)
+        return height
+    return first.z
 
 
 def lineFrom2points(p1=(0, 0), p2=(0, 0)):
