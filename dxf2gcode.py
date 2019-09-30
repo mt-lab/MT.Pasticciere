@@ -8,24 +8,23 @@ Author: bedlamzd of MT.lab
 import ezdxf as ez
 from typing import Union, Optional
 from gcodeGen import *
-from configValues import accuracy, sliceStep, DXF_PATH, PCD_PATH, zOffset, extrusionCoefficient, retractAmount, p0, p1, \
-    p2
 from elements import *
-from utilities import readPointCloud
-import globalValues
+from utilities import read_point_cloud
+from globalValues import cookies as global_cookies
+from globalValues import *
 from scanner import findCookies
 from cookie import Cookie
 
 # TODO: написать логи
 
 Z_max = 30
-Z_up = Z_max + zOffset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
+Z_up = Z_max + z_offset  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
 
 
-def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.ndarray = globalValues.heightMap,
+def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.ndarray = height_map,
          preGcode: Optional[List[str]] = None,
          postGcode: Optional[List[str]] = None, *args, **kwargs):
-    p = {'ke': extrusionCoefficient, 'em': 1, 'p_0': p0, 'p_1': p1, 'p_2': p2, 'F0': None, 'F1': None}
+    p = {'ke': extrusion_coefficient, 'em': 1, 'p_0': p0, 'p_1': p1, 'p_2': p2, 'F0': None, 'F1': None}
     E = 0
     for key in p:
         value = kwargs.get(key)
@@ -50,7 +49,7 @@ def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.nd
                 dE = p['ke'] * p['em']
                 gcode += gcode_comment(f'    {contour_index:3d} contour in layer')
                 gcode += linear_move(X=contour.firstPoint.x, Y=contour.firstPoint.y, Z=Z_up)
-                gcode += move_Z(contour.firstPoint.z + zOffset)
+                gcode += move_Z(contour.firstPoint.z + z_offset)
                 gcode += linear_move('G1', F=p['F1'])
                 last_point = contour.firstPoint
                 for element_index, element in enumerate(contour.elements, 1):
@@ -58,7 +57,7 @@ def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.nd
                     for point in element.getPoints()[1:]:
                         dL = point.distance(last_point)
                         E += round(dE * dL, 3)
-                        gcode += linear_move('G1', X=point.x, Y=point.y, Z=point.z + zOffset, E=E)
+                        gcode += linear_move('G1', X=point.x, Y=point.y, Z=point.z + z_offset, E=E)
                         printed_length += dL
                         last_point = point
                         printed_percent = printed_length / contour.length
@@ -77,8 +76,9 @@ def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.nd
     print('Команды сгенерированы')
     gcode.save()
 
-def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PATH, preGcode: Optional[List[str]] = None,
-                   postGcode: Optional[List[str]] = None, ke=extrusionCoefficient, k=1, p_0=p0, p_1=p1, p_2=p2,
+
+def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, preGcode: Optional[List[str]] = None,
+                   postGcode: Optional[List[str]] = None, ke=extrusion_coefficient, k=1, p_0=p0, p_1=p1, p_2=p2,
                    *args) -> List[str]:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
@@ -94,7 +94,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
         F0 = args[2]
         F1 = args[3]
     else:
-        pcd, pcd_xy, pcd_z = readPointCloud(path2ply)
+        pcd, pcd_xy, pcd_z = read_point_cloud(None)
         args = [None, None, None, None]
         F0 = args[2]
         F1 = args[3]
@@ -123,7 +123,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
             dE = ke * k
             gcode.append(f';    {index:3d} contour in drawing')
             gcode.append(f'G0 X{contour.firstPoint[X]:3.3f} Y{contour.firstPoint[Y]:3.3f} Z{Z_up:3.3f}')
-            gcode.append(f'G0 Z{contour.firstPoint[Z] + zOffset:3.3f}')
+            gcode.append(f'G0 Z{contour.firstPoint[Z] + z_offset:3.3f}')
             gcode.append(f'G1 F{F1}')
             last_point = contour.firstPoint
             for idx, element in enumerate(contour.elements, 1):
@@ -131,7 +131,7 @@ def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, path2ply=PCD_PAT
                 for point in element.getSlicedPoints()[1:]:
                     dL = distance(last_point, point)
                     E += round(dE * dL, 3)
-                    gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
+                    gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + z_offset:3.3f} E{E:3.3f}')
                     printed_length += dL
                     last_point = point
                     if printed_length / contour.length < p_0:
@@ -182,13 +182,13 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
                 # если от предыдущей точки до текущей расстояние больше точности, поднять сопло и довести до нужной точки
                 gcode.append(f'G0 Z{Z_up:3.3f}')
                 gcode.append(f'G0 X{way[0][X]:3.3f} Y{way[0][Y]:3.3f}')
-                gcode.append(f'G0 Z{way[0][Z] + zOffset:3.3f}')
+                gcode.append(f'G0 Z{way[0][Z] + z_offset:3.3f}')
                 last_point = way[0]  # обновить предыдущую точку
             for point in way[1:]:
-                E += round(extrusionCoefficient * distance(last_point, point), 3)
-                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + zOffset:3.3f} E{E:3.3f}')
+                E += round(extrusion_coefficient * distance(last_point, point), 3)
+                gcode.append(f'G1 X{point[X]:3.3f} Y{point[Y]:3.3f} Z{point[Z] + z_offset:3.3f} E{E:3.3f}')
                 last_point = point
-            E -= retractAmount
+            E -= retract_amount
             last_point = way[-1]
         gcode.append(f'G0 Z{Z_up:3.3f}')
     gcode += postGcode
@@ -197,7 +197,7 @@ def gcode_generator(listOfElements, listOfCookies, pathToPly=PCD_PATH, preGcode=
     return gcode
 
 
-def testGcode(pathToDxf, dE=extrusionCoefficient, F=300, height=0, center=(0, 0), retract=0, dynamicE=False, *args,
+def testGcode(pathToDxf, dE=extrusion_coefficient, F=300, height=0, center=(0, 0), retract=0, dynamicE=False, *args,
               **kwargs):
     if dynamicE:
         k = kwargs.get('k')
@@ -316,7 +316,7 @@ def slicePath(path, step=1.0):
 
 
 def adjustPath(path, offset=(0, 0), pathToPly=PCD_PATH):
-    pcd, pcd_xy, pcd_z = readPointCloud(pathToPly)
+    pcd, pcd_xy, pcd_z = read_point_cloud(pathToPly)
     # add volume to dxf, also add offset
     for element in path:
         element.setOffset(offset)
@@ -345,16 +345,17 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     :return: None
     """
 
+    update_config_values()
+
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
     dwg = Drawing(dxf)
-    dwg.slice(sliceStep)
+    dwg.slice(slice_step)
     print(dwg)
-    if globalValues.cookies is None:
-        cookies, _ = findCookies('height_map.png', globalValues.heightMap,
-                                 globalValues.distanceToLaser)  # найти положения объектов на столе
+    if global_cookies is None:
+        cookies, _ = findCookies('height_map.png', height_map)  # найти положения объектов на столе
         if len(cookies) != 0:
-            globalValues.cookies = cookies
+            cookies = cookies
             print(f'Объектов найдено: {len(cookies):{3}}')
             print('#############################################')
             for i, cookie in enumerate(cookies, 1):
@@ -364,7 +365,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
                 print('#############################################')
             print()
     else:
-        cookies = globalValues.cookies
+        cookies = global_cookies
     # gcodeInstructions = gcodeGenerator(dwg, cookies, pathToPly)
     # writeGcode(gcodeInstructions)
-    ggen(dwg, cookies, globalValues.heightMap)
+    ggen(dwg, cookies, height_map)
