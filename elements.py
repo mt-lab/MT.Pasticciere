@@ -17,9 +17,9 @@ from re import findall
 import numpy as np
 from numpy import sign
 # from tkinter import *
-from utilities import X, Y, Z, pairwise, diap, findPointInCloud, distance, generate_ordered_numbers, apprxPointHeight
+from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, generate_ordered_numbers, \
+    apprx_point_height
 from numpy import sqrt, cos, sin, pi, arctan
-from configValues import accuracy
 
 
 class Element():
@@ -168,9 +168,6 @@ class Element():
     #     :param float constantShift: для задания одной высоты всем точкам
     #     :return: None
     #     """
-    #     # TODO: вычисление высоты точки по 4 соседям (т.к. облако точек это равномерная сетка) используя веса
-    #     #       весами сделать расстояние до соседей и проверить скорость вычислений
-    #     # TODO: переделать под новое облако точек
     #     if constantShift is not None:
     #         self.points = [v.replace(z=constantShift) for v in self.points]
     #         return None
@@ -190,7 +187,7 @@ class Element():
     def addZ(self, height_map: Optional[np.ndarray] = None, constantShift=0):
         if height_map is None:
             pass
-        self.points = [v.replace(z=apprxPointHeight(v, height_map)) for v in self.points]
+        self.points = [v.replace(z=apprx_point_height(v, height_map)) for v in self.points]
         self.withZ = True
         try:
             del self._length
