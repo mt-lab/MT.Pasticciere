@@ -1,11 +1,13 @@
-from typing import List, Optional, Union
+from typing import List, Union
 from itertools import tee
 from functools import reduce
-from os.path import isfile
-from configValues import PCD_PATH, focal, pxlSize, cameraHeight
+
 import numpy as np
 from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
-from ezdxf.math.vector import Vector, NULLVEC
+from ezdxf.math.vector import Vector
+from globalValues import focal as global_focal
+from globalValues import pxl_size as global_pxl_size
+from globalValues import camera_height as global_camera_height
 
 """ Some tools for convenience """
 
@@ -100,9 +102,9 @@ def line_side(m: Vector, p1: Vector = (0, 0, 0), p2: Vector = (1, 1, 0)) -> Unio
     return pos
 
 
-def triangleArea(A, B, C):
+def triangle_area(a, b, c):
     # TODO: вынести в elements
-    area = (A[X] * (B[Y] - C[Y]) + B[X] * (C[Y] - A[Y]) + C[X] * (A[Y] - B[Y])) / 2
+    area = (a[X] * (b[Y] - c[Y]) + b[X] * (c[Y] - a[Y]) + c[X] * (a[Y] - b[Y])) / 2
     return abs(area)
 
 
@@ -118,24 +120,25 @@ def inside_polygon(p, *args: List[List[float]]):
     boundary_area = round(polygon_area(*args))
     partial_area = 0
     for v1, v2 in pairwise(closed(args)):
-        partial_area += round(triangleArea(p, v1, v2))
+        partial_area += round(triangle_area(p, v1, v2))
     if boundary_area - partial_area > boundary_area * 0.01:
         return False
     return True
 
-def insideTriangle(p, a, b, c):
+
+def inside_triangle(p, a, b, c):
     # TODO: вынести в elements
-    S = round(triangleArea(a, b, c), 3)
-    Spab = triangleArea(p, a, b)
-    Spbc = triangleArea(p, b, c)
-    Spca = triangleArea(p, c, a)
-    partial_area = round(Spab + Spbc + Spca, 3)
-    if partial_area == S:
+    total_area = round(triangle_area(a, b, c), 3)
+    area_pab = triangle_area(p, a, b)
+    area_pbc = triangle_area(p, b, c)
+    area_pca = triangle_area(p, c, a)
+    partial_area = round(area_pab + area_pbc + area_pca, 3)
+    if partial_area == total_area:
         return True
     return False
 
 
-def heightByTrigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
+def height_by_trigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
     # TODO: вынести в elements
     axy = np.asarray(a)
     bxy = np.asarray(b)
@@ -144,16 +147,15 @@ def heightByTrigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
     axy[Z] = 1
     bxy[Z] = 1
     cxy[Z] = 1
-    S = triangleArea(axy, bxy, cxy)
-    S1 = triangleArea(pxy, axy, bxy)
-    S2 = triangleArea(pxy, bxy, cxy)
-    S3 = triangleArea(pxy, cxy, axy)
-    # TODO: add check on insideTriangle to escape unnecessary calcs
-    height = c[Z] * S1 / S + a[Z] * S2 / S + b[Z] * S3 / S
+    area = triangle_area(axy, bxy, cxy)
+    area1 = triangle_area(pxy, axy, bxy)
+    area2 = triangle_area(pxy, bxy, cxy)
+    area3 = triangle_area(pxy, cxy, axy)
+    height = c[Z] * area1 / area + a[Z] * area2 / area + b[Z] * area3 / area
     return height
 
 
-def apprxPointHeight(point: Vector, height_map: np.ndarray, *arg):
+def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     # find closest point in height_map(ndarray)
     # determine if given point above or below closest, take corresponding upper/lower point in map
     # determine side on which given point is relative to 2 points from map
@@ -164,15 +166,10 @@ def apprxPointHeight(point: Vector, height_map: np.ndarray, *arg):
                           height_map[-1, 0, :2]):
         print(f'point {point} not in the area')
         return 0
-    sub = height_map[:, :, :2] - point[:2]
-    abs_sub = np.abs(sub)
-    sum_abs = np.sum(abs_sub, axis=2)
-    idx_first = sum_abs.argmin()
-    idx_first = np.unravel_index(idx_first, height_map.shape[:2])
-    # idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(), height_map.shape)[:2]
+    idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(),
+                                 height_map.shape[:2])
     first = Vector(height_map[idx_first])
     above = point[Y] > first[Y]
-    # TODO: fix out of bound
     idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
     try:
         second = Vector(height_map[idx_second])
@@ -190,34 +187,13 @@ def apprxPointHeight(point: Vector, height_map: np.ndarray, *arg):
         third = height_map[idx_third]
     except IndexError:
         return first.z
-    if insideTriangle(point, first, second, third):
-        height = heightByTrigon(point, first, second, third)
+    if inside_triangle(point, first, second, third):
+        height = height_by_trigon(point, first, second, third)
         return height
     return first.z
 
 
-def lineFrom2points(p1=(0, 0), p2=(0, 0)):
-    # TODO: вынести в elements
-    k = (p2[X] - p1[X]) / (p2[Y] - p1[Y])
-    b = p1[Y] - k * p1[X]
-    return k, b
-
-
-def perpendicular2line(p=(0, 0), k=1, b=0):
-    # TODO: вынести в elements
-    pk = 1 / k
-    pb = p[X] / k + p[Y]
-    return pk, pb
-
-
-def crossectionOfLines(k1=1, b1=0, k2=1, b2=0):
-    # TODO: вынести в elements
-    x = (b2 - b1) / (k1 - k2)
-    y = k1 * x + b1
-    return (x, y)
-
-
-def readPointCloud(path=PCD_PATH):
+def read_point_cloud(path):
     """ Read PLY point cloud into numpy array, also split it for xy and z coordinates """
     pcd = []
     with open(path) as cld:
@@ -230,62 +206,80 @@ def readPointCloud(path=PCD_PATH):
     return pcd, pcd_xy, pcd_z
 
 
-def findPointInCloud(point, pcd_xy, pcd_z, pcd=None):
+def find_point_in_cloud(point, pcd_xy, pcd_z):
     """ Find corresponding Z coordinate for a given point in given point cloud """
     point = list(point)[:2]
     # closest_points = sorted(pcd, key=lambda p:distance(p, point[:2], simple=True))[:3]
     # point[X] += offset[X] #-50
     # point[Y] += offset[Y] #120
-    # z = apprxPointHeight(point, closest_points)
+    # z = apprx_point_height(point, closest_points)
     z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
     # point.append(z if z else 0)
     return z if z else 0
 
 
-def findAngleOfView(range: 'in pxls' = 640, focal: 'in mm' = focal, pxlSize: 'in mm' = pxlSize):
+def find_angle_of_view(view_range: int = 640,
+                       focal: float = global_focal,
+                       pxl_size: float = global_pxl_size) -> float:
     """
 
-    :param range: длинна обзора в пикселях
+    :param view_range: длинна обзора в пикселях
     :param focal: фокусное расстояние
-    :param pxlSize: размер пикселя на матрице
+    :param pxl_size: размер пикселя на матрице
     :return: угол в радианах
     """
-    return 2 * arctan(range * pxlSize / 2 / focal)
+    return 2 * arctan(view_range * pxl_size / 2 / focal)
 
 
-def findCameraAngle(viewWidth: 'in mm', frameWidth: 'in pxls' = 640, cameraHeight: 'in mm' = cameraHeight,
-                    focal: 'in mm' = focal, pxlSize: 'in mm' = pxlSize):
+def find_camera_angle(view_width: float,
+                      frame_width: int = 640,
+                      camera_height: float = global_camera_height,
+                      focal: float = global_focal,
+                      pxl_size: float = global_pxl_size) -> float:
     """
 
-    :param viewWidth: ширина обзора по центру кадра в мм
-    :param frameWidth: ширина кадра в пикселях
-    :param cameraHeight: высота камеры над поверхностью в мм
+    :param view_width: ширина обзора по центру кадра в мм
+    :param frame_width: ширина кадра в пикселях
+    :param camera_height: высота камеры над поверхностью в мм
     :param focal: фокусное расстояние линзы
-    :param pxlSize: размер пикселя на матрице в мм
+    :param pxl_size: размер пикселя на матрице в мм
     :return: угол наклона камеры в радианах
     """
-    viewAngle = findAngleOfView(frameWidth, focal, pxlSize)
-    cos_cameraAngle = 2 * cameraHeight / viewWidth * tan(viewAngle / 2)
-    cameraAngle = arccos(cos_cameraAngle)
-    return cameraAngle
+    view_angle = find_angle_of_view(frame_width, focal, pxl_size)
+    cos_camera_angle = 2 * camera_height / view_width * tan(view_angle / 2)
+    camera_angle = arccos(cos_camera_angle)
+    return camera_angle
 
 
-def saveHeightMap(heightMap: np.ndarray, filename='heightMap.txt'):
+def save_height_map(height_map: np.ndarray, filename='heightMap.txt'):
     with open(filename, 'w') as outfile:
-        outfile.write('{0}\n'.format(heightMap.shape))
+        outfile.write('{0}\n'.format(height_map.shape))
         outfile.write('# Data starts here\n')
-        for dimension in heightMap:
+        for dimension in height_map:
             np.savetxt(outfile, dimension, fmt='%-7.3f')
             outfile.write('# New dimension\n')
 
 
-def readHeightMap(filename='heightMap.txt'):
-    if isfile(filename):
-        with open(filename, 'r') as infile:
-            shape = infile.readline()
-            shape = shape[1:-2]
-            shape = [int(shape.split(', ')[i]) for i in range(3)]
-            heightMap = np.loadtxt(filename, skiprows=1, dtype=np.float16)
-            heightMap = heightMap.reshape(shape)
-            return heightMap
-    return None
+def generate_ply(points_array, filename='cloud.ply'):
+    """
+    Генерирует файл облака точек
+
+    :param points_array - массив точек с координатами
+    :param filename - имя файла для записи, по умолчанию cloud.ply
+    :return: None
+    """
+    print('Generating point cloud...')
+    ply = []
+    for count, point in enumerate(points_array, 1):
+        ply.append(f'{point[X]:.3f} {point[Y]:.3f} {point[Z]:.3f}\n')
+    with open(filename, 'w+') as cloud:
+        cloud.write("ply\n"
+                    "format ascii 1.0\n"
+                    f"element vertex {len(ply)}\n"
+                    "property float x\n"
+                    "property float y\n"
+                    "property float z\n"
+                    "end_header\n")
+        for count, point in enumerate(ply, 1):
+            cloud.write(point)
+    print(f'{len(ply):{6}} points recorded')
