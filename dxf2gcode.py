@@ -12,7 +12,7 @@ from elements import *
 from utilities import read_point_cloud
 from globalValues import cookies as global_cookies
 from globalValues import *
-from scanner import findCookies
+from scanner import find_cookies
 from cookie import Cookie
 
 # TODO: написать логи
@@ -78,7 +78,7 @@ def ggen(dwg: Drawing, cookies: Optional[List[Cookie]] = None, height_map: np.nd
 
 
 def gcodeGenerator(dwg, cookies: Optional[List[Cookie]] = None, preGcode: Optional[List[str]] = None,
-                   postGcode: Optional[List[str]] = None, ke=extrusion_coefficient, k=1, p_0=p0, p_1=p1, p_2=p2,
+                   postGcode: Optional[List[str]] = None, ke=extrusion_coefficient, k=1, p_0=p0(), p_1=p1(), p_2=p2(),
                    *args) -> List[str]:
     """
     Генерирует gcode для печати рисунка dwg на печеньках cookies и возвращает список команд.
@@ -345,7 +345,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     :return: None
     """
 
-    update_config_values()
+    update_config()
 
     # прочесть dxf
     dxf = ez.readfile(pathToDxf)
@@ -353,7 +353,7 @@ def dxf2gcode(pathToDxf=DXF_PATH, pathToPly=PCD_PATH):
     dwg.slice(slice_step)
     print(dwg)
     if global_cookies is None:
-        cookies, _ = findCookies('height_map.png', height_map)  # найти положения объектов на столе
+        cookies, _ = find_cookies('height_map.png', height_map)  # найти положения объектов на столе
         if len(cookies) != 0:
             cookies = cookies
             print(f'Объектов найдено: {len(cookies):{3}}')

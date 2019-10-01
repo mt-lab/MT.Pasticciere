@@ -1,7 +1,6 @@
 from typing import List, Union
 from itertools import tee
 from functools import reduce
-
 import numpy as np
 from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
 from ezdxf.math.vector import Vector
