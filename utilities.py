@@ -1,12 +1,9 @@
-from typing import List, Union
+from typing import List, Union, Tuple
 from itertools import tee
 from functools import reduce
 import numpy as np
 from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
 from ezdxf.math.vector import Vector
-from globalValues import focal as global_focal
-from globalValues import pxl_size as global_pxl_size
-from globalValues import camera_height as global_camera_height
 
 """ Some tools for convenience """
 
@@ -69,7 +66,7 @@ def generate_ordered_numbers(number: int = 0) -> int:
         number += 1
 
 
-def distance(p1, p2=(.0, .0, .0), simple=False) -> float:
+def distance(p1, p2: Union[List[float], Tuple[float]] = (.0, .0, .0), simple=False) -> float:
     # TODO: вынести в elements
     """
         Calculate distance between 2 points either 2D or 3D
@@ -218,8 +215,8 @@ def find_point_in_cloud(point, pcd_xy, pcd_z):
 
 
 def find_angle_of_view(view_range: int = 640,
-                       focal: float = global_focal,
-                       pxl_size: float = global_pxl_size) -> float:
+                       focal: float = 2.9,
+                       pxl_size: float = 0.005) -> float:
     """
 
     :param view_range: длинна обзора в пикселях
@@ -232,9 +229,9 @@ def find_angle_of_view(view_range: int = 640,
 
 def find_camera_angle(view_width: float,
                       frame_width: int = 640,
-                      camera_height: float = global_camera_height,
-                      focal: float = global_focal,
-                      pxl_size: float = global_pxl_size) -> float:
+                      camera_height: float = 150,
+                      focal: float = 2.9,
+                      pxl_size: float = 0.005) -> float:
     """
 
     :param view_width: ширина обзора по центру кадра в мм

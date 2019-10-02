@@ -39,27 +39,29 @@ def calculate_x(frame_idx):
     return frame_idx * kx
 
 
-def calculate_yz(frameIdx, pxl_coords=(0, 0), zero_lvl_row=239, frame_shape=(480, 640)):
-    dpy0 = (zero_lvl_row - (frame_shape[0] / 2 - 1)) * pxl_size
-    dpy = (pxl_coords[0] - (frame_shape[0] / 2 - 1)) * pxl_size
-    dpx = (pxl_coords[1] - (frame_shape[1] / 2) - 1) * pxl_size
-    tan_gamma = dpy0 / focal
-    tan_theta = dpy / focal
-    tan_rho = dpx / (focal * cos_alpha)
-    tan_alphaPgamma = ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma))
-    tan_thetaMgamma= (tan_theta - tan_gamma)/(1+tan_theta * tan_gamma)
-    tan_alphaPtheta = (tan_alpha + tan_theta) / (1 - tan_alpha * tan_theta)
+def calculate_yz(frameIdx, pxl_coords=(0, 0), zero_lvl_row=239, frame_shape=(480, 640), pixel_size=0, focal_length=0,
+                 camera_angle=0,
+                 distance_camera2laser=0, camera_shift=0, **kwargs):
+    dpy0 = (zero_lvl_row - (frame_shape[0] / 2 - 1)) * pixel_size
+    dpy = (pxl_coords[0] - (frame_shape[0] / 2 - 1)) * pixel_size
+    dpx = (pxl_coords[1] - (frame_shape[1] / 2) - 1) * pixel_size
+    tan_gamma = dpy0 / focal_length
+    tan_theta = dpy / focal_length
+    tan_rho = dpx / (focal_length * cos(camera_angle))
+    tan_alphaPgamma = ((tan(camera_angle) + tan_gamma) / (1 - tan(camera_angle) * tan_gamma))
+    tan_thetaMgamma = (tan_theta - tan_gamma) / (1 + tan_theta * tan_gamma)
+    tan_alphaPtheta = (tan(camera_angle) + tan_theta) / (1 - tan(camera_angle) * tan_theta)
     camera_height = distance_camera2laser / tan_alphaPgamma
     try:
-        sin_thetaMgamma = 1 / (sqrt(1 + (1/tan_thetaMgamma) ** 2))
+        sin_thetaMgamma = 1 / (sqrt(1 + (1 / tan_thetaMgamma) ** 2))
     except ZeroDivisionError:
         sin_thetaMgamma = 0
     try:
-        sin_alphaPtheta = 1 / (sqrt(1 + (1/tan_alphaPtheta) ** 2))
+        sin_alphaPtheta = 1 / (sqrt(1 + (1 / tan_alphaPtheta) ** 2))
     except ZeroDivisionError:
         sin_alphaPtheta = 0
     try:
-        cos_alphaPgamma = 1 / (sqrt(1+tan_alphaPgamma**2))
+        cos_alphaPgamma = 1 / (sqrt(1 + tan_alphaPgamma ** 2))
     except ZeroDivisionError:
         cos_alphaPgamma = 0
     try:
@@ -127,7 +129,7 @@ def predict_laser(deriv: np.ndarray, row_start=0, row_end=480) -> np.ndarray:
     return fine_laser_center
 
 
-def predict_zero_level(array: np.ndarray, mid_row=239, row_start=0, row_end=479, img_to_mark=None)\
+def predict_zero_level(array: np.ndarray, mid_row=239, row_start=0, row_end=479, img_to_mark=None, **kwargs) \
         -> Tuple[np.ndarray, float]:
     """
 
@@ -152,11 +154,11 @@ def predict_zero_level(array: np.ndarray, mid_row=239, row_start=0, row_end=479,
     return zero_level, tangent
 
 
-def calibrate_kx(video_fps: 'frame per sec', printer_velocity: 'mm per minute' = 300):
+def calibrate_kx(video_fps: float, printer_velocity: float = 300):
     """
     Функция калибровки коэффициента Kx
-    :param video_fps:
-    :param printer_velocity:
+    :param video_fps: frames per second
+    :param printer_velocity: mm/minute
     :return:
     """
     global kx
@@ -164,7 +166,7 @@ def calibrate_kx(video_fps: 'frame per sec', printer_velocity: 'mm per minute' =
     print(f'Kx is {kx}')
 
 
-def get_mask(img, zero_level=0):
+def get_mask(img, hsv_lower_bound, hsv_upper_bound, zero_level=0):
     """
     Делает битовую маску лазера с изображения и применяет к ней lineThinner
 
@@ -180,7 +182,7 @@ def get_mask(img, zero_level=0):
     return gauss_thresh
 
 
-def get_max_height(contour, height_map: 'np.ndarray' = height_map):
+def get_max_height(contour, height_map: 'np.ndarray' = globalValues.height_map):
     hMZ = np.dsplit(height_map, 3)[Z].reshape(height_map.shape[0], height_map.shape[1])
     mask = np.zeros(height_map.shape[:2], dtype='uint8')
     cv2.drawContours(mask, [contour], -1, 255, -1)
@@ -189,7 +191,7 @@ def get_max_height(contour, height_map: 'np.ndarray' = height_map):
     return maxHeight
 
 
-def find_cookies(img_or_path, height_map=None):
+def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
@@ -361,7 +363,7 @@ def detectStart(cap, mask, threshold=0.5):
         yield False
 
 
-def detectStart2(cap, contourPath='', threshold=0.5):
+def detectStart2(cap, contourPath='', mark_center=(0, 0), threshold=0.5):
     # копия find_cookies заточеная под поиск конкретного контура и его положение с целью привязки к глобальной СК
     # работает сразу с видео потоком по принципу detectStart()
     # TODO: разделить на функции, подумать как обобщить вместе с find_cookies()
@@ -427,7 +429,7 @@ def detectStart2(cap, contourPath='', threshold=0.5):
             if cv2.matchShapes(markContour, contours[0], cv2.CONTOURS_MATCH_I2, 0) < threshold:
                 moments = cv2.moments(contours[0])
                 candidateCenter = (int(moments['m01'] / moments['m00']), int(moments['m10'] / moments['m00']))
-                if distance(mark_center, candidateCenter()) <= 2:
+                if distance(mark_center, candidateCenter) <= 2:
                     start = True
         while start:
             yield True
@@ -516,7 +518,8 @@ def skeletonize(img):
     return skel
 
 
-def scanning(cap, initial_frame_idx=0, colored=False):
+def scanning(cap, initial_frame_idx=0, colored=False, table_length=200, table_width=200, table_height=50, x0=0, y0=0,
+             z0=0, **kwargs):
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -551,7 +554,7 @@ def scanning(cap, initial_frame_idx=0, colored=False):
             if colored:
                 blur = cv2.GaussianBlur(roi, (33, 33), 0)
                 # mask = getMask(blur, frame.shape[0] / 2 - 1)
-                mask = get_mask(blur)
+                mask = get_mask(blur, row_start, **kwargs)
             else:
                 blur = cv2.GaussianBlur(gray, (33, 33), 0)
                 _, mask = cv2.threshold(blur, 5, 255, cv2.THRESH_BINARY)
@@ -564,7 +567,7 @@ def scanning(cap, initial_frame_idx=0, colored=False):
             else:
                 # иначе найти нулевую линию и её угол
                 zero_level, tangent = predict_zero_level(fine_laser_center, frame.shape[0] / 2 - 1, row_start, row_end,
-                                                         frame)
+                                                         **kwargs)
                 # если параметры линии отклоняются в пределах 1 градуса и 1 пикселя
                 if abs(laser_tangent - tangent) < tan(1 / 180 * pi) and abs(laser_row_pos - zero_level[0]) < 1:
                     # расчитать средние параметры линии по кадрам где отклонения в пределах
@@ -579,30 +582,30 @@ def scanning(cap, initial_frame_idx=0, colored=False):
             # расчитать физические координаты точек лазера
             for column, row in enumerate(fine_laser_center):
                 zero = zero_level[column]
-                width, height = calculate_yz(frame_idx, (row, column), zero)
+                width, height = calculate_yz(frame_idx, (row, column), zero, frame.shape, **kwargs)
                 max_height = max(height, max_height)
                 if 0 <= width <= table_width:
-                    height_map[frame_idx, column, X] = length + X0
-                    height_map[frame_idx, column, Y] = width + Y0
+                    height_map[frame_idx, column, X] = length + x0
+                    height_map[frame_idx, column, Y] = width + y0
                 else:
                     # если координата по ширине не на столе, то не записывать точку
                     continue
-                height_map[frame_idx, column, Z] = height + Z0 if 0 <= height <= table_height else Z0
+                height_map[frame_idx, column, Z] = height + z0 if 0 <= height <= table_height else z0
             print(
                 f'{frame_idx + initial_frame_idx + 1:{3}}/{total_frames:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
                 f'  X: {length:4.2f} мм; Zmax: {max_height:4.2f} мм')
             frame_idx += 1
             ##########################################################################
-            # """ for debug purposes """
-            # for column, row in enumerate(fine_laser_center):
-            #     frame[int(row), column] = (0, 255, 0)
-            #     frame[int(zero_level[column]), column] = (255, 0, 0)
-            # max_column = fine_laser_center.argmax()
-            # max_row = int(fine_laser_center[max_column])
-            # cv2.circle(frame, (max_column + column_start, max_row), 3, (0, 0, 255), -1)
-            # cv2.imshow('frame', frame)
-            # cv2.imshow('mask', mask)
-            # cv2.waitKey(15)
+            """ for debug purposes """
+            for column, row in enumerate(fine_laser_center):
+                frame[int(row), column] = (0, 255, 0)
+                frame[int(zero_level[column]), column] = (255, 0, 0)
+            max_column = fine_laser_center.argmax()
+            max_row = int(fine_laser_center[max_column])
+            cv2.circle(frame, (max_column + column_start, max_row), 3, (0, 0, 255), -1)
+            cv2.imshow('frame', frame)
+            cv2.imshow('mask', mask)
+            cv2.waitKey(15)
             ##########################################################################
         else:
             # когда видео кончилось
@@ -611,14 +614,14 @@ def scanning(cap, initial_frame_idx=0, colored=False):
             return height_map
 
 
-def scan(path_to_video=VID_PATH, sensitivity=104, colored=False, threshold=0.6):
+def scan(path_to_video=globalValues.VID_PATH, sensitivity=104, colored=False, threshold=0.6):
     """
     Функция обработки видео (сканирования)
     :param path_to_video: путь к видео, по умолчанию путь из settings.ini
     :return: None
     """
 
-    update_config()
+    settings_values = globalValues.get_settings_values(**globalValues.settings_sections)
 
     cap = cv2.VideoCapture(path_to_video)  # чтение видео
     calibrate_kx(cap.get(cv2.CAP_PROP_FPS))
@@ -641,7 +644,7 @@ def scan(path_to_video=VID_PATH, sensitivity=104, colored=False, threshold=0.6):
     print(f'Точка начала сканирования: {initial_frame_idx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    height_map = scanning(cap, initial_frame_idx)
+    height_map = scanning(cap, initial_frame_idx, **settings_values)
     globalValues.height_map = height_map
 
     # массив для нахождения позиций объектов
