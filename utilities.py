@@ -41,7 +41,12 @@ def diap(start, end, step=1) -> List[float]:
     yield list(end)
 
 
-def avg(*arg):
+def avg(*arg) -> float:
+    """
+     Вычисляет среднее арифметическое
+    :param arg: набор чисел
+    :return: среднее
+    """
     return reduce(lambda a, b: a + b, arg) / len(arg)
 
 
@@ -77,20 +82,23 @@ def line_side(m: Vector, p1: Vector = (0, 0, 0), p2: Vector = (1, 1, 0)) -> Unio
     return pos
 
 
-def triangle_area(a, b, c):
+def triangle_area(a, b, c, signed=False):
     # TODO: вынести в elements
-    area = (a[X] * (b[Y] - c[Y]) + b[X] * (c[Y] - a[Y]) + c[X] * (a[Y] - b[Y])) / 2
-    return abs(area)
+    area = (a[X] * (b[Y] - c[Y]) + b[X] * (c[Y] - a[Y]) + c[X] * (a[Y] - b[Y])) / 2.0
+    return area if signed else abs(area)
 
 
-def polygon_area(*args: List[List[float]]):
-    area = 0
-    for v1, v2 in pairwise(closed(args)):
-        area += (v1[X] * v2[Y] - v1[Y] * v2[X]) / 2
-    return abs(area)
+def polygon_area(poly: List):
+    total_area = 0
+    for i in range(len(poly) - 2):
+        a, b, c = poly[0], poly[i + 1], poly[i + 2]
+        area = triangle_area(a, b, c, True)
+        total_area += area
+    return abs(total_area)
 
 
 def inside_polygon(p, *args: List[List[float]]):
+    # TODO: use cv.polygonTest
     p = [round(coord, 2) for coord in p]
     boundary_area = round(polygon_area(*args))
     partial_area = 0
@@ -212,7 +220,8 @@ def find_camera_angle(view_width: float,
                       focal: float = 2.9,
                       pxl_size: float = 0.005) -> float:
     """
-
+    Вычисление угла наклона камеры от вертикали по ширине обзора камеры и
+    её высоте над поверхностью.
     :param view_width: ширина обзора по центру кадра в мм
     :param frame_width: ширина кадра в пикселях
     :param camera_height: высота камеры над поверхностью в мм
@@ -226,7 +235,47 @@ def find_camera_angle(view_width: float,
     return camera_angle
 
 
-def save_height_map(height_map: np.ndarray, filename='heightMap.txt'):
+def find_camera_angle2(img: np.ndarray,
+                       distance_camera2laser: float = 90,
+                       camera_height: float = 150,
+                       focal: float = 2.9,
+                       pixel_size: float = 0.005,
+                       **kwargs) -> float:
+    """
+    Вычисление угла наклона камеры от вертикали по расстоянию до лазера,
+    высоте над поверхностью стола и изображению положения лазера с камеры.
+    :param np.ndarray img: цветное или чб изображение (лучше чб)
+    :param float distance_camera2laser: расстояние от камеры до лазера в мм
+    :param float camera_height: расстояние от камеры до поверхности в мм
+    :param float focal: фокусное расстояние камеры в мм
+    :param float pixel_size: размер пикселя на матрице в мм
+    :param kwargs: дополнительные параметры для обработки изображения
+    :keyword ksize: int размер окна для ф-ии гаусса, нечетное число
+    :keyword sigma: float сигма для ф-ии гаусса
+    :raises Exception: 'Dimensions are not correct' if img not 3D or 2D
+    :return: угол камеры в радианах
+    """
+    import cv2
+    from scanner import predict_laser, laplace_of_gauss
+    if img.ndim == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    elif img.ndim == 2:
+        gray = img
+    else:
+        raise Exception('Dimensions are not correct')
+    deriv = laplace_of_gauss(gray, kwargs.get('ksize', 29), kwargs.get('sigma', 4.45))
+    laser = predict_laser(deriv, 0, img.shape[0])
+    middle = laser[int(len(laser) / 2)] if len(laser) % 2 != 0 else (
+            .5 * laser[int(len(laser) / 2)] + laser[int(len(laser) / 2) - 1])
+    dp0 = (middle - img.shape[0] / 2 - 1) * pixel_size
+    tan_gamma = dp0 / focal
+    d2h_ratio = distance_camera2laser / camera_height
+    tan_alpha = (d2h_ratio - tan_gamma) / (d2h_ratio + tan_gamma)
+    camera_angle = arctan(tan_alpha)
+    return camera_angle
+
+
+def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
     with open(filename, 'w') as outfile:
         outfile.write('{0}\n'.format(height_map.shape))
         outfile.write('# Data starts here\n')
