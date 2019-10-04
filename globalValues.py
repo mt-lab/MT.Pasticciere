@@ -30,7 +30,7 @@ def read_height_map(filename='height_map.txt'):
         with open(filename, 'r') as infile:
             shape = infile.readline()
             shape = shape[1:-2]
-            shape = [int(shape.split(', ')[i]) for i in range(3)]
+            shape = tuple(i for i in map(int, shape.split(', ')))
             height_map = loadtxt(filename, skiprows=1, dtype=float16)
             height_map = height_map.reshape(shape)
             return height_map
