@@ -68,8 +68,6 @@ def home(*args, **kwargs) -> str:
 
 
 move_Z = lambda z, f=None: linear_move(Z=z, F=f)
-slow_move = lambda **kwargs: linear_move(code='G0', **kwargs)
-rapid_move = lambda **kwargs: linear_move(code='G1', **kwargs)
 
 
 def write_gcode(gcode_instructions: Union[List[str], 'Gcode'], filename: str = 'cookie.gcode'):

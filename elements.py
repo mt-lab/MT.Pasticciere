@@ -36,8 +36,10 @@ class Element():
         self.entity = entity
         self.points = points  # type: List[Vector]
         self.sliced = False
-        self.withZ = False
+        self.with_z = False
         self.backwards = False
+        self._length = None
+        self._flat_length = None
 
     @property
     def first(self) -> Vector:
@@ -60,25 +62,21 @@ class Element():
 
     @property
     def length(self) -> float:
-        try:
-            return self._length
-        except AttributeError:
+        if self._length is None:
             length = 0
             for v1, v2 in pairwise(self.points):
                 length += v1.distance(v2)
             self._length = length
-            return length
+        return self._length
 
     @property
-    def flatLength(self) -> float:
-        try:
-            return self._flatLength
-        except AttributeError:
-            flatLength = 0
+    def flat_length(self) -> float:
+        if self._flat_length is None:
+            flat_length = 0
             for v1, v2 in pairwise(self.points):
-                flatLength += v1.vec2.distance(v2.vec2)
-            self._flatLength = flatLength
-            return flatLength
+                flat_length += v1.vec2.distance(v2.vec2)
+            self._flat_length = flat_length
+        return self._flat_length
 
     def __str__(self) -> str:
         return f'Element: {self.entity.dxftype()}\n ' + \
@@ -106,7 +104,7 @@ class Element():
         if center is not None:
             self.translate(center)
 
-    def bestDistance(self, point: 'Vector' = NULLVEC) -> float:
+    def best_distance(self, point: 'Vector' = NULLVEC) -> float:
         """
         Вычисляет с какой стороны точка находится ближе к элементу и ориентирует его соответственно
 
@@ -118,13 +116,13 @@ class Element():
         self.backwards = dist2last < dist2first
         return min(dist2first, dist2last)
 
-    def getPoints(self) -> List[Vector]:
+    def get_points(self) -> List[Vector]:
         """
         Возвращает точки
         """
         return self.points if not self.backwards else self.points[::-1]
 
-    def getSlicedPoints(self) -> List[Vector]:
+    def get_sliced_points(self) -> List[Vector]:
         """
         Возвращает нарезанные координаты
         """
@@ -155,21 +153,18 @@ class Element():
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
     # def addZ(self, pcd_xy=None, pcd_z=None, pcd=None, constantShift=None):
     #     """
     #     Добавить координату Z к элементу
     #     :param pcd_xy: часть облака точек с X и Y координатами
     #     :param pcd_z: часть облака точек с Z координатами
-    #     :param float constantShift: для задания одной высоты всем точкам
+    #     :param float constant_shift: для задания одной высоты всем точкам
     #     :return: None
     #     """
-    #     if constantShift is not None:
-    #         self.points = [v.replace(z=constantShift) for v in self.points]
+    #     if constant_shift is not None:
+    #         self.points = [v.replace(z=constant_shift) for v in self.points]
     #         return None
     #     else:
     #         if pcd_z is None or pcd_xy is None:
@@ -184,15 +179,12 @@ class Element():
     #     except AttributeError:
     #         pass
 
-    def addZ(self, height_map: Optional[np.ndarray] = None, constantShift=0):
+    def add_z(self, height_map: Optional[np.ndarray] = None, constant_shift=0):
         if height_map is None:
             pass
         self.points = [v.replace(z=apprx_point_height(v, height_map)) for v in self.points]
-        self.withZ = True
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self.with_z = True
+        self._length = None
 
 
 class Point(Element):
@@ -239,10 +231,7 @@ class Polyline(Element):
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
 
 class LWPolyline(Polyline):
@@ -312,10 +301,7 @@ class Spline(Element, BSpline):
         self.sliced = True
         points = [Vector(point) for point in self.approximate(int(self.max_t / step))]
         self.points = points
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
 
 class Line(Element):
@@ -353,10 +339,7 @@ class Line(Element):
                 sliced.append(end)
         self.points = sliced
         self.sliced = True
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
 
 class Circle(Element):
@@ -372,16 +355,14 @@ class Circle(Element):
         super().__init__(circle, points=points)
 
     @property
-    def flatLength(self):
-        try:
-            return self._flatLength
-        except AttributeError:
-            flatLength = 2 * pi * self.radius
-            self._flatLength = flatLength
-            return flatLength
+    def flat_length(self):
+        if self._flat_length is None:
+            flat_length = 2 * pi * self.radius
+            self._flat_length = flat_length
+        return self._flat_length
 
     def slice(self, step=1):
-        n_steps = int(self.flatLength / step)
+        n_steps = int(self.flat_length / step)
         angle_step = 2 * pi / n_steps
         sliced = []
         v = Vector()
@@ -394,10 +375,7 @@ class Circle(Element):
             sliced.append(self.last)
         self.points = sliced
         self.sliced = True
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
     @property
     def centroid(self):
@@ -412,12 +390,12 @@ class Arc(Element):
     def __init__(self, arc):
         self.center = arc.dxf.center  # type: Vector
         self.radius = arc.dxf.radius  # type: float
-        self.startAngle = arc.dxf.start_angle * pi / 180  # в радианах
-        self.endAngle = arc.dxf.end_angle * pi / 180  # в радианах
-        if self.startAngle > self.endAngle:
-            self.endAngle += 2 * pi
-        points = [Vector.from_angle(self.startAngle, self.radius) + self.center,
-                  Vector.from_angle(self.endAngle, self.radius) + self.center]
+        self.start_angle = arc.dxf.start_angle * pi / 180  # в радианах
+        self.end_angle = arc.dxf.end_angle * pi / 180  # в радианах
+        if self.start_angle > self.end_angle:
+            self.end_angle += 2 * pi
+        points = [Vector.from_angle(self.start_angle, self.radius) + self.center,
+                  Vector.from_angle(self.end_angle, self.radius) + self.center]
         super().__init__(arc, points=points)
 
     @property
@@ -425,23 +403,21 @@ class Arc(Element):
         try:
             return self._centroid
         except AttributeError:
-            centroid_x = self.radius / self.flatLength * (sin(self.endAngle) - sin(self.startAngle)) + self.center.x
-            centroid_y = self.radius / self.flatLength * (cos(self.startAngle) - cos(self.endAngle)) + self.center.y
+            centroid_x = self.radius / self.flat_length * (sin(self.end_angle) - sin(self.start_angle)) + self.center.x
+            centroid_y = self.radius / self.flat_length * (cos(self.start_angle) - cos(self.end_angle)) + self.center.y
             self._centroid = Vector(centroid_x, centroid_y, 0)
             return self._centroid
 
     @property
-    def flatLength(self):
-        try:
-            return self._flatLength
-        except AttributeError:
-            flatLength = (self.endAngle - self.startAngle) * self.radius
-            self._flatLength = flatLength
-            return flatLength
+    def flat_length(self):
+        if self._flat_length is None:
+            flat_length = (self.end_angle - self.start_angle) * self.radius
+            self._flat_length = flat_length
+        return self._flat_length
 
     def slice(self, step=1):
-        n_steps = int(self.flatLength / step)
-        angle_step = (self.endAngle - self.startAngle) / n_steps
+        n_steps = int(self.flat_length / step)
+        angle_step = (self.end_angle - self.start_angle) / n_steps
         sliced = []
         v = Vector()
         for i in range(n_steps + 1):
@@ -453,10 +429,7 @@ class Arc(Element):
             sliced.append(self.points[-1])
         self.sliced = True
         self.points = sliced
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
 
     def __str__(self):
         return 'Arc object: ' + super().__str__()
@@ -472,6 +445,8 @@ class Contour:
         """
         :param elements: элементы составляющие контур
         """
+        self._length = None
+        self._flat_length = None
         if elements is None:
             self.elements = []
             self.closed = False
@@ -482,7 +457,7 @@ class Contour:
                 self.elements = [elements]
             else:
                 raise TypeError('Contour should be either List[Element] or Element.')
-            if self.firstPoint == self.lastPoint:
+            if self.first_point == self.last_point:
                 self.closed = True
             else:
                 self.closed = False
@@ -491,11 +466,8 @@ class Contour:
         if isinstance(other, Contour):
             if not len(self):
                 elements = other.elements
-                try:
-                    del self._length
-                    del self._flatLength
-                except AttributeError:
-                    pass
+                self._length = None
+                self._flat_length = None
                 return Contour(elements)
             if self.closed or other.closed:
                 raise Exception('Cannot add closed contours.')
@@ -509,33 +481,33 @@ class Contour:
             4. start to start
               c2.reversed + c1
             """
-            if self.lastPoint == other.firstPoint:
+            if self.last_point == other.first_point:
                 elements = self.elements + other.elements
                 # return Contour(elements)
-            elif self.lastPoint == other.lastPoint:
+            elif self.last_point == other.last_point:
                 elements = self.elements + other.elements[::-1]
                 # return Contour(elements)
-            elif self.firstPoint == other.lastPoint:
+            elif self.first_point == other.last_point:
                 elements = other.elements + self.elements
                 # return Contour(elements)
-            elif self.firstPoint == other.firstPoint:
+            elif self.first_point == other.first_point:
                 elements = other.elements[::-1] + self.elements
                 # return Contour(elements)
             else:
                 raise Exception('Contours not connected.')
             # return Contour(elements)
         elif isinstance(other, Element):
-            if self.lastPoint == other.first:
+            if self.last_point == other.first:
                 elements = self.elements + [other]
                 # return Contour(elements)
-            elif self.lastPoint == other.last:
+            elif self.last_point == other.last:
                 elements = self.elements + [other]
                 other.backwards = not other.backwards
                 # return Contour(elements)
-            elif self.firstPoint == other.last:
+            elif self.first_point == other.last:
                 elements = [other] + self.elements
                 # return Contour(elements)
-            elif self.firstPoint == other.first:
+            elif self.first_point == other.first:
                 elements = [other] + self.elements
                 other.backwards = not other.backwards
                 # return Contour(elements)
@@ -543,26 +515,23 @@ class Contour:
                 raise Exception('Shapes not connected.')
         else:
             raise TypeError('Can add only Contour or Element')
-        try:
-            del self._length
-            del self._flatLength
-        except AttributeError:
-            pass
+        self._length = None
+        self._flat_length = None
         return Contour(elements)
 
-    def addElement(self, element: Element):
+    def add_element(self, element: Element):
         if element in self.elements:
             raise Exception('Element is in contour already.')
         if not isinstance(element, Element):
             raise TypeError('Adding object should be Element.')
-        if self.firstPoint == element.last:
+        if self.first_point == element.last:
             self.elements = [element] + self.elements
-        elif self.lastPoint == element.first:
+        elif self.last_point == element.first:
             self.elements += [element]
-        elif self.firstPoint == element.first:
+        elif self.first_point == element.first:
             element.backwards = not element.backwards
             self.elements = [element] + self.elements
-        elif self.lastPoint == element.last:
+        elif self.last_point == element.last:
             element.backwards = not element.backwards
             self.elements += [element]
         else:
@@ -579,76 +548,75 @@ class Contour:
             yield element
 
     @property
-    def firstElement(self) -> Element:
+    def first_element(self) -> Element:
         return self.elements[0]
 
     @property
-    def lastElement(self) -> Element:
+    def last_element(self) -> Element:
         return self.elements[-1]
 
     @property
-    def firstPoint(self) -> Vector:
-        return self.firstElement.first
+    def first_point(self) -> Vector:
+        return self.first_element.first
 
     @property
-    def lastPoint(self) -> Vector:
-        return self.lastElement.last
+    def last_point(self) -> Vector:
+        return self.last_element.last
 
     @property
-    def flatLength(self) -> float:
-        try:
-            return self._flatLength
-        except AttributeError:
-            flatLength = 0
+    def flat_length(self) -> float:
+        if self._flat_length is None:
+            flat_length = 0
             for element in self.elements:
-                flatLength += element.flatLength
-            self._flatLength = flatLength
-            return flatLength
+                flat_length += element.flat_length
+            self._flat_length = flat_length
+        return self._flat_length
 
     @property
     def length(self) -> float:
-        try:
-            return self._length
-        except AttributeError:
+        if self._length is None:
             length = 0
             for element in self.elements:
                 length += element.length
             self._length = length
-            return length
+        return self._length
 
     def isclose(self, other: Union[Vector, Element, "Contour"], abs_tol: float = 1e-12) -> bool:
         if isinstance(other, Vector):
-            close2first = self.firstPoint.isclose(other, abs_tol)
-            close2last = self.lastPoint.isclose(other, abs_tol)
+            close2first = self.first_point.isclose(other, abs_tol)
+            close2last = self.last_point.isclose(other, abs_tol)
             return close2first or close2last
         elif isinstance(other, Element):
-            close2first = self.firstPoint.isclose(other.first, abs_tol) or self.firstPoint.isclose(other.last, abs_tol)
-            close2last = self.lastPoint.isclose(other.first, abs_tol) or self.lastPoint.isclose(other.last, abs_tol)
+            close2first = self.first_point.isclose(other.first, abs_tol) or self.first_point.isclose(other.last,
+                                                                                                     abs_tol)
+            close2last = self.last_point.isclose(other.first, abs_tol) or self.last_point.isclose(other.last, abs_tol)
             return close2first or close2last
         elif isinstance(other, Contour):
-            close2first = self.firstPoint.isclose(other.firstPoint, abs_tol) or self.firstPoint.isclose(other.lastPoint,
-                                                                                                        abs_tol)
-            close2last = self.lastPoint.isclose(other.firstPoint, abs_tol) or self.lastPoint.isclose(other.lastPoint,
-                                                                                                     abs_tol)
+            close2first = self.first_point.isclose(other.first_point, abs_tol) or self.first_point.isclose(
+                other.last_point,
+                abs_tol)
+            close2last = self.last_point.isclose(other.first_point, abs_tol) or self.last_point.isclose(
+                other.last_point,
+                abs_tol)
             return close2first or close2last
         else:
             raise TypeError('Should be Vector or Element or Contour.')
 
-    def bestDistance(self, point: Vector = NULLVEC) -> float:
-        dist2first = 0 if self.firstPoint == point else self.firstPoint.distance(point)
-        dist2last = 0 if self.lastPoint == point else self.lastPoint.distance(point)
+    def best_distance(self, point: Vector = NULLVEC) -> float:
+        dist2first = 0 if self.first_point == point else self.first_point.distance(point)
+        dist2last = 0 if self.last_point == point else self.last_point.distance(point)
         return min(dist2first, dist2last)
 
-    def getPoints(self) -> List[Vector]:
+    def get_points(self) -> List[Vector]:
         points = []
         for element in self.elements:
-            points += element.getPoints()
+            points += element.get_points()
         return points
 
-    def getSlicedPoints(self) -> List[Vector]:
+    def get_sliced_points(self) -> List[Vector]:
         points = []
         for element in self.elements:
-            points += element.getSlicedPoints()
+            points += element.get_sliced_points()
         return points
 
 
@@ -667,13 +635,13 @@ class Layer:
         self.cookieContour = True if name == 'Contour' else False
         self.priority = priority if priority is not None else 0
 
-    def addContour(self, contours: Union[List[Contour], Contour]):
+    def add_contour(self, contours: Union[List[Contour], Contour]):
         if isinstance(contours, List):
             self.contours += contours
         elif isinstance(contours, Contour):
             self.contours += [contours]
 
-    def getElements(self):
+    def get_elements(self):
         elements = []
         for contour in self.contours:
             elements += contour.elements
@@ -710,14 +678,16 @@ class Drawing:
         self.elements = []  # type: List[Element]
         self.contours = []  # type: List[Contour]
         self.organized = False  # type: bool
+        self._length = None
+        self._flat_length = None
         if dxf is None:
             self.dxf = None
             self.modelspace = None
         else:
             self.dxf = dxf
             self.modelspace = self.dxf.modelspace()
-            self.readByLayer()
-        self._center, self._rotation = self.findCenterAndRotation()
+            self.read_by_layer()
+        self._center, self._rotation = self.find_center_and_rotation()
         if center is not None:
             self.center = center
         if rotation is not None:
@@ -726,7 +696,7 @@ class Drawing:
     def __str__(self):
         return f'Геометрический центр рисунка: X: {self.center[X]:4.2f} Y: {self.center[Y]:4.2f} мм\n' + \
                f'Ориентация рисунка: {self.rotation * 180 / pi: 4.2f} градуса\n' + \
-               f'Общая плоская длина рисунка: {self.flatLength: 4.2f} мм'
+               f'Общая плоская длина рисунка: {self.flat_length: 4.2f} мм'
 
     @property
     def center(self) -> Vector:
@@ -755,7 +725,7 @@ class Drawing:
         for element in self.elements:
             element.rotate(angle, self.center)
 
-    def findCenterAndRotation(self) -> Tuple[Vector, float]:
+    def find_center_and_rotation(self) -> Tuple[Vector, float]:
         """
         Расчитывает геометрический центр рисунка
         :return:
@@ -783,53 +753,48 @@ class Drawing:
 
     @property
     def length(self) -> float:
-        try:
-            return self._length
-        except AttributeError:
+        if self._length is None:
             length = 0
             for element in self.elements:
                 length += element.length
             self._length = length
-            return length
+        return self._length
 
     @property
-    def flatLength(self) -> float:
-        try:
-            return self._flatLength
-        except AttributeError:
-            flatLength = 0
+    def flat_length(self) -> float:
+        if self._flat_length is None:
+            flat_length = 0
             for element in self.elements:
-                flatLength += element.flatLength
-            self._flatLength = flatLength
-            return flatLength
+                flat_length += element.flat_length
+            self._flat_length = flat_length
+        return self._flat_length
 
-    def readDxf(self, root):
-        # TODO: read by layer
+    def read_dxf(self, root):
         for element in root:
             if element.dxftype() == 'INSERT':
                 block = self.dxf.blocks[element.dxf.name]
-                self.readDxf(block)
-            elif elementRedef(element):
-                self.elements.append(elementRedef(element))
+                self.read_dxf(block)
+            elif element_redef(element):
+                self.elements.append(element_redef(element))
         self.organized = False
         print('dxf прочтён.')
 
-    def readEntities(self, root, entities=None):
+    def read_entities(self, root, entities=None):
         if entities is None:
             entities = []
         for element in root:
             if element.dxftype() == 'INSERT':
                 block = self.dxf.blocks[element.dxf.name]
-                entities += self.readEntities(block)
-            elif elementRedef(element):
-                entities.append(elementRedef(element))
+                entities += self.read_entities(block)
+            elif element_redef(element):
+                entities.append(element_redef(element))
         print('элементы получены')
         return entities
 
-    def readByLayer(self):
+    def read_by_layer(self):
         layers = {}
-        elements = []
-        contours = []
+        elements_in_dwg = []
+        contours_in_dwg = []
         for layer in self.dxf.layers:
             name = layer.dxf.name
             print(f'чтение слоя {name}')
@@ -839,53 +804,47 @@ class Drawing:
             priority = findall('\d+', name)
             priority = int(priority[0]) if priority else None
             entities_in_layer = self.modelspace.query(f'*[layer=="{name}"]')
-            entities_in_layer = self.readEntities(entities_in_layer)
+            entities_in_layer = self.read_entities(entities_in_layer)
             if not entities_in_layer:
                 continue
-            entities_in_layer = self.organizeEntities(entities_in_layer)
-            elements += entities_in_layer
-            contours_in_layer = self.makeContours(entities_in_layer)
-            contours += contours_in_layer
+            entities_in_layer = self.organize_entities(entities_in_layer)
+            elements_in_dwg += entities_in_layer
+            contours_in_layer = self.make_contours(entities_in_layer)
+            contours_in_dwg += contours_in_layer
             layers[name] = Layer(name, contours_in_layer, priority)
         self.layers = layers
-        self.elements = elements
-        self.contours = contours
+        self.elements = elements_in_dwg
+        self.contours = contours_in_dwg
         self.organized = True
         print('файл прочтён')
 
     def slice(self, step: float = 1.0):
         for element in self.elements:
             element.slice(step)
-        try:
-            del self._length
-        except AttributeError:
-            pass
+        self._length = None
         print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
-    def addZ(self, height_map: np.ndarray, constantShift=0):
-        # def addZ(self, pcd_xy=None, pcd_z=None, constantShift=None):
-        # if constantShift is not None:
+    def add_z(self, height_map: np.ndarray, constant_shift=0):
+        # def add_z(self, pcd_xy=None, pcd_z=None, constant_shift=None):
+        # if constant_shift is not None:
         #     for element in self.elements:
-        #         element.addZ(constantShift=constantShift)
+        #         element.add_z(constant_shift=constant_shift)
         # elif pcd_xy is not None and pcd_z is not None:
         #     for element in self.elements:
-        #         element.addZ(pcd_xy, pcd_z)
+        #         element.add_z(pcd_xy, pcd_z)
         # else:
         #     raise Exception('No height data.')
         if height_map is None:
             pass
         for element in self.elements:
-            element.addZ(height_map, constantShift)
-        try:
-            del self._length
-        except AttributeError:
-            pass
+            element.add_z(height_map, constant_shift)
+        self._length = None
 
-    def organizeEntities(self, entities: List[Element], start_point: Vector = NULLVEC):
+    def organize_entities(self, entities: List[Element], start_point: Vector = NULLVEC):
         path = []
         elements = entities
         # сортировать элементы по их удалению от точки
-        elements.sort(key=lambda x: x.bestDistance(start_point))
+        elements.sort(key=lambda x: x.best_distance(start_point))
         while len(elements) != 0:
             # первый элемент в списке (ближайший к заданной точке) - текущий
             current = elements[0]
@@ -894,11 +853,11 @@ class Drawing:
             # убрать этот элемент из неотсортированного списка
             elements.pop(0)
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
-            elements.sort(key=lambda x: x.bestDistance(current.last))
+            elements.sort(key=lambda x: x.best_distance(current.last))
         print('элементы отсортированы')
         return path
 
-    def makeContours(self, entities: List[Element]):
+    def make_contours(self, entities: List[Element]):
         contour = Contour([entities[0]])
         contours = []
         for element in entities[1:]:
@@ -921,7 +880,7 @@ class Drawing:
         print('контуры составлены')
         return contours
 
-    def organizeElements(self, start_point=(0, 0)):
+    def organize_elements(self, start_point=(0, 0)):
         """
         Сортирует и ориентирует элементы друг за другом относительно данной точки
         :param start_point: точка, относительно которой выбирается первый элемент
@@ -930,7 +889,7 @@ class Drawing:
         path = []
         elements = self.elements.copy()
         # сортировать элементы по их удалению от точки
-        elements.sort(key=lambda x: x.bestDistance(start_point))
+        elements.sort(key=lambda x: x.best_distance(start_point))
         while len(elements) != 0:
             # первый элемент в списке (ближайший к заданной точке) - текущий
             current = elements[0]
@@ -939,13 +898,12 @@ class Drawing:
             # убрать этот элемент из неотсортированного списка
             elements.pop(0)
             # отсортировать элементы по их удалению от последней точки предыдущего элемента
-            elements.sort(key=lambda x: x.bestDistance(current.last))
+            elements.sort(key=lambda x: x.best_distance(current.last))
         self.elements = path
         self.organized = True
         print('Сформирована очередность элементов.')
 
-    def findContours(self):
-        # TODO: исправить неверный реверс элементов
+    def find_contours(self):
         contour = Contour([self.elements[0]])
         contours = []
         for element in self.elements[1:]:
