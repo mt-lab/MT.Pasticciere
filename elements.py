@@ -7,6 +7,7 @@ Author: bedlamzd of MT.lab
 """
 
 from typing import List, Union, Any, Optional, Tuple, Dict
+from itertools import count
 from cv2 import moments
 import math
 import ezdxf as ez
@@ -16,9 +17,7 @@ from ezdxf.math.bspline import BSpline
 from re import findall
 import numpy as np
 from numpy import sign
-# from tkinter import *
-from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, generate_ordered_numbers, \
-    apprx_point_height
+from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, apprx_point_height, triangle_area
 from numpy import sqrt, cos, sin, pi, arctan
 
 
@@ -262,6 +261,7 @@ class Spline(Element, BSpline):
         return self.points[-1] if not self.backwards else self.points[0]
 
     def slice(self, step=1):
+        # TODO: подумать как использовать градиентный спуск или т.п.
         # n1, n2 = 0, 0
         # t = 0.001
         # dt = 0.0001
@@ -621,7 +621,7 @@ class Contour:
 
 
 class Layer:
-    number_generator = generate_ordered_numbers()
+    number_generator = count()
 
     def __init__(self, name=None, contours: Union[List[Contour], Contour] = None, priority=None):
         if isinstance(contours, List):
