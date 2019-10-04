@@ -42,6 +42,7 @@ def calculate_x(frame_idx):
 def calculate_yz(frameIdx, pxl_coords=(0, 0), zero_lvl_row=239, frame_shape=(480, 640), pixel_size=0, focal_length=0,
                  camera_angle=0,
                  distance_camera2laser=0, camera_shift=0, **kwargs):
+    mirrored = kwargs.get('mirrored', False)
     dpy0 = (zero_lvl_row - (frame_shape[0] / 2 - 1)) * pixel_size
     dpy = (pxl_coords[0] - (frame_shape[0] / 2 - 1)) * pixel_size
     dpx = (pxl_coords[1] - (frame_shape[1] / 2) - 1) * pixel_size
@@ -69,7 +70,7 @@ def calculate_yz(frameIdx, pxl_coords=(0, 0), zero_lvl_row=239, frame_shape=(480
     except ZeroDivisionError:
         z = 0
     y = (camera_height - z) * tan_rho  # координата y точки относительно камеры
-    y += camera_shift
+    y = camera_shift + y if not mirrored else camera_shift - y
     # x = calculate_x(frameIdx) # координата x точки высчитанная по номеру кадра
     return y, z
 
@@ -528,6 +529,7 @@ def skeletonize(img):
 
 def scanning(cap, initial_frame_idx=0, colored=False, table_length=200, table_width=200, table_height=50, x0=0, y0=0,
              z0=0, **kwargs):
+    reverse = kwargs.get('reverse', False)
     # читать видео с кадра initialFrameIdx
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -593,7 +595,7 @@ def scanning(cap, initial_frame_idx=0, colored=False, table_length=200, table_wi
                 width, height = calculate_yz(frame_idx, (row, column), zero, frame.shape, **kwargs)
                 max_height = max(height, max_height)
                 if 0 <= width <= table_width:
-                    height_map[frame_idx, column, X] = length + x0
+                    height_map[frame_idx, column, X] = length + x0 if not reverse else x0 - length
                     height_map[frame_idx, column, Y] = width + y0
                 else:
                     # если координата по ширине не на столе, то не записывать точку
@@ -622,7 +624,7 @@ def scanning(cap, initial_frame_idx=0, colored=False, table_length=200, table_wi
             return height_map
 
 
-def scan(path_to_video=globalValues.VID_PATH, sensitivity=104, colored=False, threshold=0.6):
+def scan(path_to_video=globalValues.VID_PATH, sensitivity=104, colored=False, threshold=0.6, **kwargs):
     """
     Функция обработки видео (сканирования)
     :param path_to_video: путь к видео, по умолчанию путь из settings.ini
@@ -652,7 +654,7 @@ def scan(path_to_video=globalValues.VID_PATH, sensitivity=104, colored=False, th
     print(f'Точка начала сканирования: {initial_frame_idx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    height_map = scanning(cap, initial_frame_idx, **settings_values)
+    height_map = scanning(cap, initial_frame_idx, **settings_values, **kwargs)
     globalValues.height_map = height_map
 
     # массив для нахождения позиций объектов

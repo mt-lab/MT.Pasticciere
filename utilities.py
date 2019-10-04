@@ -263,16 +263,21 @@ def find_camera_angle2(img: np.ndarray,
         gray = img
     else:
         raise Exception('Dimensions are not correct')
+    roi = kwargs.get('roi', ((0, gray.shape[0]),(0,gray.shape[1])))
+    gray = gray[roi[0][0]:roi[0][1], roi[1][0]:roi[1][1]]
     deriv = laplace_of_gauss(gray, kwargs.get('ksize', 29), kwargs.get('sigma', 4.45))
     laser = predict_laser(deriv, 0, img.shape[0])
-    middle = laser[int(len(laser) / 2)] if len(laser) % 2 != 0 else (
-            .5 * laser[int(len(laser) / 2)] + laser[int(len(laser) / 2) - 1])
+    mid_idx = int(len(laser) / 2)
+    middle = laser[int(len(laser) / 2)] if len(laser) % 2 != 0 else .5 *(
+             laser[int(len(laser) / 2)] + laser[int(len(laser) / 2) - 1])
+    img[laser.astype(int)+roi[0][0], [i + roi[1][0] for i in range(laser.size)]] = (0,255,0)
+    cv2.circle(img, ( mid_idx+roi[1][0],int(middle)+roi[0][0]), 2, (0,0,255), -1)
     dp0 = (middle - img.shape[0] / 2 - 1) * pixel_size
     tan_gamma = dp0 / focal
     d2h_ratio = distance_camera2laser / camera_height
     tan_alpha = (d2h_ratio - tan_gamma) / (d2h_ratio + tan_gamma)
     camera_angle = arctan(tan_alpha)
-    return camera_angle
+    return camera_angle, img
 
 
 def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
