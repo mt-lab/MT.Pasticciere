@@ -14,17 +14,17 @@ import globalValues
 from scanner import find_cookies
 from cookie import Cookie
 
-# TODO: написать логи
 
-Z_max = 30
-Z_up = Z_max + 0.2  # later should be cloud Z max + few mm сейчас это глобальный максимум печати принтера по Z
+# TODO: написать логи
 
 
 def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
                     height_map: np.ndarray = globalValues.height_map,
                     extrusion_coefficient=0.041, extrusion_multiplex=1, p0=0.05, p1=0.05, p2=0.05, z_offset=0.2,
                     **kwargs):
+    # TODO: дописать под работу для генерации тестового gcode (печать по плоскости на расстоянии от стола)
     E = 0
+    Z_max = kwargs.get('table_height', 30)
     gcode = Gcode()
     gcode += home()
     gcode += move_Z(Z_max, kwargs.get('F0'))
