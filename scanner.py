@@ -18,7 +18,7 @@ import imutils
 
 # TODO: написать логи
 
-# TODO: комментарии и рефактор
+# TODO: комментарии и рефактор; удалить ненужные функции
 
 # TODO: для постобработки облака взять значения внутри найденных контуров (используя маску), найти среднее и отклонения
 #       и обрезать всё что выше mean + std (или 2*std)
@@ -214,12 +214,12 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
             original = cv2.merge((img_or_path.copy(), img_or_path.copy(), img_or_path.copy()))
             gray = img_or_path.copy()
     else:
-        return 'Вы передали какую то дичь'
+        raise TypeError(f'передан {type(img_or_path)}, ожидалось str или numpy.ndarray')
 
     if height_map is None:
         height_map = gray.copy() / 10
 
-    gray[gray < gray.mean()] = 0
+    # gray[gray < gray.mean()] = 0
 
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -261,6 +261,8 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
     result = cv2.bitwise_and(original, original, mask=sureBg)
     # расчет центров и поворотов контуров сразу в мм
     cookies = []
+    mask = np.zeros(result.shape[:2], dtype='uint8')
+    cv2.drawContours(mask, contours, -1, 255, -1)
     for contour in contours:
         tmp = contour.copy()  # скопировать контур, чтобы не изменять оригинал
         tmp = np.float32(tmp)
@@ -283,10 +285,16 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
         b = 2 * (moments['m11'] / moments['m00'] - cx * cy)
         c = moments['m02'] / moments['m00'] - cy ** 2
         theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
+        x1 = int(Cx + Cy / tan(theta))
+        x2 = int(Cx - (result.shape[0] - Cy) * tan(pi / 2 - theta))
+        cv2.line(result, (x1, 0), (x2, result.shape[0]), (0, 0, 255), 2)
+        cv2.circle(result, (Cx, Cy), 3, (0, 255, 0), -1)
+        result = cv2.bitwise_and(result, result, mask=mask)
         # угол поворота с учетом приведения в СК принтера
         rotation = theta + pi / 2
         maxHeight = get_max_height(contour, height_map)
         cookies.append(Cookie(center=center[:2], centerHeight=center[Z], rotation=rotation, maxHeight=maxHeight))
+    cv2.drawContours(result, contours, -1, (255, 0, 0), 2)
     print('Положения печений найдены.')
     return cookies, result
 
@@ -596,16 +604,16 @@ def scanning(cap, initial_frame_idx=0, colored=False, table_length=200, table_wi
                 f'  X: {length:4.2f} мм; Zmax: {max_height:4.2f} мм')
             frame_idx += 1
             ##########################################################################
-            """ for debug purposes """
-            for column, row in enumerate(fine_laser_center):
-                frame[int(row), column] = (0, 255, 0)
-                frame[int(zero_level[column]), column] = (255, 0, 0)
-            max_column = fine_laser_center.argmax()
-            max_row = int(fine_laser_center[max_column])
-            cv2.circle(frame, (max_column + column_start, max_row), 3, (0, 0, 255), -1)
-            cv2.imshow('frame', frame)
-            cv2.imshow('mask', mask)
-            cv2.waitKey(15)
+            # """ for debug purposes """
+            # for column, row in enumerate(fine_laser_center):
+            #     frame[int(row), column] = (0, 255, 0)
+            #     frame[int(zero_level[column]), column] = (255, 0, 0)
+            # max_column = fine_laser_center.argmax()
+            # max_row = int(fine_laser_center[max_column])
+            # cv2.circle(frame, (max_column + column_start, max_row), 3, (0, 0, 255), -1)
+            # cv2.imshow('frame', frame)
+            # cv2.imshow('mask', mask)
+            # cv2.waitKey(15)
             ##########################################################################
         else:
             # когда видео кончилось
