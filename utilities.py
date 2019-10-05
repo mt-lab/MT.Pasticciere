@@ -270,7 +270,7 @@ def find_camera_angle2(img: np.ndarray,
     dp0 = (middle - img.shape[0] / 2 - 1) * pixel_size
     tan_gamma = dp0 / focal
     d2h_ratio = distance_camera2laser / camera_height
-    tan_alpha = (d2h_ratio - tan_gamma) / (d2h_ratio + tan_gamma)
+    tan_alpha = (d2h_ratio - tan_gamma) / (1 + d2h_ratio * tan_gamma)
     camera_angle = arctan(tan_alpha)
     return camera_angle
 
