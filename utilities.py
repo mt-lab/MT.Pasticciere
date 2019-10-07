@@ -19,6 +19,18 @@ def pairwise(iterable):
     return zip(a, b)
 
 
+def print_objects(objects: Any, pre_msg: Optional[str] = None, object_msg: Optional[str] = '',
+                  sep: Optional[str] = '#'):
+    if pre_msg is not None:
+        print(pre_msg)
+    print(sep * 30)
+    for count, obj in enumerate(objects):
+        print(f'{object_msg}', f'№{count:3d}')
+        print(sep * 30)
+        print(obj)
+        print(sep * 30)
+
+
 def closed(iterable):
     """ ABCD -> A, B, C, D, A """
     return [item for item in iterable] + [iterable[0]]

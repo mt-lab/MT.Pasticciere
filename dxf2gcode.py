@@ -9,7 +9,7 @@ import ezdxf as ez
 from typing import Union, Optional
 from gcodeGen import *
 from elements import *
-from utilities import read_point_cloud
+from utilities import read_point_cloud, print_objects
 import globalValues
 from scanner import find_cookies
 from cookie import Cookie
@@ -110,13 +110,7 @@ def dxf2gcode(path_to_dxf=globalValues.DXF_PATH, *args, **kwargs):
         cookies, _ = find_cookies('height_map.png', globalValues.height_map)  # найти положения объектов на столе
         if len(cookies) != 0:
             globalValues.cookies = cookies
-            print(f'Объектов найдено: {len(cookies):{3}}')
-            print('#############################################')
-            for i, cookie in enumerate(cookies, 1):
-                print(f'Объект №{i:3d}')
-                print('#############################################')
-                print(cookie)
-                print('#############################################')
+            print_objects(cookies, f'Объектов найдено: {len(cookies):{3}}')
             print()
     else:
         cookies = globalValues.cookies

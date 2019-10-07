@@ -11,7 +11,7 @@ import cv2
 from typing import Tuple, List
 from utilities import X, Y, Z, distance
 import globalValues
-from utilities import save_height_map
+from utilities import save_height_map, OutOfScanArea, mid_idx, print_objects
 from cookie import *
 import time
 import imutils
@@ -663,13 +663,7 @@ def scan(path_to_video=globalValues.VID_PATH, sensitivity=104, colored=False, th
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
     if len(cookies) != 0:
         globalValues.cookies = cookies
-        print(f'Объектов найдено: {len(cookies):{3}}')
-        print('#############################################')
-        for i, cookie in enumerate(cookies, 1):
-            print(f'Объект №{i:3d}')
-            print('#############################################')
-            print(cookie)
-            print('#############################################')
+        print_objects(cookies, f'Объектов найдено: {len(cookies):{3}}')
         print()
 
     # сохранить карты
