@@ -1,8 +1,8 @@
-from typing import List, Union, Tuple, Iterable
+from typing import List, Union, Tuple, Iterable, Sequence, Optional, Any, TypeVar
 from itertools import tee
 from functools import reduce
 import numpy as np
-from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
+from numpy import arctan, sqrt, tan, arccos
 from ezdxf.math.vector import Vector
 
 """ Some tools for convenience """
@@ -51,6 +51,7 @@ def diap(start, end, step=1) -> List[float]:
      между данными двумя.
     :param Iterable[float] start: начальная точка в пространстве
     :param Iterable[float] end: конечная точка в пространстве
+    :param float step: шаг между точками
     :return: точка между start и end
     """
     start = Vector(start)
@@ -262,7 +263,7 @@ def find_camera_angle2(img: np.ndarray,
                        camera_height: float = 150,
                        focal: float = 2.9,
                        pixel_size: float = 0.005,
-                       **kwargs) -> float:
+                       **kwargs) -> Tuple[float, np.ndarray]:
     """
     Вычисление угла наклона камеры от вертикали по расстоянию до лазера,
     высоте над поверхностью стола и изображению положения лазера с камеры.
@@ -299,6 +300,28 @@ def find_camera_angle2(img: np.ndarray,
     tan_alpha = (d2h_ratio - tan_gamma) / (1 + d2h_ratio * tan_gamma)
     camera_angle = arctan(tan_alpha)
     return camera_angle, img
+
+
+def angle_from_video(video, **kwargs):
+    import cv2
+    cap = cv2.VideoCapture(video)
+    mean_angle = 0
+    count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            print('max_row of video')
+            break
+        angle, frame = find_camera_angle2(frame, **kwargs)
+        count += 1
+        mean_angle = (mean_angle * (count - 1) + angle) / count
+        print(np.rad2deg(mean_angle), np.rad2deg(angle))
+        cv2.imshow('frame', frame)
+        ch = cv2.waitKey(15)
+        if ch == 27:
+            print('closed by user')
+            break
+    cv2.destroyAllWindows()
 
 
 def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
