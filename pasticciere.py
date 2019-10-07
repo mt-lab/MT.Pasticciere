@@ -506,29 +506,29 @@ def getstatus():
     sliceStepValue.grid(row=15, column=0)
 
     extrusionMultiplexLabel = tk.Label(statuswin, text="Множитель экструзии:")
-    extrusionMultiplexLabel.grid(row=14, column=0)
+    extrusionMultiplexLabel.grid(row=16, column=0)
     extrusionMultiplexValue = tk.Label(statuswin, text=get_setting(path, "GCoder", "extrusion_multiplex"))
-    extrusionMultiplexValue.grid(row=15, column=0)
+    extrusionMultiplexValue.grid(row=17, column=0)
 
     videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
-    videolabel.grid(row=14, column=0)
+    videolabel.grid(row=18, column=0)
     videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "videoforpointcloud"))
-    videovalue.grid(row=15, column=0)
+    videovalue.grid(row=19, column=0)
 
     cloudlabel = tk.Label(statuswin, text="Путь к облаку точек:")
-    cloudlabel.grid(row=16, column=0)
+    cloudlabel.grid(row=20, column=0)
     cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "pointcloudpath"))
-    cloudvalue.grid(row=17, column=0)
+    cloudvalue.grid(row=21, column=0)
 
     dxflabel = tk.Label(statuswin, text="Путь к dxf-файлу:")
-    dxflabel.grid(row=18, column=0)
+    dxflabel.grid(row=22, column=0)
     dxfvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "dxfpath"))
-    dxfvalue.grid(row=19, column=0)
+    dxfvalue.grid(row=23, column=0)
 
     stepbutton = tk.Button(statuswin, text="Ok", command=statuswin.destroy)
-    stepbutton.grid(row=20, column=0)
+    stepbutton.grid(row=24, column=0)
 
 
 def fixIni():
