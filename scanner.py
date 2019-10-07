@@ -6,9 +6,9 @@ Author: bedlamzd of MT.lab
 """
 
 import numpy as np
-from numpy import cos, sin, tan, sqrt, arctan, pi
+from numpy import cos, tan, sqrt, arctan, pi
 import cv2
-from typing import Tuple, List
+from typing import Tuple, List, Sequence, Optional, Union, Any
 from utilities import X, Y, Z, distance
 import globalValues
 from utilities import save_height_map, OutOfScanArea, mid_idx, print_objects
