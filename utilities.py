@@ -333,3 +333,15 @@ def generate_ply(points_array, filename='cloud.ply'):
         for count, point in enumerate(ply, 1):
             cloud.write(point)
     print(f'{len(ply):{6}} points recorded')
+
+
+class OutOfScanArea(Exception):
+    def __init__(self, message='Out of scaning area', **kwargs):
+        pos = kwargs.get('pos')
+        bounds = kwargs.get('bounds')
+        msg = message
+        if pos is not None:
+            msg += f'. Real position {pos}'
+        if bounds is not None:
+            msg += f'. Allowed Range {bounds}'
+        self.message = msg
