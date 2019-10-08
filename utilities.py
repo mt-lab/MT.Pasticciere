@@ -245,6 +245,7 @@ def find_camera_angle(view_width: float,
     """
     Вычисление угла наклона камеры от вертикали по ширине обзора камеры и
     её высоте над поверхностью.
+
     :param view_width: ширина обзора по центру кадра в мм
     :param frame_width: ширина кадра в пикселях
     :param camera_height: высота камеры над поверхностью в мм
@@ -267,6 +268,7 @@ def find_camera_angle2(img: np.ndarray,
     """
     Вычисление угла наклона камеры от вертикали по расстоянию до лазера,
     высоте над поверхностью стола и изображению положения лазера с камеры.
+
     :param np.ndarray img: цветное или чб изображение (лучше чб)
     :param float distance_camera2laser: расстояние от камеры до лазера в мм
     :param float camera_height: расстояние от камеры до поверхности в мм
@@ -302,7 +304,20 @@ def find_camera_angle2(img: np.ndarray,
     return camera_angle, img
 
 
-def angle_from_video(video, **kwargs):
+def angle_from_video(video: Union[str, int], **kwargs):
+    """
+    Имплементация find_camera_angle2 для видео вместо отдельного снимка
+
+    :param video: путь к видео или номер девайса для захвата
+    :param kwargs: параметры функции find_camera_angle2
+    :keyword distance_camera2laser: расстояние от камеры до лазера в мм
+    :keyword camera_height: расстояние от камеры до поверхности в мм
+    :keyword focal: фокусное расстояние камеры в мм
+    :keyword pixel_size: размер пикселя на матрице в мм
+    :keyword ksize: int размер окна для ф-ии гаусса, нечетное число
+    :keyword sigma: float сигма для ф-ии гаусса
+    :return: средний угол за все обработанные кадры
+    """
     import cv2
     cap = cv2.VideoCapture(video)
     mean_angle = 0
@@ -310,18 +325,67 @@ def angle_from_video(video, **kwargs):
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            print('max_row of video')
+            print('video ended or crashed')
             break
         angle, frame = find_camera_angle2(frame, **kwargs)
         count += 1
         mean_angle = (mean_angle * (count - 1) + angle) / count
-        print(np.rad2deg(mean_angle), np.rad2deg(angle))
+        msg = f'Количество измерений: {count}\n' + \
+              f'Средний угол: {np.rad2deg(mean_angle):4.2f}\n' + \
+              f'Угол в текущем кадре: {np.rad2deg(angle):4.2f}'
+        print(msg, '#' * 30, sep='\n')
         cv2.imshow('frame', frame)
         ch = cv2.waitKey(15)
         if ch == 27:
             print('closed by user')
             break
+    cap.release()
     cv2.destroyAllWindows()
+    return mean_angle
+
+
+def select_hsv_values(video):
+    import cv2
+
+    def nothing():
+        pass
+
+    params = {'h1': 0, 'h2': 255, 's1': 0, 's2': 255, 'v1': 0, 'v2': 255}
+    setwin = 'hsv_set'
+    reswin = 'result'
+    cv2.namedWindow(setwin, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(reswin, cv2.WINDOW_NORMAL)
+    for key in params:
+        cv2.createTrackbar(key, setwin, params[key], 255, nothing)
+    cv2.createTrackbar('mask', setwin, 0, 1, nothing)
+
+    # noinspection PyShadowingNames
+    def get_params(win='hsv_set'):
+        for key in params:
+            params[key] = int(cv2.getTrackbarPos(key, win))
+        m = int(cv2.getTrackbarPos('mask', setwin))
+        hsv_lower = tuple(params[k] for k in ['h1', 's1', 'v1'])
+        hsv_upper = tuple(params[k] for k in ['h2', 's2', 'v2'])
+        return hsv_lower, hsv_upper, m
+
+    cap = cv2.VideoCapture(video)
+    lowerb, upperb = (0, 0, 0), (255, 255, 255)
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret is True:
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            lowerb, upperb, m = get_params(setwin)
+            hsv = cv2.inRange(hsv, lowerb, upperb, None)
+            result = cv2.bitwise_and(frame, frame, mask=hsv) if m == 1 else hsv
+            cv2.imshow(reswin, result)
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ch = cv2.waitKey(15)
+        if ch == 27:
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    return lowerb, upperb
 
 
 def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
