@@ -627,7 +627,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             if colored:  # сделать маску для выделения зоны лазера в кадре
                 blur = cv2.GaussianBlur(roi, (ksize, ksize), 0)
-                mask = get_hsv_mask(blur, row_start, **kwargs)
+                mask = get_hsv_mask(blur, **kwargs)
             else:
                 blur = cv2.GaussianBlur(gray, (ksize, ksize), 0)
                 _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
