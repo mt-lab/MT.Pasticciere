@@ -114,7 +114,6 @@ def sendFile(host, port, name, password, file):
 
 path = "settings.ini"
 
-
 window = tk.Tk()
 
 
@@ -337,21 +336,28 @@ def gcodesetdiag():
     Задание точности построения gcode (минимальной длины линии)
     Содержит вложенную функцию записи значения в конфигурационный файл
     """
+
     def accuracySet():
         update_setting(path, "GCoder", "accuracy", accuracyForm.get())
         gcodesetwin.destroy()
 
+    def extrusionMultiplexSet():
+        update_setting(path, 'GCoder', 'slice_step', extrusionMultiplexForm.get())
+
+    def sliceStepSet():
+        update_setting(path, 'GCoder', 'slice_step', sliceStepForm.get())
+
     def zoffsetSet():
-        update_setting(path, "GCoder", "zoffset", zoffsetForm.get())
+        update_setting(path, "GCoder", "z_offset", zoffsetForm.get())
         gcodesetwin.destroy()
 
     def extcoeffSet():
-        update_setting(path, "GCoder", "extrusioncoefficient",
+        update_setting(path, "GCoder", "extrusion_coefficient",
                        extcoeffForm.get())
         gcodesetwin.destroy()
 
     def retractSet():
-        update_setting(path, "GCoder", "retractamount", retractForm.get())
+        update_setting(path, "GCoder", "retract_amount", retractForm.get())
         gcodesetwin.destroy()
 
     def p0Set():
@@ -370,7 +376,7 @@ def gcodesetdiag():
     gcodesetwin.title("Настройка gcode")
     gcodesetwin.minsize(width=170, height=500)
 
-    accuracyLabel = tk.Label(gcodesetwin, text="Размер шага (мм):")
+    accuracyLabel = tk.Label(gcodesetwin, text="Точность (мм):")
     accuracyLabel.grid(row=0, column=0)
     accuracyForm = tk.Entry(gcodesetwin)
     accuracyForm.grid(row=1, column=0)
@@ -419,6 +425,20 @@ def gcodesetdiag():
     p2Button = tk.Button(gcodesetwin, text="Задать", command=p2Set)
     p2Button.grid(row=13, column=1)
 
+    sliceStepLabel = tk.Label(gcodesetwin, text="Размер шага (мм):")
+    sliceStepLabel.grid(row=14, column=0)
+    sliceStepForm = tk.Entry(gcodesetwin)
+    sliceStepForm.grid(row=15, column=0)
+    sliceStepButton = tk.Button(gcodesetwin, text="Задать", command=sliceStepSet)
+    sliceStepButton.grid(row=15, column=1)
+
+    extrusionMultiplexLabel = tk.Label(gcodesetwin, text="Множитель экструзии:")
+    extrusionMultiplexLabel.grid(row=14, column=0)
+    extrusionMultiplexForm = tk.Entry(gcodesetwin)
+    extrusionMultiplexForm.grid(row=15, column=0)
+    extrusionMultiplexButton = tk.Button(gcodesetwin, text="Задать", command=extrusionMultiplexSet)
+    extrusionMultiplexButton.grid(row=15, column=1)
+
 
 def addressCutter(address):
     cuttedAddress = address[-15:]
@@ -441,28 +461,28 @@ def getstatus():
     statuswin = Toplevel(window)
     statuswin.title("Текущие параметры")
     statuswin.minsize(width=400, height=400)
-    stepLabel = tk.Label(statuswin, text="Размер шага:")
+    stepLabel = tk.Label(statuswin, text="Точность:")
     stepLabel.grid(row=0, column=0)
     stepValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                     "accuracy")+" мм")
+                                                     "accuracy") + " мм")
     stepValue.grid(row=1, column=0)
 
     zoffsetLabel = tk.Label(statuswin, text="Смещение по Z:")
     zoffsetLabel.grid(row=2, column=0)
     zoffsetValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                        "zoffset")+" мм")
+                                                        "z_offset") + " мм")
     zoffsetValue.grid(row=3, column=0)
 
     excoefLabel = tk.Label(statuswin, text="Коэффициент экструзии:")
     excoefLabel.grid(row=4, column=0)
     excoefValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                       "extrusioncoefficient"))
+                                                       "extrusion_coefficient"))
     excoefValue.grid(row=5, column=0)
 
     retractLabel = tk.Label(statuswin, text="Подсос:")
     retractLabel.grid(row=6, column=0)
     retractValue = tk.Label(statuswin, text=get_setting(path, "GCoder",
-                                                        "retractamount"))
+                                                        "retract_amount"))
     retractValue.grid(row=7, column=0)
 
     p0Label = tk.Label(statuswin, text="P0:")
@@ -480,22 +500,35 @@ def getstatus():
     p2Value = tk.Label(statuswin, text=get_setting(path, "GCoder", "p2"))
     p2Value.grid(row=13, column=0)
 
+    sliceStepLabel = tk.Label(statuswin, text="Размер шага (мм):")
+    sliceStepLabel.grid(row=14, column=0)
+    sliceStepValue = tk.Label(statuswin, text=get_setting(path, "GCoder", "slice_step"))
+    sliceStepValue.grid(row=15, column=0)
+
+    extrusionMultiplexLabel = tk.Label(statuswin, text="Множитель экструзии:")
+    extrusionMultiplexLabel.grid(row=16, column=0)
+    extrusionMultiplexValue = tk.Label(statuswin, text=get_setting(path, "GCoder", "extrusion_multiplex"))
+    extrusionMultiplexValue.grid(row=17, column=0)
+
     videolabel = tk.Label(statuswin, text="Путь к файлу видео:")
-    videolabel.grid(row=14, column=0)
+    videolabel.grid(row=18, column=0)
     videovalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "videoforpointcloud"))
-    videovalue.grid(row=15, column=0)
+    videovalue.grid(row=19, column=0)
+
     cloudlabel = tk.Label(statuswin, text="Путь к облаку точек:")
-    cloudlabel.grid(row=16, column=0)
+    cloudlabel.grid(row=20, column=0)
     cloudvalue = tk.Label(statuswin, text=get_setting(path, "GCoder",
                                                       "pointcloudpath"))
-    cloudvalue.grid(row=17, column=0)
+    cloudvalue.grid(row=21, column=0)
+
     dxflabel = tk.Label(statuswin, text="Путь к dxf-файлу:")
-    dxflabel.grid(row=18, column=0)
+    dxflabel.grid(row=22, column=0)
     dxfvalue = tk.Label(statuswin, text=get_setting(path, "GCoder", "dxfpath"))
-    dxfvalue.grid(row=19, column=0)
+    dxfvalue.grid(row=23, column=0)
+
     stepbutton = tk.Button(statuswin, text="Ok", command=statuswin.destroy)
-    stepbutton.grid(row=20, column=0)
+    stepbutton.grid(row=24, column=0)
 
 
 def fixIni():

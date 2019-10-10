@@ -1,18 +1,17 @@
 from math import radians
-from numpy import loadtxt, cos, tan, float16
+from numpy import loadtxt, float16
 from os.path import isfile
 import configparser
-from typing import List
 
 config_path = 'settings.ini'
 
 
-def string2list(delim=' ', func=None):
-    def _string2list(string: str, delim=' ', func=None):
-        return string.split(delim) if func is None else [func(x) for x in string.split(delim)]
+def string2list(sep=' ', f=None):
+    def _string2list(string: str, s=' ', func=None):
+        return string.split(s) if func is None else [func(x) for x in string.split(s)]
 
     def wrapper(string):
-        return _string2list(string, delim, func)
+        return _string2list(string, sep, f)
 
     return wrapper
 
@@ -31,9 +30,9 @@ def read_height_map(filename='height_map.txt'):
             shape = infile.readline()
             shape = shape[1:-2]
             shape = tuple(i for i in map(int, shape.split(', ')))
-            height_map = loadtxt(filename, skiprows=1, dtype=float16)
-            height_map = height_map.reshape(shape)
-            return height_map
+            _height_map = loadtxt(filename, skiprows=1, dtype=float16)
+            _height_map = _height_map.reshape(shape)
+            return _height_map
     return None
 
 

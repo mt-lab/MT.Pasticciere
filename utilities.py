@@ -1,8 +1,8 @@
-from typing import List, Union, Tuple, Iterable
+from typing import List, Union, Tuple, Iterable, Sequence, Optional, Any, TypeVar
 from itertools import tee
 from functools import reduce
 import numpy as np
-from numpy import cos, sin, arctan, sqrt, floor, tan, arccos
+from numpy import arctan, sqrt, tan, arccos
 from ezdxf.math.vector import Vector
 
 """ Some tools for convenience """
@@ -11,12 +11,34 @@ from ezdxf.math.vector import Vector
 
 X, Y, Z = 0, 1, 2
 
+T = TypeVar('T')
+
+
+def mid_idx(arr: Sequence[T], shift: Optional[int] = 0) -> Union[T, int]:
+    mid = int(len(arr) / 2) + shift
+    if len(arr) % 2 == 0:
+        return arr[slice(mid - 1, mid + 1)], mid - 1
+    else:
+        return arr[mid], mid
+
 
 def pairwise(iterable):
     """ s -> (s0,s1), (s1,s2), (s2, s3), ... """
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
+
+
+def print_objects(objects: Any, pre_msg: Optional[str] = None, object_msg: Optional[str] = '',
+                  sep: Optional[str] = '#'):
+    if pre_msg is not None:
+        print(pre_msg)
+    print(sep * 30)
+    for count, obj in enumerate(objects):
+        print(f'{object_msg}', f'№{count:3d}')
+        print(sep * 30)
+        print(obj)
+        print(sep * 30)
 
 
 def closed(iterable):
@@ -29,6 +51,7 @@ def diap(start, end, step=1) -> List[float]:
      между данными двумя.
     :param Iterable[float] start: начальная точка в пространстве
     :param Iterable[float] end: конечная точка в пространстве
+    :param float step: шаг между точками
     :return: точка между start и end
     """
     start = Vector(start)
@@ -240,7 +263,7 @@ def find_camera_angle2(img: np.ndarray,
                        camera_height: float = 150,
                        focal: float = 2.9,
                        pixel_size: float = 0.005,
-                       **kwargs) -> float:
+                       **kwargs) -> Tuple[float, np.ndarray]:
     """
     Вычисление угла наклона камеры от вертикали по расстоянию до лазера,
     высоте над поверхностью стола и изображению положения лазера с камеры.
@@ -263,21 +286,42 @@ def find_camera_angle2(img: np.ndarray,
         gray = img
     else:
         raise Exception('Dimensions are not correct')
-    roi = kwargs.get('roi', ((0, gray.shape[0]),(0,gray.shape[1])))
+    roi = kwargs.get('roi', ((0, gray.shape[0]), (0, gray.shape[1])))
     gray = gray[roi[0][0]:roi[0][1], roi[1][0]:roi[1][1]]
     deriv = laplace_of_gauss(gray, kwargs.get('ksize', 29), kwargs.get('sigma', 4.45))
     laser = predict_laser(deriv, 0, img.shape[0])
-    mid_idx = int(len(laser) / 2)
-    middle = laser[int(len(laser) / 2)] if len(laser) % 2 != 0 else .5 *(
-             laser[int(len(laser) / 2)] + laser[int(len(laser) / 2) - 1])
-    img[laser.astype(int)+roi[0][0], [i + roi[1][0] for i in range(laser.size)]] = (0,255,0)
-    cv2.circle(img, ( mid_idx+roi[1][0],int(middle)+roi[0][0]), 2, (0,0,255), -1)
+    middle, idx = mid_idx(laser)
+    middle = avg(laser[idx])
+    img[laser.astype(int) + roi[0][0], [i + roi[1][0] for i in range(laser.size)]] = (0, 255, 0)
+    cv2.circle(img, (idx + roi[1][0], int(middle) + roi[0][0]), 2, (0, 0, 255), -1)
     dp0 = (middle - img.shape[0] / 2 - 1) * pixel_size
     tan_gamma = dp0 / focal
     d2h_ratio = distance_camera2laser / camera_height
-    tan_alpha = (d2h_ratio - tan_gamma) / (d2h_ratio + tan_gamma)
+    tan_alpha = (d2h_ratio - tan_gamma) / (1 + d2h_ratio * tan_gamma)
     camera_angle = arctan(tan_alpha)
     return camera_angle, img
+
+
+def angle_from_video(video, **kwargs):
+    import cv2
+    cap = cv2.VideoCapture(video)
+    mean_angle = 0
+    count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            print('max_row of video')
+            break
+        angle, frame = find_camera_angle2(frame, **kwargs)
+        count += 1
+        mean_angle = (mean_angle * (count - 1) + angle) / count
+        print(np.rad2deg(mean_angle), np.rad2deg(angle))
+        cv2.imshow('frame', frame)
+        ch = cv2.waitKey(15)
+        if ch == 27:
+            print('closed by user')
+            break
+    cv2.destroyAllWindows()
 
 
 def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
@@ -312,3 +356,15 @@ def generate_ply(points_array, filename='cloud.ply'):
         for count, point in enumerate(ply, 1):
             cloud.write(point)
     print(f'{len(ply):{6}} points recorded')
+
+
+class OutOfScanArea(Exception):
+    def __init__(self, message='Out of scaning area', **kwargs):
+        pos = kwargs.get('pos')
+        bounds = kwargs.get('bounds')
+        msg = message
+        if pos is not None:
+            msg += f'. Real position {pos}'
+        if bounds is not None:
+            msg += f'. Allowed Range {bounds}'
+        self.message = msg
