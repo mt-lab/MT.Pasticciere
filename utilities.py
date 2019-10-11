@@ -358,6 +358,10 @@ def generate_ply(points_array, filename='cloud.ply'):
     print(f'{len(ply):{6}} points recorded')
 
 
+def nothing(*args, **kwargs):
+    pass
+
+
 class OutOfScanArea(Exception):
     def __init__(self, message='Out of scaning area', **kwargs):
         pos = kwargs.get('pos')
@@ -368,3 +372,86 @@ class OutOfScanArea(Exception):
         if bounds is not None:
             msg += f'. Allowed Range {bounds}'
         self.message = msg
+
+
+def height_from_stream(video):
+    import cv2
+    from scanner import laplace_of_gauss, predict_laser, predict_zero_level, find_coords
+    params = {'distance_camera2laser': (900, 1500),
+              'camera_angle': (300, 900),
+              'Ynull': (0, 480),
+              'Yend': (480, 480),
+              'Xnull': (0, 640),
+              'Xend': (640, 640),
+              }
+    setwin = 'settings'
+
+    cv2.namedWindow(setwin)
+    for key, (initial, max_val) in params.items():
+        cv2.createTrackbar(key, setwin, initial, max_val, nothing)
+
+    def get_params(par: dict, win=setwin):
+        par_vals = {}
+        for key in par.keys():
+            par_vals[key] = cv2.getTrackbarPos(key, win)
+        return par_vals
+
+    K = 29
+    SIGMA = 4.45
+    THRESH = 5
+
+    cap = cv2.VideoCapture(video)
+    while cap.isOpened():
+        ret, frame = cap.read()
+        values = get_params(params)
+        camera_angle = values.get('camera_angle', 300) / 10 * np.pi / 180
+        values['camera_angle'] = camera_angle
+        d = values.get('distance_camera2laser', 900) / 10
+        values['distance_camera2laser'] = d
+        row_start = values.pop('Ynull')
+        row_stop = values.pop('Yend')
+        col_start = values.pop('Xnull')
+        col_stop = values.pop('Xend')
+        if row_start >= row_stop and col_start >= col_stop:
+            roi = frame
+        else:
+            roi = frame[row_start:row_stop, col_start:col_stop]
+        if ret is False:
+            cap.release()
+            continue
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (K, K), 0)
+        _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # _, mask = cv2.threshold(blur, THRESH, 255, cv2.THRESH_BINARY)
+        der = laplace_of_gauss(gray, K, SIGMA)
+        der = cv2.bitwise_and(der, der, mask=mask)
+        laser = predict_laser(der, row_start, row_stop)
+        laser = np.pad(laser, (col_start, frame.shape[1] - col_stop), mode='constant')
+        zero_lvl, _ = predict_zero_level(laser, frame.shape[0] // 2)
+        # zero_lvl[(zero_lvl < row_start) | (zero_lvl > row_stop)] = row_stop
+        laser[laser < zero_lvl] = zero_lvl[laser < zero_lvl]
+        coords = find_coords(0, laser, zero_lvl, frame.shape,
+                             focal_length=2.9,
+                             pixel_size=0.005,
+                             table_height=100,
+                             camera_shift=113,
+                             **values)
+        height = coords[:, Z]
+        for column in range(col_start, col_stop):
+            row = laser[column]
+            frame[int(row), column] = (0, 255, 0)
+            frame[int(zero_lvl[column]), column] = (255, 0, 0)
+        frame[[row_start, row_stop - 1], col_start:col_stop] = (127, 127, 0)
+        frame[row_start:row_stop, [col_start, col_stop - 1]] = (127, 127, 0)
+        max_column = laser[col_start:col_stop].argmax() + col_start
+        max_row = int(laser[max_column])
+        cv2.circle(frame, (max_column, max_row), 3, (0, 0, 255), -1)
+        cv2.imshow('frame', frame)
+        cv2.imshow('mask', mask)
+        ch = cv2.waitKey(15)
+        print(coords[col_start:col_stop, Z].max())
+        if ch == 27:
+            cap.release()
+            continue
+    cap.release()
+    cv2.destroyAllWindows()
