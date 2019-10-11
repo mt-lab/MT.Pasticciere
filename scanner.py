@@ -82,7 +82,7 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
     tan_alphaPgamma = ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma))
     camera_height = distance_camera2laser / tan_alphaPgamma  # высота камеры
     for column in range(laser_points.size):
-        dpy0 = (zero_level[column] - frame_shape[0] / 2 - 1) * pixel_size
+        dpy0 = (zero_level[column] - (frame_shape[0] / 2 - 1)) * pixel_size
         dpy = (laser_points[column] - (frame_shape[0] / 2 - 1)) * pixel_size
         dpx = (column - (frame_shape[1] / 2) - 1) * pixel_size
         tan_gamma = dpy0 / focal_length
