@@ -343,9 +343,11 @@ def gcodesetdiag():
 
     def extrusionMultiplexSet():
         update_setting(path, 'GCoder', 'slice_step', extrusionMultiplexForm.get())
+        gcodesetwin.destroy()
 
     def sliceStepSet():
         update_setting(path, 'GCoder', 'slice_step', sliceStepForm.get())
+        gcodesetwin.destroy()
 
     def zoffsetSet():
         update_setting(path, "GCoder", "z_offset", zoffsetForm.get())
