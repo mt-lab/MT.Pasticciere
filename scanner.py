@@ -306,43 +306,18 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
     # применяем на изначальную картинку маску с задним фоном
     result = cv2.bitwise_and(original, original, mask=blankSpace)
-    result = cv2.bitwise_and(original, original, mask=sureBg)
-    # расчет центров и поворотов контуров сразу в мм
     cookies = []
-    mask = np.zeros(result.shape[:2], dtype='uint8')
-    cv2.drawContours(mask, contours, -1, 255, -1)
     for contour in contours:
-        tmp = contour.copy()  # скопировать контур, чтобы не изменять оригинал
-        tmp = np.float32(tmp)
-        # перевести из пикселей в мм
-        for point in tmp:
-            px = int(point[0][1])
-            py = int(point[0][0])
-            point[0][1] = height_map[px, py, X]
-            point[0][0] = height_map[px, py, Y]
-        moments = cv2.moments(tmp)
-        # найти центр контура и записать его в СК принтера
-        M = cv2.moments(contour)
-        Cx = int(M['m10'] / M['m00'])
-        Cy = int(M['m01'] / M['m00'])
-        cx = moments['m10'] / moments['m00']
-        cy = moments['m01'] / moments['m00']
-        center = height_map[Cy, Cx]
-        # найти угол поворота контура (главная ось)
-        a = moments['m20'] / moments['m00'] - cx ** 2
-        b = 2 * (moments['m11'] / moments['m00'] - cx * cy)
-        c = moments['m02'] / moments['m00'] - cy ** 2
-        theta = 1 / 2 * arctan(b / (a - c)) + (a < c) * pi / 2
-        # x1 = int(Cx + Cy / tan(theta))
-        # x2 = int(Cx - (result.shape[0] - Cy) * tan(pi / 2 - theta))
-        # cv2.line(result, (x1, 0), (x2, result.shape[0]), (0, 0, 255), 2)
-        cv2.circle(result, (Cx, Cy), 3, (0, 255, 0), -1)
-        # result = cv2.bitwise_and(result, result, mask=mask)
-        # угол поворота с учетом приведения в СК принтера
-        rotation = theta + pi / 2
-        maxHeight = get_max_height(contour, height_map)
-        cookies.append(Cookie(center=center[:2], centerHeight=center[Z], rotation=rotation, maxHeight=maxHeight))
-    cv2.drawContours(result, contours, -1, (255, 0, 0), 2)
+        mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
+        cv2.drawContours(mask, [contour], -1, 255, -1)
+        # height_map_mask = np.dstack((mask, mask.copy(), mask.copy()))
+        col, row, w, h = cv2.boundingRect(contour)
+        height_map_fragment = height_map.copy()
+        height_map_fragment[:, :, Z][mask == 0] = 0
+        height_map_fragment = height_map[row:row + h, col:col + w]
+        cookie = Cookie(height_map=height_map_fragment, contour=contour, bounding_box=(col, row, w, h))
+        cookies.append(cookie)
+        cv2.circle(result, cookie.pixel_center[::-1], 3, (0, 255, 0), -1)
     print('Положения печений найдены.')
     return cookies, result
 
@@ -687,7 +662,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     else:  # когда видео кончилось
         time_passed = time.time() - start
         print(f'Готово. Потрачено времени на анализ рельефа: {time_passed:3.2f} с\n')
-        height_map[height_map[:, :, Z] < 0] = 0  # везде где Z < 0 приравнять к нулю
+        height_map[:, :, Z][height_map[:, :, Z] < 0] = 0  # везде где Z < 0 приравнять к нулю
         return height_map
 
 
