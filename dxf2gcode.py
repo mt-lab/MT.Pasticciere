@@ -14,20 +14,48 @@ import globalValues
 from scanner import find_cookies
 from cookie import Cookie
 
-
 # TODO: написать логи
+DEFAULT_F0 = 2500  # mm/minute
+DEFAULT_F1 = 1000  # mm/minute
+DEFAULT_TABLE_HEIGHT = 30  # mm
 
 
 def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
                     height_map: np.ndarray = globalValues.height_map,
-                    extrusion_coefficient=0.041, extrusion_multiplex=1, p0=0.05, p1=0.05, p2=0.05, z_offset=0.2,
+                    extrusion_coefficient: float = 0.041,
+                    extrusion_multiplex: float = 1,
+                    p0: float = 0.05, p1: float = 0.05, p2: float = 0.05,
+                    z_offset: float = 0.2,
                     **kwargs):
+    """
+    Принимает обработанный рисунок, положения объектов и рельеф и генерирует из этого Gcode.
+    Сохраняет Gcode по завершению.
+
+    :param dwg: Рисунок для проекции на рельеф
+    :param cookies: положение объектов в области
+    :param height_map: карта высот области
+    :param extrusion_coefficient: коэффициент подачи глазури
+    :param extrusion_multiplex: множитель подачи для начала контуров
+    :param p0: относительная длина линии до которой экструзия повышена
+    :param p1: относительная длина линии до которой после p0 нет экструзии
+    :param p2: относительная длина линии до которой экструзия обычная
+    0 <= p0 <= p1 <= p2 <= 1
+    :param z_offset: постоянное смещение от поверхности объекта
+    :param kwargs: дополнительные параметры
+    :keyword table_height: рабочая максимальная высота
+    :keyword F0: скорость быстрых перемещений
+    :keyword F1: скорость медленных перемещений (при печати)
+    :return: None
+    """
     # TODO: дописать под работу для генерации тестового gcode (печать по плоскости на расстоянии от стола)
+    # TODO: дописать под генерацию НЕдинамической подачи
+    Z_max = kwargs.get('table_height', DEFAULT_TABLE_HEIGHT)
+    F0 = kwargs.get('F0', DEFAULT_F0)
+    F1 = kwargs.get('F1', DEFAULT_F1)
     E = 0
-    Z_max = kwargs.get('table_height', 30)
     gcode = Gcode()
     gcode += home()
-    gcode += move_Z(Z_max, kwargs.get('F0'))
+    gcode += move_Z(Z_max, F0)
     for count, cookie in enumerate(cookies, 1):
         Z_up = cookie.maxHeight + 5 if cookie.maxHeight + 5 <= Z_max else Z_max
         gcode += gcode_comment(f'{count:3d} cookie')
@@ -46,7 +74,7 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
                 gcode += gcode_comment(f'    {contour_index:3d} contour in layer')
                 gcode += linear_move(X=contour.first_point.x, Y=contour.first_point.y, Z=Z_up)
                 gcode += move_Z(contour.first_point.z + z_offset)
-                gcode += linear_move('G1', F=kwargs.get('F1'))
+                gcode += linear_move('G1', F=F1)
                 last_point = contour.first_point
                 for element_index, element in enumerate(contour.elements, 1):
                     gcode += gcode_comment(f'        {element_index:3d} element in contour')
@@ -65,7 +93,7 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
                             dE = extrusion_coefficient
                         else:
                             dE = 0
-                gcode += linear_move(F=kwargs.get('F0'))
+                gcode += linear_move(F=F0)
                 gcode += move_Z(Z_up)
     gcode += move_Z(Z_max)
     gcode += home()
@@ -109,7 +137,6 @@ def dxf2gcode(path_to_dxf=globalValues.DXF_PATH, *args, **kwargs):
     if globalValues.cookies is None:
         cookies, _ = find_cookies('height_map.png', globalValues.height_map)  # найти положения объектов на столе
         if len(cookies) != 0:
-            globalValues.cookies = cookies
             print_objects(cookies, f'Объектов найдено: {len(cookies):{3}}')
             print()
     else:

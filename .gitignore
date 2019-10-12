@@ -11,8 +11,10 @@
 *.jpg
 *.pyc
 *.pdf
+*.djvu
 /venv/*
 /.idea/*
+/docs/*
 settings.ini
 /__pycache__/*.pyc
 /venv3.7/
