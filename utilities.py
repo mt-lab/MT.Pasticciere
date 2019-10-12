@@ -123,7 +123,7 @@ def polygon_area(poly: List):
 def inside_polygon(p, *args: List[List[float]]):
     # TODO: use cv.polygonTest
     p = [round(coord, 2) for coord in p]
-    boundary_area = round(polygon_area(*args))
+    boundary_area = round(polygon_area(args))
     partial_area = 0
     for v1, v2 in pairwise(closed(args)):
         partial_area += round(triangle_area(p, v1, v2))
