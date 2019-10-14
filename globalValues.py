@@ -1,5 +1,5 @@
 from math import radians
-from numpy import loadtxt, float16
+from numpy import loadtxt, float32
 from os.path import isfile
 import configparser
 
@@ -30,7 +30,7 @@ def read_height_map(filename='height_map.txt'):
             shape = infile.readline()
             shape = shape[1:-2]
             shape = tuple(i for i in map(int, shape.split(', ')))
-            _height_map = loadtxt(filename, skiprows=1, dtype=float16)
+            _height_map = loadtxt(filename, skiprows=1, dtype=float32)
             _height_map = _height_map.reshape(shape)
             return _height_map
     return None
