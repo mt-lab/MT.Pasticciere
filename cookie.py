@@ -5,16 +5,24 @@ import cv2
 
 
 class Cookie:
-    def __init__(self, height_map=None, contour=None, bounding_box=None):
-        self.contour = contour  # контур из целой карты высот
-        self.height_map = height_map  # область печеньки на карте высот
+    def __init__(self, height_map, contour, bounding_box=None):
+        self._contour = contour  # контур из целой карты высот
+        self._height_map = height_map  # область печеньки на карте высот
         self._center = None  # центр печенья в мм (X, Y, Z)
         self._pixel_center = None  # центр печенья в пикселях на целой карте высот
         self._bounding_box = bounding_box  # центр, высота и ширина области печеньки на карте высот
-        self._width = None  # мм
-        self._length = None  # мм
-        self._max_height = None  # мм
-        self._rotation = None  # угол
+        self._width = None  # размер печеньки вдоль Y оси в мм
+        self._length = None  # размер печеньки вдоль X оси в мм
+        self._max_height = None  # максимальная высота в контуре ограничивающем печенье в мм
+        self._rotation = None  # ориентация печеньки в пространстве в радианах
+
+    @property
+    def height_map(self):
+        return self._height_map
+
+    @property
+    def contour(self):
+        return self._contour
 
     @property
     def center(self):
@@ -31,6 +39,22 @@ class Cookie:
         else:
             self.find_center_and_rotation()
             return self._rotation
+
+    @property
+    def width(self):
+        if self._width is not None:
+            return self._width
+        else:
+            self._width = self.height_map[0, 0, Y] - self.height_map[0, -1, Y]
+            return self._width
+
+    @property
+    def length(self):
+        if self._length is not None:
+            return self._length
+        else:
+            self._length = self.height_map[0, 0, X] - self.height_map[-1, 0, X]
+            return self._length
 
     @property
     def pixel_center(self):
