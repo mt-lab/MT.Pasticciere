@@ -158,6 +158,11 @@ def laplace_of_gauss(img: np.ndarray, ksize: int, sigma: float = .0, delta: floa
 
 
 def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
+    # TODO: написать варианты не использующие LoG:
+    #       1. применять квадратичную аппроксимацию сразу на изображение (отсутствие возможности цветного скана или в ярком освещении)
+    #       2. применять GGM (возможно ухудшение точности)
+    #       3. применять IGGM (возможно замедление работы алгоритма)
+    #       4. применять фильтр по фону на LoG и всё бышеперечисленное
     """
 
     :param deriv: laplace_of_gauss transformed img
@@ -264,7 +269,8 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
     else:
         raise TypeError(f'передан {type(img_or_path)}, ожидалось str или numpy.ndarray')
 
-    if height_map is None:
+    if height_map is None:  # если карта высот не дана попытаться восстановить её из картинки
+        # TODO: Убрать это или переделать как то. С текущей реализацией не работает.
         height_map = gray.copy() / 10
 
     # gray[gray < gray.mean()] = 0
@@ -292,14 +298,13 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
     markers[unknown == 255] = 0
     markers = cv2.watershed(original, markers)
     # выделяем контуры на изображении
-    original[markers == -1] = [255, 0, 0]
+    original[markers == -1] = [0, 0, 255]
     # количество печенек на столе (уникальные маркеры минус фон и контур всего изображения)
     numOfCookies = len(np.unique(markers)) - 2
     # вырезаем ненужный контур всей картинки
-    blankSpace = np.zeros(gray.shape, dtype='uint8')
-    blankSpace[markers == 1] = 255
-    blankSpace = cv2.bitwise_not(blankSpace)
-    blankSpaceCropped = blankSpace[1:blankSpace.shape[0] - 1, 1:blankSpace.shape[1] - 1]
+    blankSpace = np.full(gray.shape, 255, dtype='uint8')
+    blankSpace[markers == 1] = 0
+    blankSpaceCropped = np.pad(blankSpace[1:-1, 1:-1], 1, 'constant')
     # находим контуры на изображении
     contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours = imutils.grab_contours(contours)
@@ -581,16 +586,17 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     FRAME_SHAPE = (FRAME_HEIGHT, FRAME_WIDTH)
+    THRESH_VALUE = 5  # пороговое значение для создания маски с простым трешхолдом
+    STABILITY_TIME = FPS
+    LASER_ANGLE_TOLERANCE = tan(0.01 / 180 * pi)  # допуск стабильного отклонения угла лазера
+    LASER_POS_TOLERANCE = 1  # допуск стабильного отклонения позиции лазера
+    # если допуски отрицательные, то всегда расчитывать положение лазера
     ksize = 29  # размер окна для laplace_of_gauss
     sigma = 4.45  # сигма для laplace_of_gauss
-    THRESH_VALUE = 5
-    LASER_ANGLE_TOLERANCE = tan(1 / 180 * pi)  # допуск стабильного отклонения угла лазера
-    LASER_POS_TOLERANCE = 1  # допуск стабильного отклонения позиции лазера
     frame_idx = 0  # счетчик обработанных кадров
     stability_counter, laser_tangent, laser_row_pos = 0, 0, 0  # метрики стабильности нулевой линии лазера
     zero_level = None  # переменная для нулевой линии
-    height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, FRAME_WIDTH, 3),
-                          dtype='float16')  # карта высот
+    height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, FRAME_WIDTH, 3), dtype='float32')  # карта высот
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)  # читать видео с кадра initialFrameIdx
     start = time.time()
     if row_start >= row_stop and col_start >= col_stop:
@@ -621,7 +627,6 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             if stability_counter < FPS:  # если параметры не стабильны в течении 1 секунды (FPS видео)
                 # найти нулевую линию и её угол
                 zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
-                zero_level[(zero_level < row_start) | (zero_level > row_stop)] = row_stop
                 #  если параметры линии отклоняются в допустимых пределах
                 if abs(laser_tangent - tangent) < LASER_ANGLE_TOLERANCE and \
                         abs(laser_row_pos - zero_level[0]) < LASER_POS_TOLERANCE:
@@ -633,6 +638,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
                 # TODO: вставить предупреждение если лазер долго нестабилен
                 # расчитать нулевой уровень по расчитанным параметрам
                 zero_level = np.array([-x * laser_tangent + laser_row_pos for x in range(fine_laser_center.size)])
+                zero_level[(zero_level < row_start) | (zero_level > row_stop)] = row_stop
             # занулить точки где положение "лазера" ниже нулевой линии
             fine_laser_center[fine_laser_center < zero_level] = zero_level[fine_laser_center < zero_level]
             try:  # расчитать физические координаты точек лазера
@@ -663,6 +669,10 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
         time_passed = time.time() - start
         print(f'Готово. Потрачено времени на анализ рельефа: {time_passed:3.2f} с\n')
         height_map[:, :, Z][height_map[:, :, Z] < 0] = 0  # везде где Z < 0 приравнять к нулю
+        if kwargs.get('reverse', False):
+            height_map = np.flipud(height_map)
+        if kwargs.get('mirrored', False):
+            height_map = np.fliplr(height_map)
         return height_map
 
 
@@ -718,6 +728,9 @@ def scan(path_to_video: str = globalValues.VID_PATH, colored: bool = False, **kw
     # массив для нахождения позиций объектов
     height_map_z = np.dsplit(height_map, 3)[Z].reshape(height_map.shape[0], height_map.shape[1])
     height_map_8bit = (height_map_z * 10).astype(np.uint8)
+    np.clip(height_map_8bit, 0, 255)
+    # height_map_8bit = cv2.applyColorMap(cv2.normalize(height_map_8bit.astype(np.uint8), None, 0, 255, cv2.NORM_MINMAX), 1)
+    height_map_8bit[height_map_z < 1] = 0
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
     if len(cookies) != 0:
         globalValues.cookies = cookies
