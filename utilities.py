@@ -1,7 +1,8 @@
 from typing import List, Union, Tuple, Iterable, Sequence, Optional, Any, TypeVar
 from itertools import tee
-from functools import reduce
+from functools import reduce, wraps
 import numpy as np
+import cv2
 from numpy import arctan, sqrt, tan, arccos
 from ezdxf.math.vector import Vector
 
@@ -126,8 +127,8 @@ def inside_polygon(p, *args: List[List[float]]):
     boundary_area = round(polygon_area(args))
     partial_area = 0
     for v1, v2 in pairwise(closed(args)):
-        partial_area += round(triangle_area(p, v1, v2))
-    if boundary_area - partial_area > boundary_area * 0.01:
+        partial_area += triangle_area(p, v1, v2)
+    if boundary_area - round(partial_area) > boundary_area * 0.01:
         return False
     return True
 
@@ -168,10 +169,14 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     # take corresponding left or right points
     # check if point inside the triangle formed by founded 3 points
     # calculate height for a point
-    if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
-                          height_map[-1, 0, :2]):
+    ind = ((0, 0, -1, -1), (0, -1, -1, 0))
+    if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
         print(f'point {point} not in the area')
         return 0
+    # if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
+    #                       height_map[-1, 0, :2]):
+    #     print(f'point {point} not in the area')
+    #     return 0
     idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(),
                                  height_map.shape[:2])
     first = Vector(height_map[idx_first])
@@ -185,7 +190,6 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     side = line_side(point, first, second)
     if side == 0:
         height = first.lerp(second, point.distance(first) / first2second).z
-        # height = point.distance(first)/first2second * first.z + point.distance(second)/first2second * second.z
         return height
     else:
         idx_third = (idx_first[X] + int(side), idx_first[Y])
@@ -345,11 +349,6 @@ def angle_from_video(video: Union[str, int], **kwargs):
 
 
 def select_hsv_values(video):
-    import cv2
-
-    def nothing():
-        pass
-
     params = {'h1': 0, 'h2': 255, 's1': 0, 's2': 255, 'v1': 0, 'v2': 255}
     setwin = 'hsv_set'
     reswin = 'result'
@@ -426,7 +425,12 @@ def nothing(*args, **kwargs):
     pass
 
 
-class OutOfScanArea(Exception):
+class Error(Exception):
+    def __init__(self):
+        self.message = f'Unknown error'
+
+
+class OutOfScanArea(Error):
     def __init__(self, message='Out of scaning area', **kwargs):
         pos = kwargs.get('pos')
         bounds = kwargs.get('bounds')
@@ -436,6 +440,49 @@ class OutOfScanArea(Exception):
         if bounds is not None:
             msg += f'. Allowed Range {bounds}'
         self.message = msg
+
+
+def decor_stream2img(img_func):
+    """
+    Декоратор позволяющий использовать функции для кадров с видео
+
+    :param img_func: функция работающая только с кадрами
+    :return: генератор
+    """
+    import cv2
+    @wraps(img_func)
+    def wrapper(video, loops=False, *args, **kwargs):
+        """
+        Принимает на вход видео к которому покадрово нужно применить функцию
+
+        :param video: видео для обработки
+        :param loops: зациклить видео или нет (если video это поток с камеры то False в любом случае)
+        :param args: параметры для функции
+        :param kwargs: доп параметры и именные аргументы для функции
+        :keyword max_loops: максимальное число циклов по видео. default = 10. None - бесконечно
+        :return: поочерёдно результат img_func для каждого кадра
+        """
+        count_loops = 0
+        max_loops = kwargs.pop('max_loops', 10)
+        cap = cv2.VideoCapture(video)
+        if isinstance(video, int):
+            loops = False
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if ret is True:
+                res = img_func(frame, *args, **kwargs)
+                yield res
+            elif loops:
+                if max_loops is None or count_loops < max_loops:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    count_loops += 1
+                print('max loops reached')
+                cap.release()
+            else:
+                print('video ended or crashed')
+                cap.release()
+
+    return wrapper
 
 
 def height_from_stream(video):
@@ -519,3 +566,19 @@ def height_from_stream(video):
             continue
     cap.release()
     cv2.destroyAllWindows()
+
+
+def apprx_x(coords: np.ndarray, height_map: np.ndarray, d, y, h, w, tol):
+    # TODO: доделать и внедрить в find_coords или scanning желательно отдельной функцией
+    n = 0
+    checkpoint = 0
+    p_idx = np.abs(coords[:, Y] - y).argmin()
+    point = coords[p_idx]
+    if abs(point[Y] - y) < w / 2 and abs(point[Z] - h) < tol:
+        n += 1
+        if n == 1:
+            checkpoint = p_idx
+        else:
+            x = np.array([d * ((n - 2) + i / (p_idx - checkpoint)) for i in range(p_idx - checkpoint)])
+            height_map[checkpoint:p_idx, :, X] = x
+    return height_map
