@@ -736,9 +736,8 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
 
     # массив для нахождения позиций объектов
     height_map_z = np.dsplit(height_map, 3)[Z].reshape(height_map.shape[0], height_map.shape[1])
-    height_map_8bit = (height_map_z * 10).astype(np.uint8)
-    np.clip(height_map_8bit, 0, 255)
-    # height_map_8bit = cv2.applyColorMap(cv2.normalize(height_map_8bit.astype(np.uint8), None, 0, 255, cv2.NORM_MINMAX), 1)
+    height_map_8bit = (height_map_z / np.amax(height_map_z) * 255).astype(np.uint8)
+
     height_map_8bit[height_map_z < 1] = 0
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
     if len(cookies) != 0:
@@ -747,6 +746,7 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
         print()
 
     # сохранить карты
+    height_map_8bit = cv2.applyColorMap(height_map_8bit.astype(np.uint8), 1)
     cv2.imwrite('height_map.png', height_map_8bit)
     save_height_map(height_map)
     cv2.imwrite('cookies.png', detected_contours)
