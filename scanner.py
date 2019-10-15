@@ -587,8 +587,8 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     FRAME_SHAPE = (FRAME_HEIGHT, FRAME_WIDTH)
     THRESH_VALUE = 5  # пороговое значение для создания маски с простым трешхолдом
-    STABILITY_TIME = FPS
-    LASER_ANGLE_TOLERANCE = tan(0.01 / 180 * pi)  # допуск стабильного отклонения угла лазера
+    STABILITY_TIME = 2 * FPS
+    LASER_ANGLE_TOLERANCE = 0.1 * 640  # допуск стабильного отклонения угла лазера
     LASER_POS_TOLERANCE = 1  # допуск стабильного отклонения позиции лазера
     # если допуски отрицательные, то всегда расчитывать положение лазера
     ksize = 29  # размер окна для laplace_of_gauss
@@ -624,12 +624,13 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             fine_laser_center[
                 abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
             # расчёт угла и положения нулевой линии
-            if stability_counter < FPS:  # если параметры не стабильны в течении 1 секунды (FPS видео)
+            if stability_counter < STABILITY_TIME:  # если параметры не стабильны в течении 1 секунды (FPS видео)
                 # найти нулевую линию и её угол
                 zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
+                angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))  # abs(laser_tangent - tangent)
+                pos_error = abs(laser_row_pos - zero_level[0])
                 #  если параметры линии отклоняются в допустимых пределах
-                if abs(laser_tangent - tangent) < LASER_ANGLE_TOLERANCE and \
-                        abs(laser_row_pos - zero_level[0]) < LASER_POS_TOLERANCE:
+                if angle_error < LASER_ANGLE_TOLERANCE and pos_error < LASER_POS_TOLERANCE:
                     stability_counter += 1  # расчитать средние параметры линии по кадрам
                     laser_row_pos = (laser_row_pos * (stability_counter - 1) + zero_level[0]) / stability_counter
                     laser_tangent = (laser_tangent * (stability_counter - 1) + tangent) / stability_counter
