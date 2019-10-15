@@ -97,7 +97,3 @@ settings_sections = {
     'p2': ('GCoder', float),
     'slice_step': ('GCoder', float),
 }
-
-VID_PATH = get_setting(config_path, 'GCoder', 'videoforpointcloud')
-PCD_PATH = get_setting(config_path, 'GCoder', 'pointcloudpath')
-DXF_PATH = get_setting(config_path, 'GCoder', 'dxfpath')

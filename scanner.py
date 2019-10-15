@@ -676,7 +676,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
         return height_map
 
 
-def scan(path_to_video: str = globalValues.VID_PATH, colored: bool = False, **kwargs):
+def scan(path_to_video: str, colored: bool = False, **kwargs):
     """
     Функция обработки видео (сканирования)
     Находит начало области сканирования, и с этого момента обрабатывает видео поток, получает карту высот.
