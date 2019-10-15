@@ -157,6 +157,15 @@ def laplace_of_gauss(img: np.ndarray, ksize: int, sigma: float = .0, delta: floa
     return laplace
 
 
+def gray_gravity(img: np.ndarray, row_start=0, row_stop=480) -> np.ndarray:
+    ggm = img.copy() / np.amax(img)
+    centers = np.sum(ggm * (np.mgrid[:ggm.shape[0], :ggm.shape[1]][0] + 1), axis=0) / np.sum(ggm,
+                                                                                             axis=0) + row_start - 1
+    centers[centers > row_stop - 1] = row_stop - 1
+    centers[np.isinf(centers) | np.isnan(centers)] = 0
+    return centers
+
+
 def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
     # TODO: написать варианты не использующие LoG:
     #       1. применять квадратичную аппроксимацию сразу на изображение (отсутствие возможности цветного скана или в ярком освещении)
@@ -182,8 +191,7 @@ def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
         p2 = (1.0 * row, deriv[row, column])
         p3 = (1.0 * nextRow, deriv[nextRow, column])
         fine_laser_center[column] = find_laser_center(p1, p2, p3)[0] + min_row
-    if max_row is not None:
-        fine_laser_center[fine_laser_center > max_row - 1] = max_row
+    fine_laser_center[fine_laser_center > max_row - 1] = max_row
     return fine_laser_center
 
 
