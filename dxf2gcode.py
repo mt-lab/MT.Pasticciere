@@ -61,7 +61,7 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
         gcode += gcode_comment(f'{count:3d} cookie')
         dwg.center = cookie.center
         dwg.rotation = cookie.rotation
-        dwg.add_z(cookie.height_map)
+        dwg.add_z(height_map)
         for layer_index, layer in enumerate(sorted(dwg.layers.values(), key=lambda x: x.priority)):
             gcode += gcode_comment(f'{layer_index:3d} layer: {layer.name} in drawing')
             if layer.name == 'Contour':  # or layer.priority == 0:
@@ -119,7 +119,7 @@ def test_gcode(path_to_dxf, d_e=0.041, *args, **kwargs):
     gcode_generator(dwg, None, None, d_e, k, p_0, p_1, p_2, preGcode=preGcode, **kwargs)
 
 
-def dxf2gcode(path_to_dxf=globalValues.DXF_PATH, *args, **kwargs):
+def dxf2gcode(path_to_dxf: str, *args, **kwargs):
     """
     Функция обработки dxf в Gcode
 
@@ -141,4 +141,4 @@ def dxf2gcode(path_to_dxf=globalValues.DXF_PATH, *args, **kwargs):
             print()
     else:
         cookies = globalValues.cookies
-    gcode_generator(dwg, cookies, globalValues.height_map)
+    gcode_generator(dwg, cookies, globalValues.height_map, **settings_values)
