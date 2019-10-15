@@ -170,13 +170,13 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     # check if point inside the triangle formed by founded 3 points
     # calculate height for a point
     ind = ((0, 0, -1, -1), (0, -1, -1, 0))
-    if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
-        print(f'point {point} not in the area')
-        return 0
-    # if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
-    #                       height_map[-1, 0, :2]):
+    # if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
     #     print(f'point {point} not in the area')
     #     return 0
+    if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
+                          height_map[-1, 0, :2]):
+        print(f'point {point} not in the area')
+        return 0
     idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(),
                                  height_map.shape[:2])
     first = Vector(height_map[idx_first])
@@ -190,7 +190,8 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     side = line_side(point, first, second)
     if side == 0:
         height = first.lerp(second, point.distance(first) / first2second).z
-        return height
+        return first.z
+        # return height
     else:
         idx_third = (idx_first[X] + int(side), idx_first[Y])
     try:
@@ -198,7 +199,8 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     except IndexError:
         return first.z
     if inside_triangle(point, first, second, third):
-        height = height_by_trigon(point, first, second, third)
+        height = first.z
+        # height = height_by_trigon(point, first, second, third)
         return height
     return first.z
 
@@ -582,3 +584,38 @@ def apprx_x(coords: np.ndarray, height_map: np.ndarray, d, y, h, w, tol):
             x = np.array([d * ((n - 2) + i / (p_idx - checkpoint)) for i in range(p_idx - checkpoint)])
             height_map[checkpoint:p_idx, :, X] = x
     return height_map
+
+
+def polynom(deg: int = 0):
+    return lambda n: n ** deg
+
+
+def eval(x: float):
+    return lambda f: f(x)
+
+
+def mat_eval(val, arr):
+    return list(map(eval(val, arr)))
+
+
+def weight(rj):
+    if rj <= 1:
+        return 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4
+    else:
+        return 0
+
+
+def rj(Cj, Cp, Rs: float):
+    return np.sqrt((Cj[0] - Cp[0]) ** 2 + (Cj[1] - Cp[1]) ** 2) / Rs
+
+
+def fit(m, n, values):
+    if len(values) != n:
+        raise Error
+    pT = np.array([polynom(i) for i in range(m)])
+    P = np.array([list(map(eval(value), pT)) for value in values])
+    W = np.diag(list(map(weight, values)))
+    A = P.T @ W @ P
+    A_inv = np.linalg.inv(A)
+    B = P.T @ W
+    F = lambda val: mat_eval(val, pT) @ A_inv @ B
