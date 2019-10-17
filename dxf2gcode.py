@@ -56,13 +56,14 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
     E = 0
     gcode = Gcode()
     gcode += home()
+    gcode += 'G92 E0'
     gcode += move_Z(Z_max, F0)
     for count, cookie in enumerate(cookies, 1):
         Z_up = cookie.max_height + 5 if cookie.max_height + 5 <= Z_max else Z_max
         gcode += gcode_comment(f'{count:3d} cookie')
         dwg.center = cookie.center
         dwg.rotation = cookie.rotation
-        dwg.add_z(cookie.height_map if cookie.height_map else height_map, point_apprx=point_apprx,
+        dwg.add_z(cookie.height_map if cookie.height_map is not None else height_map, point_apprx=point_apprx,
                   height=kwargs.get('height', 0))
         for layer_index, layer in enumerate(sorted(dwg.layers.values(), key=lambda x: x.priority)):
             gcode += gcode_comment(f'{layer_index:3d} layer: {layer.name} in drawing')
