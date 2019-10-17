@@ -19,6 +19,7 @@ import numpy as np
 from numpy import sign
 from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, apprx_point_height, triangle_area
 from numpy import sqrt, cos, sin, pi, arctan
+import gcodeGen
 
 
 class Element():
@@ -154,16 +155,16 @@ class Element():
         self.sliced = True
         self._length = None
 
-    # def add_z(self, pcd_xy=None, pcd_z=None, pcd=None, constant_shift=None):
+    # def add_z(self, pcd_xy=None, pcd_z=None, pcd=None, height=None):
     #     """
     #     Добавить координату Z к элементу
     #     :param pcd_xy: часть облака точек с X и Y координатами
     #     :param pcd_z: часть облака точек с Z координатами
-    #     :param float constant_shift: для задания одной высоты всем точкам
+    #     :param float height: для задания одной высоты всем точкам
     #     :return: None
     #     """
-    #     if constant_shift is not None:
-    #         self.points = [v.replace(z=constant_shift) for v in self.points]
+    #     if height is not None:
+    #         self.points = [v.replace(z=height) for v in self.points]
     #         return None
     #     else:
     #         if pcd_z is None or pcd_xy is None:
@@ -175,10 +176,11 @@ class Element():
     #         self.with_z = True
     #     self._length = None
 
-    def add_z(self, height_map: Optional[np.ndarray] = None, constant_shift=0):
+    def add_z(self, height_map: Optional[np.ndarray] = None, point_apprx=False, **kwargs):
         if height_map is None:
             pass
-        self.points = [v.replace(z=apprx_point_height(v, height_map)) for v in self.points]
+        self.points = [v.replace(z=apprx_point_height(v, height_map, point_apprx=point_apprx, **kwargs)) for v in
+                       self.points]
         self.with_z = True
         self._length = None
 
@@ -815,11 +817,11 @@ class Drawing:
         self._length = None
         print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
-    def add_z(self, height_map: np.ndarray, constant_shift=0):
-        # def add_z(self, pcd_xy=None, pcd_z=None, constant_shift=None):
-        # if constant_shift is not None:
+    def add_z(self, height_map: np.ndarray, point_apprx=False, **kwargs):
+        # def add_z(self, pcd_xy=None, pcd_z=None, height=None):
+        # if height is not None:
         #     for element in self.elements:
-        #         element.add_z(constant_shift=constant_shift)
+        #         element.add_z(height=height)
         # elif pcd_xy is not None and pcd_z is not None:
         #     for element in self.elements:
         #         element.add_z(pcd_xy, pcd_z)
@@ -828,7 +830,7 @@ class Drawing:
         if height_map is None:
             pass
         for element in self.elements:
-            element.add_z(height_map, constant_shift)
+            element.add_z(height_map, point_apprx=point_apprx, **kwargs)
         self._length = None
 
     def organize_entities(self, entities: List[Element], start_point: Vector = NULLVEC):

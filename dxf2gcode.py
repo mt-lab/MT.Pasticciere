@@ -21,7 +21,7 @@ DEFAULT_TABLE_HEIGHT = 30  # mm
 
 
 def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
-                    height_map: np.ndarray = globalValues.height_map,
+                    height_map: Optional[np.ndarray] = None,
                     extrusion_coefficient: float = 0.041,
                     extrusion_multiplex: float = 1,
                     p0: float = 0.05, p1: float = 0.05, p2: float = 0.05,
@@ -52,6 +52,7 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
     Z_max = kwargs.get('table_height', DEFAULT_TABLE_HEIGHT)
     F0 = kwargs.get('F0', DEFAULT_F0)
     F1 = kwargs.get('F1', DEFAULT_F1)
+    point_apprx = kwargs.get('point_apprx', None)
     E = 0
     gcode = Gcode()
     gcode += home()
@@ -61,7 +62,8 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
         gcode += gcode_comment(f'{count:3d} cookie')
         dwg.center = cookie.center
         dwg.rotation = cookie.rotation
-        dwg.add_z(height_map)
+        dwg.add_z(cookie.height_map if cookie.height_map else height_map, point_apprx=point_apprx,
+                  height=kwargs.get('height', 0))
         for layer_index, layer in enumerate(sorted(dwg.layers.values(), key=lambda x: x.priority)):
             gcode += gcode_comment(f'{layer_index:3d} layer: {layer.name} in drawing')
             if layer.name == 'Contour':  # or layer.priority == 0:
@@ -128,11 +130,12 @@ def dxf2gcode(path_to_dxf: str, *args, **kwargs):
     """
 
     settings_values = globalValues.get_settings_values(**globalValues.settings_sections)
+    kwargs.update(settings_values)
 
     # прочесть dxf
     dxf = ez.readfile(path_to_dxf)
     dwg = Drawing(dxf)
-    dwg.slice(settings_values.get('slice_step'))
+    dwg.slice(kwargs.get('slice_step'))
     print(dwg)
     if globalValues.cookies is None:
         cookies, _ = find_cookies('height_map.png', globalValues.height_map)  # найти положения объектов на столе
@@ -141,4 +144,4 @@ def dxf2gcode(path_to_dxf: str, *args, **kwargs):
             print()
     else:
         cookies = globalValues.cookies
-    gcode_generator(dwg, cookies, globalValues.height_map, **settings_values)
+    gcode_generator(dwg, cookies, height_map, **kwargs)
