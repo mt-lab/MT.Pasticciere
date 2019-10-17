@@ -111,23 +111,31 @@ class Gcode:
             yield command
 
     def __add__(self, other: Union[List[str], str]):
-        """adds commands at the end of the instructions"""
+        """adds commands at the end of the self instructions"""
         if isinstance(other, str):
-            self.instructions = self.instructions + [other]
+            instructions = self.instructions + [other]
         elif isinstance(other, List):
             if all(isinstance(item, str) for item in other):
-                self.instructions = self.instructions + other
+                instructions = self.instructions + other
             else:
                 raise TypeError('list should contain only strings')
-        return self
+        elif isinstance(other, Gcode):
+            instructions = self.instructions + other.instructions
+        else:
+            raise TypeError(f'cannot add {type(other)} to Gcode')
+        return Gcode(instructions)
 
     def __radd__(self, other):
-        """adds commands at the beginning of the instructions"""
+        """adds commands at the beginning of the self instructions"""
         if isinstance(other, str):
-            self.instructions = [other] + self.instructions
+            instructions = [other] + self.instructions
         elif isinstance(other, List):
             if all(isinstance(item, str) for item in other):
-                self.instructions = other + self.instructions
+                instructions = other + self.instructions
             else:
                 raise TypeError('list should contain only strings')
-        return self
+        elif isinstance(other, Gcode):
+            instructions = other.instructions + self.instructions
+        else:
+            raise TypeError(f'cannot add {type(other)} to Gcode')
+        return Gcode(instructions)
