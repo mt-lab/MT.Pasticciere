@@ -15,6 +15,15 @@ X, Y, Z = 0, 1, 2
 T = TypeVar('T')
 
 
+def show_height_map(height_map: np.ndarray):
+    import pptk
+    height_map = height_map.reshape(height_map.size // 3, 3)
+    height_map = height_map[height_map[:, Z].argsort()]
+    v = pptk.viewer(height_map)
+    v.attributes(height_map[:, Z])
+    return v
+
+
 def mid_idx(arr: Sequence[T], shift: Optional[int] = 0) -> Union[T, int]:
     mid = int(len(arr) / 2) + shift
     if len(arr) % 2 == 0:
@@ -35,7 +44,7 @@ def print_objects(objects: Any, pre_msg: Optional[str] = None, object_msg: Optio
     if pre_msg is not None:
         print(pre_msg)
     print(sep * 30)
-    for count, obj in enumerate(objects):
+    for count, obj in enumerate(objects, 1):
         print(f'{object_msg}', f'№{count:3d}')
         print(sep * 30)
         print(obj)
@@ -598,7 +607,7 @@ def eval(x: float):
 
 
 def mat_eval(val, arr):
-    return list(map(eval(val, arr)))
+    return list(map(eval(val), arr))
 
 
 def weight(rj):
