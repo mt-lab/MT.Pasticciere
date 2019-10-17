@@ -252,7 +252,7 @@ def get_max_height(contour, height_map: 'np.ndarray' = globalValues.height_map):
     return maxHeight
 
 
-def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map):
+def find_cookies(img_or_path, height_map: 'np.ndarray'):
     """
     Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
     :param img (np arr, str): карта высот
@@ -276,12 +276,6 @@ def find_cookies(img_or_path, height_map: 'np.ndarray' = globalValues.height_map
             gray = img_or_path.copy()
     else:
         raise TypeError(f'передан {type(img_or_path)}, ожидалось str или numpy.ndarray')
-
-    if height_map is None:  # если карта высот не дана попытаться восстановить её из картинки
-        # TODO: Убрать это или переделать как то. С текущей реализацией не работает.
-        height_map = gray.copy() / 10
-
-    # gray[gray < gray.mean()] = 0
 
     # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -563,7 +557,8 @@ def skeletonize(img):
     return skel
 
 
-def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = False, **kwargs) -> np.ndarray:
+def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = False, debug=False,
+             **kwargs) -> np.ndarray:
     """
 
     :param cv2.VideoCapture cap: видеопоток для обработки
@@ -661,16 +656,16 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
                 f'  X: {height_map[frame_idx][0, X]:4.2f} мм; Zmax: {height_map[frame_idx][:, Z].max():4.2f} мм')
             frame_idx += 1
             ##########################################################################
-            # """ for debug purposes """
-            # for column, row in enumerate(fine_laser_center):
-            #     frame[int(row), column] = (0, 255, 0)
-            #     frame[int(zero_level[column]), column] = (255, 0, 0)
-            # max_column = fine_laser_center.argmax()
-            # max_row = int(fine_laser_center[max_column])
-            # cv2.circle(frame, (max_column, max_row), 3, (0, 0, 255), -1)
-            # cv2.imshow('frame', frame)
-            # cv2.imshow('mask', mask)
-            # cv2.waitKey(15)
+            if debug:  # for debug purposes
+                for column, row in enumerate(fine_laser_center):
+                    frame[int(row), column] = (0, 255, 0)
+                    frame[int(zero_level[column]), column] = (255, 0, 0)
+                max_column = fine_laser_center.argmax()
+                max_row = int(fine_laser_center[max_column])
+                cv2.circle(frame, (max_column, max_row), 3, (0, 0, 255), -1)
+                cv2.imshow('frame', frame)
+                cv2.imshow('mask', mask)
+                cv2.waitKey(15)
             ##########################################################################
         else:  # кадры кончились или побиты(?)
             cap.release()  # закрыть видео
@@ -703,6 +698,7 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
                     если видео чб то поиск по пропаже/появлению линии и thresh - минимально количество точек на линии
     :keyword mirrored: ориентация сканирования. 0 слева - False, 0 справа - True
     :keyword reverse: направление сканирования. от нуля - False, к нулю - True
+    :keyword debug: флаг отладки для функций
     :return: None
     """
 
@@ -746,7 +742,6 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
         print()
 
     # сохранить карты
-    height_map_8bit = cv2.applyColorMap(height_map_8bit.astype(np.uint8), 1)
     cv2.imwrite('height_map.png', height_map_8bit)
     save_height_map(height_map)
     cv2.imwrite('cookies.png', detected_contours)
