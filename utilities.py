@@ -3,6 +3,7 @@ from itertools import tee
 from functools import reduce, wraps
 import numpy as np
 import cv2
+import open3d
 from numpy import arctan, sqrt, tan, arccos
 from ezdxf.math.vector import Vector
 
@@ -16,12 +17,60 @@ T = TypeVar('T')
 
 
 def show_height_map(height_map: np.ndarray):
-    import pptk
-    height_map = height_map.reshape(height_map.size // 3, 3)
-    height_map = height_map[height_map[:, Z].argsort()]
-    v = pptk.viewer(height_map)
-    v.attributes(height_map[:, Z])
-    return v
+    pcd = get_pcd_of_height_map(height_map)
+    open3d.draw_geometries_with_editing([pcd])
+
+
+def get_pcd_of_height_map(height_map: np.ndarray):
+    pcd = open3d.geometry.PointCloud()
+    pcd.points = open3d.Vector3dVector(height_map.copy().reshape(height_map.size // 3, 3))
+    return pcd
+
+
+def get_colored_point_in_pcd(height_map: np.ndarray, idx, fg_color=(1, 0, 0), bg_color=(1, 0.706, 0)):
+    """
+
+    :param height_map:
+    :param idx: flat_idx
+    :param fg_color:
+    :param bg_color:
+    :return:
+    """
+    pcd = get_pcd_of_height_map(height_map)
+    if idx:
+        colors = np.full(np.asarray(pcd.points).shape[0])
+        for i in idx:
+            colors[i] = fg_color
+        pcd.colors = open3d.Vector3dVector(colors)
+    else:
+        pcd.paint_uniform_color(fg_color)
+    return pcd
+
+
+def get_max_height_coords(height_map: np.ndarray):
+    return height_map[height_map[..., Z].argmax()]
+
+
+def get_max_height_idx(height_map: np.ndarray):
+    return np.unravel_index(height_map[..., Z].argmax(), height_map.shape[:2])
+
+
+def get_nearest(point, height_map: np.ndarray, planar=True):
+    if len(point) < 2 or len(point) > 3:
+        raise TypeError('only 2D or 3D points')
+    if planar:
+        return np.unravel_index(np.sum(np.abs(height_map[..., :2] - point[:2]), axis=2).argmin(), height_map.shape[:2])
+    else:
+        return np.unravel_index(np.sum(np.abs(height_map[..., :] - point), axis=2).argmin(), height_map.shape[:2])
+
+
+def get_furthest(point, height_map: np.ndarray, planar=True):
+    if len(point) < 2 or len(point) > 3:
+        raise TypeError('only 2D or 3D points')
+    if planar:
+        return np.unravel_index(np.sum(np.abs(height_map[..., :2] - point[:2]), axis=2).argmax(), height_map.shape[:2])
+    else:
+        return np.unravel_index(np.sum(np.abs(height_map[..., :] - point), axis=2).argmax(), height_map.shape[:2])
 
 
 def mid_idx(arr: Sequence[T], shift: Optional[int] = 0) -> Union[T, int]:
@@ -130,12 +179,12 @@ def polygon_area(poly: List):
     return abs(total_area)
 
 
-def inside_polygon(p, *args: List[List[float]]):
+def inside_polygon(p, poly: List[List[float]]):
     # TODO: use cv.polygonTest
     p = [round(coord, 2) for coord in p]
-    boundary_area = round(polygon_area(args))
+    boundary_area = round(polygon_area(poly))
     partial_area = 0
-    for v1, v2 in pairwise(closed(args)):
+    for v1, v2 in pairwise(closed(poly)):
         partial_area += triangle_area(p, v1, v2)
     if boundary_area - round(partial_area) > boundary_area * 0.01:
         return False
@@ -182,12 +231,10 @@ def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False,
     # if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
     #     print(f'point {point} not in the area')
     #     return 0
-    if not inside_polygon(point, height_map[0, 0, :2], height_map[0, -1, :2], height_map[-1, -1, :2],
-                          height_map[-1, 0, :2]):
+    if not inside_polygon(point, height_map[ind][:, :2]):
         print(f'point {point} not in the area')
         return 0
-    idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(),
-                                 height_map.shape[:2])
+    idx_first = get_nearest(point, height_map, True)
     first = Vector(height_map[idx_first])
     if point_apprx == 'nearest':
         return first.z
