@@ -11,6 +11,7 @@ class Cookie:
         self._center = None  # центр печенья в мм (X, Y, Z)
         self._pixel_center = None  # центр печенья в пикселях на целой карте высот
         self._bounding_box = bounding_box  # центр, высота и ширина области печеньки на карте высот
+        self._min_bounding_box = None
         self._width = None  # размер печеньки вдоль Y оси в мм
         self._length = None  # размер печеньки вдоль X оси в мм
         self._max_height = None  # максимальная высота в контуре ограничивающем печенье в мм
@@ -45,7 +46,7 @@ class Cookie:
         if self._width is not None:
             return self._width
         else:
-            self._width = self.height_map[0, 0, Y] - self.height_map[0, -1, Y]
+            self._width = self.min_bounding_box[1][1]
             return self._width
 
     @property
@@ -53,7 +54,7 @@ class Cookie:
         if self._length is not None:
             return self._length
         else:
-            self._length = self.height_map[0, 0, X] - self.height_map[-1, 0, X]
+            self._length = self.min_bounding_box[1][0]
             return self._length
 
     @property
@@ -74,6 +75,14 @@ class Cookie:
         else:
             self._bounding_box = cv2.boundingRect(self.contour)
             return self._bounding_box
+
+    @property
+    def min_bounding_box(self):
+        if self._min_bounding_box is not None:
+            return self._min_bounding_box
+        else:
+            self._min_bounding_box = cv2.minAreaRect(self.contour)
+            return self._min_bounding_box
 
     @property
     def max_height(self):
