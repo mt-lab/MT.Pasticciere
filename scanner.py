@@ -317,7 +317,6 @@ def find_cookies(img_or_path, height_map: 'np.ndarray'):
     for contour in contours:
         mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
         cv2.drawContours(mask, [contour], -1, 255, -1)
-        # height_map_mask = np.dstack((mask, mask.copy(), mask.copy()))
         col, row, w, h = cv2.boundingRect(contour)
         height_map_fragment = height_map.copy()
         height_map_fragment[:, :, Z][mask == 0] = 0
@@ -627,7 +626,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             fine_laser_center[
                 abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
             # расчёт угла и положения нулевой линии
-            if stability_counter < STABILITY_TIME:  # если параметры не стабильны в течении 1 секунды (FPS видео)
+            if stability_counter < STABILITY_TIME:  # если параметры не были стабильны в течении заданного времени
                 # найти нулевую линию и её угол
                 zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
                 angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))  # abs(laser_tangent - tangent)

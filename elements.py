@@ -155,26 +155,6 @@ class Element():
         self.sliced = True
         self._length = None
 
-    # def add_z(self, pcd_xy=None, pcd_z=None, pcd=None, height=None):
-    #     """
-    #     Добавить координату Z к элементу
-    #     :param pcd_xy: часть облака точек с X и Y координатами
-    #     :param pcd_z: часть облака точек с Z координатами
-    #     :param float height: для задания одной высоты всем точкам
-    #     :return: None
-    #     """
-    #     if height is not None:
-    #         self.points = [v.replace(z=height) for v in self.points]
-    #         return None
-    #     else:
-    #         if pcd_z is None or pcd_xy is None:
-    #             if pcd is None:
-    #                 raise Exception('Point cloud is needed.')
-    #             else:
-    #                 pcd_xy, pcd_z = np.split(pcd, [Z], axis=1)
-    #         self.points = [v.replace(z=findPointInCloud(v.xyz, pcd_xy, pcd_z)) for v in self.points]
-    #         self.with_z = True
-    #     self._length = None
 
     def add_z(self, height_map: Optional[np.ndarray] = None, point_apprx=False, **kwargs):
         if height_map is None:
@@ -818,15 +798,6 @@ class Drawing:
         print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
     def add_z(self, height_map: np.ndarray, point_apprx=False, **kwargs):
-        # def add_z(self, pcd_xy=None, pcd_z=None, height=None):
-        # if height is not None:
-        #     for element in self.elements:
-        #         element.add_z(height=height)
-        # elif pcd_xy is not None and pcd_z is not None:
-        #     for element in self.elements:
-        #         element.add_z(pcd_xy, pcd_z)
-        # else:
-        #     raise Exception('No height data.')
         if height_map is None:
             pass
         for element in self.elements:

@@ -84,19 +84,9 @@ class Cookie:
             return self._max_height
 
     def find_center_and_rotation(self):
-        # SECOND METHOD
-        # Использовать cv2.fitEllipse() на tmp
-        # МОГУТ БЫТЬ КОСЯКИ, ПРОВЕРИТЬ
-        # ellipse = cv2.fitEllipse(tmp)
-        # center2 = ellipse[0][::-1]  # свап координат из-за opencv
-        # theta = np.deg2rad(ellipse[2])
-        # rotation2 = pi - theta  # перевод в СК принтера
-        # THIRD METHOD
-        # Найти центр по пикселям. Поворот в данном случае искажен и не находится.
         center_row, center_col = self.pixel_center
         col, row, w, h = self.bounding_box  # кординаты описывающего прямоугольника
         center_z = self.height_map[center_row - row, center_col - col, Z]
-        # FIRST METHOD
         # Найти центр и поворот контура по точкам в мм
         tmp = np.asarray([(self.height_map[point[0][1] - row, point[0][0] - col, Y],
                            self.height_map[point[0][1] - row, point[0][0] - col, X]) for point in self.contour],
