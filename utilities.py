@@ -162,7 +162,7 @@ def height_by_trigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
     return height
 
 
-def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
+def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False, **kwargs) -> float:
     # find closest point in height_map(ndarray)
     # determine if given point above or below closest, take corresponding upper/lower point in map
     # determine side on which given point is relative to 2 points from map
@@ -180,29 +180,32 @@ def apprx_point_height(point: Vector, height_map: np.ndarray) -> float:
     idx_first = np.unravel_index(np.sum(np.abs(height_map[:, :, :2] - point[:2]), axis=2).argmin(),
                                  height_map.shape[:2])
     first = Vector(height_map[idx_first])
-    above = point[Y] > first[Y]
-    idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
-    try:
-        second = Vector(height_map[idx_second])
-    except IndexError:
+    if point_apprx == 'nearest':
         return first.z
-    first2second = first.distance(second)
-    side = line_side(point, first, second)
-    if side == 0:
-        height = first.lerp(second, point.distance(first) / first2second).z
+    elif point_apprx == 'constant':
+        return kwargs.get('height', 0)
+    elif point_apprx is None or 'triangle':
+        above = point[Y] > first[Y]
+        idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
+        try:
+            second = Vector(height_map[idx_second])
+        except IndexError:
+            return first.z
+        first2second = first.distance(second)
+        side = line_side(point, first, second)
+        if side == 0:
+            height = first.lerp(second, point.distance(first) / first2second).z
+            return height
+        else:
+            idx_third = (idx_first[X] + int(side), idx_first[Y])
+        try:
+            third = height_map[idx_third]
+        except IndexError:
+            return first.z
+        if inside_triangle(point, first, second, third):
+            height = height_by_trigon(point, first, second, third)
+            return height
         return first.z
-        # return height
-    else:
-        idx_third = (idx_first[X] + int(side), idx_first[Y])
-    try:
-        third = height_map[idx_third]
-    except IndexError:
-        return first.z
-    if inside_triangle(point, first, second, third):
-        height = first.z
-        # height = height_by_trigon(point, first, second, third)
-        return height
-    return first.z
 
 
 def read_point_cloud(path):
