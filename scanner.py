@@ -504,7 +504,7 @@ def detect_start3(cap, threshhold=50):
         thresh[laser.astype(int), np.array([i for i in range(laser.size)])] = 255
         thresh = cv2.GaussianBlur(thresh, (5, 5), 0)
         # TODO: проверку стабильности пропажи и появления лазера
-        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.8, 10)
+        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.6, 10)
         if lines is not None:
             for count, line in enumerate(lines):
                 for x1, y1, x2, y2 in line:
@@ -567,6 +567,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     Параметры для сканирования:
         :keyword mirrored: ориентация сканирования. 0 слева - False, 0 справа - True
         :keyword reverse: направление сканирования. от нуля - False, к нулю - True
+        :keyword interpolation: инерполировать ли изображение на большее разрешение
     Параметры из конфига:
         :keyword hsv_upper_bound: верхняя граница hsv фильтра для цветного скана
         :keyword hsv_lower_bound: нижняя граница hsv фильтра для цветного скана
@@ -590,9 +591,12 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     FRAME_SHAPE = (FRAME_HEIGHT, FRAME_WIDTH)
     THRESH_VALUE = 5  # пороговое значение для создания маски с простым трешхолдом
     STABILITY_TIME = 2 * FPS
-    LASER_ANGLE_TOLERANCE = 0.1 * 640  # допуск стабильного отклонения угла лазера
-    LASER_POS_TOLERANCE = 1  # допуск стабильного отклонения позиции лазера
+    LASER_ANGLE_TOLERANCE = -1.1 * 640  # допуск стабильного отклонения угла лазера
+    LASER_POS_TOLERANCE = -1  # допуск стабильного отклонения позиции лазера
     # если допуски отрицательные, то всегда расчитывать положение лазера
+    INTERPOLATION = kwargs.get('interpolation', False)
+    INTER_X = 1
+    INTER_Y = 2
     ksize = 29  # размер окна для laplace_of_gauss
     sigma = 4.45  # сигма для laplace_of_gauss
     frame_idx = 0  # счетчик обработанных кадров
@@ -601,47 +605,56 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, FRAME_WIDTH, 3), dtype='float32')  # карта высот
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)  # читать видео с кадра initialFrameIdx
     start = time.time()
-    if row_start >= row_stop and col_start >= col_stop:
-        raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
+    # if row_start >= row_stop and col_start >= col_stop:
+    #     raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
     while cap.isOpened():  # пока видео открыто
         ret, frame = cap.read()
         if ret is True:  # пока кадры есть - сканировать
+            # TODO: проверить с resize и интерполяцией
             roi = frame[row_start:row_stop, col_start:col_stop]  # обрезать кадр по зоне интереса
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             if colored:  # сделать маску для выделения зоны лазера в кадре
                 blur = cv2.GaussianBlur(roi, (ksize, ksize), 0)
                 mask = get_hsv_mask(blur, **kwargs)
             else:
-                blur = cv2.GaussianBlur(gray, (ksize, ksize), 0)
-                _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
-            derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
-            derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
-            derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
-            fine_laser_center = predict_laser(derivative, row_start, row_stop)  # расчитать субпиксельные позиции лазера
+                blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
+                _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                # _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
+            # derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
+            # derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
+            # derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
+            # fine_laser_center = predict_laser(derivative, row_start, row_stop)  # расчитать субпиксельные позиции лазера
+            blur = cv2.bitwise_and(blur, blur, mask=mask)
+            # fine_laser_center = gray_gravity(blur, row_start, row_stop)
+            fine_laser_center = predict_laser(blur, row_start, row_stop)
+            if INTERPOLATION:
+                fine_laser_center = fine_laser_center / INTER_Y
+                fine_laser_center[fine_laser_center > frame.shape[0] - 1] = 0
             # привести к ширине кадра для простоты
-            fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), mode='constant')
+            # fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), mode='constant')
             # если по производной положений лазера есть всплески отклонение которых от среднего больше чем пять
             # среднеквадратичных, то считать эту точку невалидной и занулить её
             fine_laser_center_deriv = cv2.Sobel(fine_laser_center, -1, 0, 1, None, 1).flatten()
             fine_laser_center[
                 abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
             # расчёт угла и положения нулевой линии
-            if stability_counter < STABILITY_TIME:  # если параметры не были стабильны в течении заданного времени
-                # найти нулевую линию и её угол
-                zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
-                angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))  # abs(laser_tangent - tangent)
-                pos_error = abs(laser_row_pos - zero_level[0])
-                #  если параметры линии отклоняются в допустимых пределах
-                if angle_error < LASER_ANGLE_TOLERANCE and pos_error < LASER_POS_TOLERANCE:
-                    stability_counter += 1  # расчитать средние параметры линии по кадрам
-                    laser_row_pos = (laser_row_pos * (stability_counter - 1) + zero_level[0]) / stability_counter
-                    laser_tangent = (laser_tangent * (stability_counter - 1) + tangent) / stability_counter
-                else:  # иначе принять найденные параметры за новые и обнулить счётчик
-                    laser_row_pos, laser_tangent, stability_counter = zero_level[0], tangent, 0
-                # TODO: вставить предупреждение если лазер долго нестабилен
-                # расчитать нулевой уровень по расчитанным параметрам
-                zero_level = np.array([-x * laser_tangent + laser_row_pos for x in range(fine_laser_center.size)])
-                zero_level[(zero_level < row_start) | (zero_level > row_stop)] = row_stop
+            zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1)
+            # if stability_counter < STABILITY_TIME:  # если параметры не были стабильны в течении заданного времени
+            #     # найти нулевую линию и её угол
+            #     zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
+            #     angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))  # abs(laser_tangent - tangent)
+            #     pos_error = abs(laser_row_pos - zero_level[0])
+            #     #  если параметры линии отклоняются в допустимых пределах
+            #     if angle_error < LASER_ANGLE_TOLERANCE and pos_error < LASER_POS_TOLERANCE:
+            #         stability_counter += 1  # расчитать средние параметры линии по кадрам
+            #         laser_row_pos = (laser_row_pos * (stability_counter - 1) + zero_level[0]) / stability_counter
+            #         laser_tangent = (laser_tangent * (stability_counter - 1) + tangent) / stability_counter
+            #     else:  # иначе принять найденные параметры за новые и обнулить счётчик
+            #         laser_row_pos, laser_tangent, stability_counter = zero_level[0], tangent, 0
+            #     # TODO: вставить предупреждение если лазер долго нестабилен
+            #     # расчитать нулевой уровень по расчитанным параметрам
+            #     zero_level = np.array([-x * laser_tangent + zero_level[0] for x in range(fine_laser_center.size)])
+            #     zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
             # занулить точки где положение "лазера" ниже нулевой линии
             fine_laser_center[fine_laser_center < zero_level] = zero_level[fine_laser_center < zero_level]
             try:  # расчитать физические координаты точек лазера
@@ -656,14 +669,15 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             frame_idx += 1
             ##########################################################################
             if debug:  # for debug purposes
-                for column, row in enumerate(fine_laser_center):
+                for column, row in enumerate(fine_laser_center, col_start):
                     frame[int(row), column] = (0, 255, 0)
                     frame[int(zero_level[column]), column] = (255, 0, 0)
                 max_column = fine_laser_center.argmax()
                 max_row = int(fine_laser_center[max_column])
-                cv2.circle(frame, (max_column, max_row), 3, (0, 0, 255), -1)
+                cv2.circle(frame, (max_column + col_start, max_row), 3, (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
+                cv2.imshow('height map', height_map.copy()[..., Z] / np.amax(height_map[..., Z]))
                 cv2.waitKey(15)
             ##########################################################################
         else:  # кадры кончились или побиты(?)
