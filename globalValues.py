@@ -27,6 +27,7 @@ def get_settings_values(path=config_path, **kwargs):
 def read_height_map(filename='height_map.txt'):
     if isfile(filename):
         with open(filename, 'r') as infile:
+            print('Читаю карту высот')
             shape = infile.readline()
             shape = shape[1:-2]
             shape = tuple(i for i in map(int, shape.split(', ')))
@@ -68,7 +69,7 @@ def get_setting(path, section, setting) -> str:
     return value
 
 
-height_map = read_height_map()
+height_map = None
 cookies = None
 
 settings_sections = {

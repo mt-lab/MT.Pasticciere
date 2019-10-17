@@ -137,8 +137,12 @@ def dxf2gcode(path_to_dxf: str, *args, **kwargs):
     dwg = Drawing(dxf)
     dwg.slice(kwargs.get('slice_step'))
     print(dwg)
+    if globalValues.height_map is None:
+        height_map = globalValues.read_height_map()
+    else:
+        height_map = globalValues.height_map
     if globalValues.cookies is None:
-        cookies, _ = find_cookies('height_map.png', globalValues.height_map)  # найти положения объектов на столе
+        cookies, _ = find_cookies('height_map.png', height_map)  # найти положения объектов на столе
         if len(cookies) != 0:
             print_objects(cookies, f'Объектов найдено: {len(cookies):{3}}')
             print()
