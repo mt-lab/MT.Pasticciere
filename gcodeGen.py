@@ -42,6 +42,13 @@ def linear_move(code: str = 'G0', **kwargs) -> str:
     return abstract_gcode_command(**params)
 
 
+def set_position(*args, **kwargs) -> str:
+    code = 'G92'
+    g92_params = {'X': None, 'Y': None, 'Z': None, 'E': None}
+    g92_params = {k: kwargs[k] for k in g92_params if k in kwargs}
+    return abstract_gcode_command(code=code, **g92_params)
+
+
 def home(*args, **kwargs) -> str:
     """
     Homing command for the printer.
@@ -57,6 +64,7 @@ def home(*args, **kwargs) -> str:
     code = 'G28'
     g28_params = {'O': None, 'R': None, 'X': None, 'Y': None, 'Z': None}
     if args:
+        # ЧИВО?
         for item in args:
             if item in g28_params:
                 g28_params[item] = ''
