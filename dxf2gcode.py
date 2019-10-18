@@ -56,7 +56,7 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
     E = 0
     gcode = Gcode()
     gcode += home()
-    gcode += 'G92 E0'
+    gcode += set_position(E=0)
     gcode += move_Z(Z_max, F0)
     for count, cookie in enumerate(cookies, 1):
         Z_up = cookie.max_height + 5 if cookie.max_height + 5 <= Z_max else Z_max
