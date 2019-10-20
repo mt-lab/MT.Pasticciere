@@ -12,6 +12,7 @@ from tkinter import messagebox as mb
 from tkinter import Toplevel
 from tkinter import filedialog
 from scanner import scan
+from threading import Thread
 import configparser
 import logging
 import otk
@@ -180,31 +181,6 @@ def getOtk():
     logger.info("Снимок получен")
 
 
-def stop():
-    """
-    Аварийная остановка устройства (тестовый функционал, скорей всего работать
-    не будет)
-    """
-    host = get_setting(path, "network", "ip1")
-    port = 22
-    sshUsername1 = get_setting(path, "network", "user1")
-    sshPassword1 = get_setting(path, "network", "pass1")
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
-                   port=port)
-    console = client.invoke_shell()
-    console.keep_this = client
-    console.send('pronsole\n')
-    time.sleep(1)
-    console.send('connect\n')
-    time.sleep(2)
-    console.send('M112\n')
-    time.sleep(1)
-    console.send('exit\n')
-    client.close()
-
-
 def getScan():
     """
     Проведение сканирования на удалённом устройстве и получение видеофайла
@@ -269,6 +245,32 @@ def getScan():
 
 
 def getPrinted():
+
+    def stop():
+        """
+        Аварийная остановка устройства (тестовый функционал, скорей всего работать
+        не будет)
+        """
+        host = get_setting(path, "network", "ip1")
+        port = 22
+        sshUsername1 = get_setting(path, "network", "user1")
+        sshPassword1 = get_setting(path, "network", "pass1")
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(hostname=host, username=sshUsername1, password=sshPassword1,
+                       port=port)
+        console = client.invoke_shell()
+        console.keep_this = client
+        console.send('pronsole\n')
+        time.sleep(1)
+        console.send('connect\n')
+        time.sleep(2)
+        console.send('M112\n')
+        time.sleep(1)
+        console.send('exit\n')
+        client.close()
+
+
     print("Отправка задания на печать")
     logger.info("Отправка задания на печать")
     host = get_setting(path, "network", "ip1")
@@ -296,6 +298,13 @@ def getPrinted():
     console.send('load cookie.gcode\n')
     time.sleep(1)
     console.send('print\n')
+    stopwin = Toplevel(window)
+    stopwin.title("Остановка")
+    stopwin.minsize(width=100, height=100)
+    stopButton = tk.Button(stopwin, text="СТОП", command=stop)
+    stopButton.grid(row=0, column=0)
+    stepbutton = tk.Button(stopwin, text="Закрыть", command=stopwin.destroy)
+    stepbutton.grid(row=20, column=0)
     time.sleep(60)
     console.send('exit\n')
     channel.close()
@@ -558,8 +567,8 @@ camshot = tk.Button(text="Скан", command=getScan)
 camshot.grid(row=1, column=5)
 getMask = tk.Button(text="Маска", command=otk.getMask)
 getMask.grid(row=1, column=6)
-fullstop = tk.Button(text="СТОП", command=stop)
-fullstop.grid(row=1, column=7)
+#fullstop = tk.Button(text="СТОП", command=stop)
+#fullstop.grid(row=1, column=7)
 mancomparing = tk.Button(text="Сравнить", command=mancomparing)
 mancomparing.grid(row=1, column=8)
 gcoderb = tk.Button(window, text="Генерация gcode", command=gcoder)
@@ -568,7 +577,8 @@ gcodesetb = tk.Button(window, text="Параметры gcode", command=gcodesetd
 gcodesetb.grid(row=1, column=10)
 pointcloudb = tk.Button(window, text="Опознание рельефа", command=pointcloud)
 pointcloudb.grid(row=1, column=11)
-getprinted = tk.Button(window, text="Печать", command=getPrinted)
+getprinted = tk.Button(window, text="Печать",
+                       command=lambda: Thread(target=getPrinted).start())
 getprinted.grid(row=1, column=12)
 fixIni = tk.Button(window, text="Правка конфига", command=fixIni)
 fixIni.grid(row=1, column=13)
