@@ -73,7 +73,6 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
     :param float x0: начальная координата сканирования (начало стола) по X
     :param float y0: начало стола по Y
     :param float z0: начало стола по Z
-    :param kwargs: для лишних случайно переданных параметров
     :raises OutOfScanArea: если точка вне зоны сканирования по X
     :return: массив физических координат точек в глобальной системе координат
     """
@@ -401,29 +400,59 @@ def skeletonize(img):
 def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.ndarray:
     """
 
-    :param cv2.VideoCapture cap: видеопоток для обработки
-    :param int initial_frame_idx: начальный кадр
-    :param bool colored: если видео цветное
-    :param kwargs: дополнительные параметры для расчётов
+    :param cv2.VideoCapture cap:    видеопоток для обработки
+    :param int initial_frame_idx:   начальный кадр
+    :param kwargs:                  дополнительные параметры для расчётов
     Параметры для сканирования:
-        :keyword mirrored: ориентация сканирования. 0 слева - False, 0 справа - True
-        :keyword reverse: направление сканирования. от нуля - False, к нулю - True
-        :keyword interpolation: инерполировать ли изображение на большее разрешение
+        :keyword mirrored: ориентация сканирования
+            (default) False - ноль слева
+                      True - ноль справа
+        :keyword reverse: направление сканирования
+            (default) False - от нуля
+                      True - к нулю
+        :keyword colored: изображение цветное или нет
+            (default) False - черно-белое
+                      True - цветное
+        :keyword extraction_mode: способ нахождения примерного центра лазера
+            (default) 'max_peak' - по максимальной интенсивности на изображении с аппроксимацией по параболе
+                      'log' - максимальное значние лапласиана гаусса с аппроксимацией по параболе
+                      'ggm' - gray gravity method
+                      'iggm' - # TODO: improved gray gravity method
+        :keyword threshold: значение трэшхолда для маски
+            (default) thresh <= 0 - OTSU
+                      thresh > 0 - обычный трешхолд
+        :keyword avg_time: время в секундах для усреднения нулевой линии с учетом стабильности
+            (default) avg_time <= 0 без усреднения, считать в каждом кадре
+                      avg_time > 0 с усреднением
+        :keyword laser_angle_tol: допуск отклонения угла лазера в градусах при усреднении
+            (default) 0.1 градуса
+        :keyword laser_pos_tol: допуск отклонения положения лазера в пикселях при усреднении
+            (default) 0.1 пикселя
+        :keyword roi:   область интереса в кадре в формате (row_start, row_stop, col_start, col_stop)
+            (default) по всей области изображения
+        :keyword debug: флаг отладки
+            (default) False - отключена
+                      True - включена визуализауция процесса
     Параметры из конфига:
-        :keyword hsv_upper_bound: верхняя граница hsv фильтра для цветного скана
-        :keyword hsv_lower_bound: нижняя граница hsv фильтра для цветного скана
+        :keyword hsv_upper_bound:       верхняя граница hsv фильтра для цветного скана
+        :keyword hsv_lower_bound:       нижняя граница hsv фильтра для цветного скана
         :keyword distance_camera2laser: расстояние между камерой и лазером
-        :keyword camera_shift: смещение камеры по Y
-        :keyword camera_angle: угол камеры от вертикали
-        :keyword focal_length: фокусное расстояние камеры
-        :keyword pixel_size: размер пикселя камеры
-        :keyword table_length: длина сканируемой зоны
-        :keyword table_width: ширина сканируемой зоны
-        :keyword table_height: высота сканируемой зоны
-        :keyword x0: начальная координата сканирования (начало стола) по X
-        :keyword y0: начало стола по Y
-        :keyword z0: начало стола по Z
-    :return: карту высот формы (TOTAL_FRAMES, FRAME_WIDTH, 3), где для каждого пикселя записана [X, Y, Z] координата
+        :keyword camera_shift:          смещение камеры по Y
+        :keyword camera_angle:          угол камеры от вертикали
+        :keyword focal_length:          фокусное расстояние камеры
+        :keyword pixel_size:            размер пикселя камеры
+        :keyword table_length:          длина сканируемой зоны
+        :keyword table_width:           ширина сканируемой зоны
+        :keyword table_height:          высота сканируемой зоны
+        :keyword x0:                    начальная координата сканирования (начало стола) по X
+        :keyword y0:                    начало стола по Y
+        :keyword z0:                    начало стола по Z
+    Дополнительные параметры:
+        :keyword log_k:     размер окна для 'log'
+            (default) 29
+        :keyword log_sigma: среднеквардратичное отклонение для 'log'
+            (default) 4.45
+    :return: карту высот формы (TOTAL_FRAMES, col+stop-col_start, 3), где каждый пиксель это [X, Y, Z] координата
     """
     FPS = cap.get(cv2.CAP_PROP_FPS)  # частота кадров видео
     TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # всего кадров в видео
@@ -457,7 +486,6 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     while cap.isOpened():  # пока видео открыто
         ret, frame = cap.read()
         if ret is True:  # пока кадры есть - сканировать
-            # TODO: проверить с resize и интерполяцией
             roi = frame[row_start:row_stop, col_start:col_stop]  # обрезать кадр по зоне интереса
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             if colored:  # сделать маску для выделения зоны лазера в кадре
@@ -543,7 +571,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 cv2.imshow('mask', mask)
                 cv2.imshow('height map', height_map.copy()[..., Z] / np.amax(height_map[..., Z]))
                 cv2.waitKey(15)
-            ##########################################################################
+            ############################################################################################################
         else:  # кадры кончились или побиты(?)
             cap.release()  # закрыть видео
     else:  # когда видео кончилось
@@ -570,9 +598,9 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     :param str path_to_video: путь к видео, по умолчанию путь из settings.ini
     :param bool colored: видео цветное или нет
     :param kwargs: дополнительные параметры для сканирования
-    :keyword thresh: параметр для детекта начала. thresh < 0 без детекта.
-                    если видео цветное то поиск по мастер маске и 0 < thresh < 1 - степень схожести
-                    если видео чб то поиск по пропаже/появлению линии и thresh - минимально количество точек на линии
+    :keyword start_thresh: параметр для детекта начала. start_thresh < 0 без детекта.
+                    если видео цветное то поиск по мастер маске и 0 < start_thresh < 1 - степень схожести
+                    если видео чб то поиск по пропаже/появлению линии и start_thresh - минимально количество точек на линии
     :keyword mirrored: ориентация сканирования. 0 слева - False, 0 справа - True
     :keyword reverse: направление сканирования. от нуля - False, к нулю - True
     :keyword debug: флаг отладки для функций

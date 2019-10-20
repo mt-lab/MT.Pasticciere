@@ -155,7 +155,6 @@ class Element():
         self.sliced = True
         self._length = None
 
-
     def add_z(self, height_map: Optional[np.ndarray] = None, point_apprx=False, **kwargs):
         if height_map is None:
             pass
@@ -241,42 +240,6 @@ class Spline(Element, BSpline):
 
     def slice(self, step=1):
         # TODO: подумать как использовать градиентный спуск или т.п.
-        # n1, n2 = 0, 0
-        # t = 0.001
-        # dt = 0.0001
-        # prev_point = self.point(0)
-        # prev_e = 0
-        # sliced = [prev_point]
-        # while t < self.max_t:
-        #     n1 += 1
-        #     p = self.point(t + dt)
-        #     d = p.distance(prev_point)
-        #     e = step - d
-        #     while abs(e) > step * .2:
-        #         n2 += 1
-        #         if sign(prev_e * e) > 0:
-        #             dt += abs(dt) * sign(e)
-        #             p = self.point(t + dt)
-        #             d = p.distance(prev_point)
-        #             prev_e = e
-        #             e = step - d
-        #         elif sign(prev_e * e) < 0:
-        #             dt = 3 / 4 * abs(dt) * sign(e)
-        #             p = self.point(t + dt)
-        #             d = p.distance(prev_point)
-        #             e = step - d
-        #         elif prev_e == 0:
-        #             prev_e = e
-        #             continue
-        #         else:
-        #             raise Exception('wtf')
-        #         print(n1, n2, e, t, dt, p)
-        #     n2 = 0
-        #     sliced.append(p)
-        #     prev_point = p
-        #     t += dt
-        # if not self.point(self.max_t).isclose(prev_point):
-        #     sliced.append(self.point(self.max_t))
         self.sliced = True
         points = [Vector(point) for point in self.approximate(int(self.max_t / step))]
         self.points = points

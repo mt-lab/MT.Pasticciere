@@ -109,7 +109,7 @@ class Gcode:
             yield command
 
     def __add__(self, other: Union[List[str], str]):
-        """adds commands at the end of the self instructions"""
+        """adds commands at the end of the instructions"""
         if isinstance(other, str):
             instructions = self.instructions + [other]
         elif isinstance(other, List):
@@ -124,7 +124,7 @@ class Gcode:
         return Gcode(instructions)
 
     def __radd__(self, other):
-        """adds commands at the beginning of the self instructions"""
+        """adds commands at the beginning of the instructions"""
         if isinstance(other, str):
             instructions = [other] + self.instructions
         elif isinstance(other, List):
