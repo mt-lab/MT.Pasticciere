@@ -26,7 +26,6 @@ import time
 # масштабные коэффициенты для построения облака точек
 kx = 1 / 3  # мм/кадр
 
-startMask = cv2.imread('startMask.png', 0)
 settings = ['hsv_upper_bound',
             'hsv_lower_bound',
             'distance_camera2laser',
@@ -257,60 +256,10 @@ def get_max_height(contour, height_map: 'np.ndarray' = globalValues.height_map):
     return maxHeight
 
 
-def compare(img, mask, threshold=0.5):
-    """
-    Побитовое сравнение по маске по количеству белых пикселей
-    :param img: изображение для сравнения
-    :param mask: применяемая маска
-    :param threshold: порог схожести
-    :return: True/False в зависимости от схожести
-    """
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    hsv = cv2.inRange(hsv, np.array([88, 161, 55]), np.array([144, 255, 92]))
-    cmp = cv2.bitwise_and(hsv, hsv, mask=mask)
-    # cv2.imshow('cmp', cmp)
-    # cv2.imshow('raw', img)
-    # cv2.waitKey(30)
-    similarity = np.sum(cmp == 255) / np.sum(mask == 255) if np.sum(mask == 255) != 0 else 0
-    print(f'{similarity:4.2f}')
-    if similarity >= threshold:
-        return True
-    else:
-        return False
-
-
 def normalize(img, value=1):
     array = img.copy().astype(np.float64)
     array = (array - array.min()) / (array.max() - array.min()) * value
     return array
-
-
-def detect_start(cap, mask, threshold=0.5):
-    """
-    Поиск кадра для начала сканирования
-    :param cap: видеопоток из файла
-    :param mask: маска для поиска кадра
-    :param threshold: порог схожести
-    :return: если видеопоток кончился -1;
-             до тех пор пока для потока не найден нужный кадр False;
-             когда кадр найден и все последующие вызовы генератора для данного потока True;
-    """
-    if threshold == -1:
-        print('Сканирование без привязки к глобальной СК')
-        yield True
-    start = False
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    while True:
-        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        ret, frame = cap.read()
-        if ret is not True:
-            yield -1
-        if compare(frame, mask, threshold):
-            start = True
-        while start:
-            yield True
-        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
-        yield False
 
 
 def detect_start3(cap, threshhold=50, roi=None):
@@ -623,8 +572,9 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
     if colored:
-        start_thresh = kwargs.pop('start_thresh', 0.6)
-        detector = detect_start(cap, startMask, start_thresh)
+        # TODO: либо отказаться от цвета совсем, либо уже придумать что то
+        start_thresh = kwargs.pop('start_thresh', 104)
+        detector = detect_start3(cap, start_thresh)
     else:
         start_thresh = kwargs.pop('start_thresh', 104)
         detector = detect_start3(cap, start_thresh)
