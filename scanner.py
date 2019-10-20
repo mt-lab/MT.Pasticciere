@@ -350,22 +350,6 @@ def compare(img, mask, threshold=0.5):
         return False
 
 
-def avgK(frame, ksize):
-    pad = int((ksize - 1) / 2)
-    img = np.pad(frame, (pad, pad), 'constant', constant_values=(0, 0))
-    result = np.zeros(frame.shape)
-    for x in range(pad, frame.shape[1]):
-        for y in range(pad, frame.shape[0]):
-            crop = img[y - pad:y + pad + 1, x - pad:x + pad + 1]
-            avg = 0
-            if crop[pad, pad] != 0:
-                nonZeros = np.sum(crop != 0)
-                avg = np.sum(crop) / nonZeros if nonZeros != 0 else 0
-            pxlvalue = avg
-            result[y, x] = pxlvalue
-    return result
-
-
 def normalize(img, value=1):
     array = img.copy().astype(np.float64)
     array = (array - array.min()) / (array.max() - array.min()) * value
