@@ -19,7 +19,6 @@ import numpy as np
 from numpy import sign
 from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, apprx_point_height, triangle_area
 from numpy import sqrt, cos, sin, pi, arctan
-import gcodeGen
 
 
 class Element():

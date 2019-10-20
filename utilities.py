@@ -95,10 +95,10 @@ def get_colored_point_in_pcd(height_map: np.ndarray, idx, fg_color=(1, 0, 0), bg
     """
     pcd = get_pcd_of_height_map(height_map)
     if idx:
-        colors = np.full(np.asarray(pcd.points).shape[0])
+        colors = np.full(np.asarray(height_map).shape, bg_color)
         for i in idx:
-            colors[i] = fg_color
-        pcd.colors = open3d.Vector3dVector(colors)
+            colors[np.unravel_index(i, colors.shape[:2])] = fg_color
+        pcd.colors = open3d.Vector3dVector(colors.reshape(colors.size // 3, 3))
     else:
         pcd.paint_uniform_color(fg_color)
     return pcd
@@ -560,8 +560,8 @@ def nothing(*args, **kwargs):
 
 
 class Error(Exception):
-    def __init__(self):
-        self.message = f'Unknown error'
+    def __init__(self, msg=None):
+        self.message = f'Unknown error' if msg is None else msg
 
 
 class OutOfScanArea(Error):

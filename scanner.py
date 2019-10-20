@@ -202,25 +202,24 @@ def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
     return fine_laser_center
 
 
-def predict_zero_level(array: np.ndarray, mid_row: Union[int, float] = 239) -> Tuple[np.ndarray, float]:
+def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239) -> Tuple[np.ndarray, float]:
     """
     Расчитывает положение нулевой линии и её угол по крайним точкам из массива
 
-    :param np.ndarray array: массив точек описывающих положение лазера
+    :param np.ndarray laser: массив точек описывающих положение лазера
     :param mid_row: средний ряд кадра, значение по умолчанию если расчёт не получится
     :return: массив точек нулевой линии и тангенс наклона линии от горизонтали
     """
-    zero_level = np.full_like(array, mid_row)
+    zero_level = np.full_like(laser, mid_row)
     tangent = .0
-    nonzero_indices = array.nonzero()[0]
+    nonzero_indices = laser.nonzero()[0]
     if nonzero_indices.size:
         first_nonzero = nonzero_indices[0]
         last_nonzero = nonzero_indices[-1]
-        tangent = (array[last_nonzero] - array[first_nonzero]) / (last_nonzero - first_nonzero)
+        tangent = (laser[last_nonzero] - laser[first_nonzero]) / (last_nonzero - first_nonzero)
         tangent = .0 if tangent == np.inf else tangent
-        for column in range(zero_level.size):
-            row = (column - first_nonzero) * tangent + array[first_nonzero]
-            zero_level[column] = row
+        zero_level = np.array(
+            [(column - first_nonzero) * tangent + laser[first_nonzero] for column in range(laser.size)])
     return zero_level, tangent
 
 
@@ -269,11 +268,11 @@ def compare(img, mask, threshold=0.5):
     """
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     hsv = cv2.inRange(hsv, np.array([88, 161, 55]), np.array([144, 255, 92]))
-    compare = cv2.bitwise_and(hsv, hsv, mask=mask)
-    # cv2.imshow('compare', compare)
+    cmp = cv2.bitwise_and(hsv, hsv, mask=mask)
+    # cv2.imshow('cmp', cmp)
     # cv2.imshow('raw', img)
     # cv2.waitKey(30)
-    similarity = np.sum(compare == 255) / np.sum(mask == 255) if np.sum(mask == 255) != 0 else 0
+    similarity = np.sum(cmp == 255) / np.sum(mask == 255) if np.sum(mask == 255) != 0 else 0
     print(f'{similarity:4.2f}')
     if similarity >= threshold:
         return True
@@ -305,7 +304,7 @@ def detect_start(cap, mask, threshold=0.5):
     while True:
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
-        if ret != True:
+        if ret is not True:
             yield -1
         if compare(frame, mask, threshold):
             start = True

@@ -34,13 +34,18 @@ class Cookie:
         return self._contour
 
     @property
+    def contour_local(self):
+        if self._contour_local is None:
+            col, row, *_ = self.bounding_box
+            self._contour_local = self.contour - np.array([col, row])
+        return self._contour_local
+
+    @property
     def contour_mm(self):
         if self._contour_mm is None:
-            col, row, _, _ = self.bounding_box
-            self._contour_mm = np.asarray([(self.height_map[point[0][1] - row, point[0][0] - col, Y],
-                                            self.height_map[point[0][1] - row, point[0][0] - col, X]) for point in
-                                           self.contour],
-                                          dtype=np.float32)
+            self._contour_mm = np.asarray([[(self.height_map[point[0, 1], point[0, 0], Y],
+                                             self.height_map[point[0, 1], point[0, 0], X])]
+                                           for point in self.contour_local], dtype=np.float32)
         return self._contour_mm
 
     @property
@@ -48,6 +53,20 @@ class Cookie:
         if self._center is None:
             self.find_center_and_rotation()
         return self._center
+
+    @property
+    def center_pixel(self):
+        if self._center_pixel is None:
+            self._center_pixel = find_center_and_rotation(self.contour, False)
+            self._center_pixel = tuple(int(round(c)) for c in self._center_pixel)
+        return self._center_pixel
+
+    @property
+    def center_local(self):
+        if self._center_local is None:
+            self._center_local = (self.center_pixel[0] - self.bounding_box[0],
+                                  self.center_pixel[1] - self.bounding_box[1])
+        return self._center_local
 
     @property
     def rotation(self):
@@ -66,15 +85,6 @@ class Cookie:
         if self._length is None:
             self._length = self.min_bounding_box_mm[1][0]
         return self._length
-
-    @property
-    def pixel_center(self):
-        if self._pixel_center is None:
-            moments = cv2.moments(self.contour)
-            col = int(round(moments['m10'] / moments['m00']))
-            row = int(round(moments['m01'] / moments['m00']))
-            self._pixel_center = (row, col)
-        return self._pixel_center
 
     @property
     def bounding_box(self):
