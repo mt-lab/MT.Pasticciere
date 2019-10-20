@@ -32,21 +32,19 @@ def linear_move(code: str = 'G0', **kwargs) -> str:
     :keyword float F: feed rate (head speed)
     :return str command: gcode command as a string
     """
-    params = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
-    for key in params.keys():
-        value = kwargs.get(key)
-        params[key] = f'{value:3.3f}' if value is not None else None
-    params['code'] = code
-    if params['code'] not in ['G0', 'G1']:
+    if code not in ['G0', 'G1']:
         raise Exception('code should be G0 or G1')
+    params = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
+    params = {k: f'{kwargs[k]:3.3f}' if k in kwargs and kwargs[k] is not None else None for k in params}
+    params['code'] = code
     return abstract_gcode_command(**params)
 
 
 def set_position(*args, **kwargs) -> str:
     code = 'G92'
-    g92_params = {'X': None, 'Y': None, 'Z': None, 'E': None}
-    g92_params = {k: kwargs[k] for k in g92_params if k in kwargs}
-    return abstract_gcode_command(code=code, **g92_params)
+    params = {'X': None, 'Y': None, 'Z': None, 'E': None}
+    params = {k: f'{kwargs[k]:3.3f}' if k in kwargs and kwargs[k] is not None else None for k in params}
+    return abstract_gcode_command(code=code, **params)
 
 
 def home(*args, **kwargs) -> str:
@@ -62,17 +60,9 @@ def home(*args, **kwargs) -> str:
     :return str command:
     """
     code = 'G28'
-    g28_params = {'O': None, 'R': None, 'X': None, 'Y': None, 'Z': None}
-    if args:
-        # ЧИВО?
-        for item in args:
-            if item in g28_params:
-                g28_params[item] = ''
-    if kwargs:
-        for key, value in kwargs.items():
-            if key in g28_params:
-                g28_params[key] = f'{value:3.3f}' if value is not None else None
-    return abstract_gcode_command(code=code, **g28_params)
+    params = {'O': None, 'R': None, 'X': None, 'Y': None, 'Z': None}
+    params = {k: f'{kwargs[k]:3.3f}' if k in kwargs and kwargs[k] is not None else None for k in params}
+    return abstract_gcode_command(code=code, **params)
 
 
 move_Z = lambda z, f=None: linear_move(Z=z, F=f)
