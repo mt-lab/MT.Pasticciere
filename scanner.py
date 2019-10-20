@@ -6,15 +6,14 @@ Author: bedlamzd of MT.lab
 """
 
 import numpy as np
-from numpy import cos, tan, sqrt, arctan, pi
+from numpy import cos, tan, sqrt, pi
 import cv2
-from typing import Tuple, List, Sequence, Optional, Union, Any
-from utilities import X, Y, Z, distance
+from typing import Tuple
+from utilities import save_height_map, OutOfScanArea, Error, mid_idx, print_objects
 import globalValues
-from utilities import save_height_map, OutOfScanArea, mid_idx, print_objects
+from globalValues import get_settings_values, settings_sections
 from cookie import *
 import time
-import imutils
 
 # TODO: написать логи
 
@@ -27,12 +26,21 @@ import imutils
 # масштабные коэффициенты для построения облака точек
 kx = 1 / 3  # мм/кадр
 
-# ширина изображения для обработки, пиксели
-col_start = 0
-col_stop = 640
-row_start = 100
-row_stop = 400
 startMask = cv2.imread('startMask.png', 0)
+settings = ['hsv_upper_bound',
+            'hsv_lower_bound',
+            'distance_camera2laser',
+            'camera_shift',
+            'camera_angle',
+            'focal_length',
+            'pixel_size',
+            'table_length',
+            'table_width',
+            'table_height',
+            'x0',
+            'y0',
+            'z0',
+            ]
 
 
 def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray,
@@ -44,8 +52,7 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
                 focal_length: float = 2.9,
                 pixel_size: float = 0.005,
                 table_length: float = 200, table_width: float = 200, table_height: float = 50,
-                x0: float = 0, y0: float = 0, z0: float = 0,
-                **kwargs) -> np.ndarray:
+                x0: float = 0, y0: float = 0, z0: float = 0) -> np.ndarray:
     """
     Расчёт физических координат точек по их положению в кадре и положению нулевой линии
 
@@ -104,10 +111,10 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
         x = x if not reverse else - x
         if x0 + x < 0 or abs(x) > table_length:  # если x вне зоны сканирования райзнуть ошибку
             raise OutOfScanArea(pos=x + x0, bounds=table_length)
-        if 0 <= z <= table_height and 0 <= y <= table_width:
+        if 0 <= z <= table_height:
             positions[column] = np.array([x + x0, y + y0, z + z0])
         else:
-            positions[column] = np.array([x + x0, y0, z0])
+            positions[column] = np.array([x + x0, y + y0, z0])
     return positions
 
 
@@ -229,7 +236,7 @@ def calibrate_kx(video_fps: float, printer_velocity: float = 300):
     print(f'Kx is {kx}')
 
 
-def get_hsv_mask(img, hsv_lower_bound, hsv_upper_bound, **kwargs):
+def get_hsv_mask(img, hsv_lower_bound, hsv_upper_bound):
     """
     Делает битовую маску лазера с цветного изображения
 
@@ -308,90 +315,18 @@ def detect_start(cap, mask, threshold=0.5):
         yield False
 
 
-def detectStart2(cap, contourPath='', mark_center=(0, 0), threshold=0.5):
-    # копия find_cookies заточеная под поиск конкретного контура и его положение с целью привязки к глобальной СК
-    # работает сразу с видео потоком по принципу detect_start()
-    # TODO: разделить на функции, подумать как обобщить вместе с find_cookies()
-
-    if threshold < 0:
-        print('Сканирование без привязки к глобальной СК')
-        yield True
-
-    # прочитать контур метки
-    markPic = cv2.imread(contourPath, cv2.IMREAD_GRAYSCALE)
-    markContours = cv2.findContours(markPic, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    markContours = imutils.grab_contours(markContours)
-    markContour = sorted(markContours, key=cv2.contourArea, reverse=True)[0]
-
-    start = False
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    while True:
-        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        ret, frame = cap.read()
-
-        if ret != True or not cap.isOpened():
-            # если видео закончилось или не открылось вернуть ошибку
-            yield -1
-
-        original = frame
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        blur = cv2.GaussianBlur(gray, (3, 3), 0)
-        ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        kernel = np.ones((5, 5), np.uint8)
-        closing = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
-        opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=2)
-        # найти однозначный задний фон
-        sureBg = cv2.dilate(opening, kernel, iterations=3)
-        distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
-        # однозначно объекты
-        ret, sureFg = cv2.threshold(distTrans, 0.1 * distTrans.max(), 255, 0)
-        sureFg = np.uint8(sureFg)
-        # область в которой находятся контура
-        unknown = cv2.subtract(sureBg, sureFg)
-        # назначение маркеров
-        ret, markers = cv2.connectedComponents(sureFg)
-        # отмечаем всё так, чтобы у заднего фона было точно 1
-        markers += 1
-        # помечаем граничную область нулём
-        markers[unknown == 255] = 0
-        markers = cv2.watershed(original, markers)
-        # выделяем контуры на изображении
-        original[markers == -1] = [255, 0, 0]
-        # количество контуров на столе (уникальные маркеры минус фон и контур всего изображения)
-        numOfContours = len(np.unique(markers)) - 2
-        # вырезаем ненужный контур всей картинки
-        blankSpace = np.zeros(gray.shape, dtype='uint8')
-        blankSpace[markers == 1] = 255
-        blankSpace = cv2.bitwise_not(blankSpace)
-        blankSpaceCropped = blankSpace[1:blankSpace.shape[0] - 1, 1:blankSpace.shape[1] - 1]
-        # находим контуры на изображении
-        contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        contours = imutils.grab_contours(contours)
-        if len(contours) != 0 and contours is not None:
-            contours = sorted(contours, key=lambda x: cv2.matchShapes(markContour, x, cv2.CONTOURS_MATCH_I2, 0))[
-                       :numOfContours]  # сортируем их по схожести с мастер контуром
-            if cv2.matchShapes(markContour, contours[0], cv2.CONTOURS_MATCH_I2, 0) < threshold:
-                moments = cv2.moments(contours[0])
-                candidateCenter = (int(moments['m01'] / moments['m00']), int(moments['m10'] / moments['m00']))
-                if distance(mark_center, candidateCenter) <= 2:
-                    start = True
-        while start:
-            yield True
-        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} frames skipped waiting for starting point')
-        yield False
-        # применяем на изначальную картинку маску с задним фоном
-        # result = cv2.bitwise_and(original, original, mask=blankSpace)
-        # result = cv2.bitwise_and(original, original, mask=sureBg)
-
-
-def detect_start3(cap, threshhold=50):
+def detect_start3(cap, threshhold=50, roi=None):
     if threshhold < 0:
         yield True
     start = False
     mirror = False
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     firstLine = False
+    row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
+    if row_start >= row_stop and col_start >= col_stop:
+        raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
     while True:
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
@@ -438,9 +373,9 @@ def detect_start3(cap, threshhold=50):
             if lines is not None:
                 start = True
         while start:
-            print(f'{frameIdx + 1:{3}}/{frameCount:{3}} кадр. Начало сканирования')
+            print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадр. Начало сканирования')
             yield True
-        print(f'{frameIdx + 1:{3}}/{frameCount:{3}} кадров пропущенно в ожидании точки старта')
+        print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров пропущенно в ожидании точки старта')
         yield False
 
 
@@ -464,8 +399,7 @@ def skeletonize(img):
     return skel
 
 
-def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = False, debug=False,
-             **kwargs) -> np.ndarray:
+def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.ndarray:
     """
 
     :param cv2.VideoCapture cap: видеопоток для обработки
@@ -497,24 +431,30 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     FRAME_SHAPE = (FRAME_HEIGHT, FRAME_WIDTH)
-    THRESH_VALUE = 5  # пороговое значение для создания маски с простым трешхолдом
-    STABILITY_TIME = 2 * FPS
-    LASER_ANGLE_TOLERANCE = -1.1 * 640  # допуск стабильного отклонения угла лазера
-    LASER_POS_TOLERANCE = -1  # допуск стабильного отклонения позиции лазера
-    # если допуски отрицательные, то всегда расчитывать положение лазера
-    INTERPOLATION = kwargs.get('interpolation', False)
-    INTER_X = 1
-    INTER_Y = 2
-    ksize = 29  # размер окна для laplace_of_gauss
-    sigma = 4.45  # сигма для laplace_of_gauss
+    REVERSE = kwargs.pop('reverse', False)
+    MIRRORED = kwargs.pop('mirrored', False)
+    EXTRACTION_MODE = kwargs.pop('extraction_mode', 'max_peak').lower()  # метод для расчёта лазера
+    THRESH_VALUE = kwargs.pop('threshold', 0)  # пороговое значение для создания маски с простым трешхолдом
+    AVG_TIME = round(kwargs.pop('avg_time', 0) * FPS)  # время на усреднение стабильного лазера; при <=0 то не усреднять
+    LASER_ANGLE_TOLERANCE = np.deg2rad(kwargs.pop('laser_angle_tol', 0.1))  # допуск стабильного отклонения угла лазера
+    LASER_POS_TOLERANCE = kwargs.pop('laser_pos_tol', 0.1)  # допуск стабильного отклонения позиции лазера
+    ksize = kwargs.pop('log_k', 29)  # размер окна для laplace_of_gauss
+    sigma = kwargs.pop('log_sigma', 4.45)  # сигма для laplace_of_gauss
+    colored = kwargs.pop('colored', False)
+    hsv_upper_bound = kwargs.pop('hsv_upper_bound', (0, 0, 0))
+    hsv_lower_bound = kwargs.pop('hsv_lower_bound', (255, 255, 255))
+    row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
+    DEBUG = kwargs.pop('debug', False)
+    kwargs = {k: kwargs[k] for k in kwargs if k in settings}
     frame_idx = 0  # счетчик обработанных кадров
-    stability_counter, laser_tangent, laser_row_pos = 0, 0, 0  # метрики стабильности нулевой линии лазера
+    avg_counter, laser_tangent, laser_row_pos = 0, 0, 0  # метрики стабильности нулевой линии лазера
     zero_level = None  # переменная для нулевой линии
-    height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, FRAME_WIDTH, 3), dtype='float32')  # карта высот
+    fine_laser_center = None  # переменная для лазера
+    if row_start >= row_stop and col_start >= col_stop:
+        raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
+    height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, col_stop - col_start, 3), dtype='float32')  # карта высот
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)  # читать видео с кадра initialFrameIdx
     start = time.time()
-    # if row_start >= row_stop and col_start >= col_stop:
-    #     raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
     while cap.isOpened():  # пока видео открыто
         ret, frame = cap.read()
         if ret is True:  # пока кадры есть - сканировать
@@ -523,51 +463,66 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             if colored:  # сделать маску для выделения зоны лазера в кадре
                 blur = cv2.GaussianBlur(roi, (ksize, ksize), 0)
-                mask = get_hsv_mask(blur, **kwargs)
+                mask = get_hsv_mask(blur, hsv_upper_bound, hsv_lower_bound)
+                blur = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
             else:
                 blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
-                _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                # _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
-            # derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
-            # derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
-            # derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
-            # fine_laser_center = predict_laser(derivative, row_start, row_stop)  # расчитать субпиксельные позиции лазера
+                if THRESH_VALUE > 0:
+                    _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
+                else:
+                    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             blur = cv2.bitwise_and(blur, blur, mask=mask)
-            # fine_laser_center = gray_gravity(blur, row_start, row_stop)
-            fine_laser_center = predict_laser(blur, row_start, row_stop)
-            if INTERPOLATION:
-                fine_laser_center = fine_laser_center / INTER_Y
-                fine_laser_center[fine_laser_center > frame.shape[0] - 1] = 0
-            # привести к ширине кадра для простоты
-            # fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), mode='constant')
+            ############################################################################################################
+            # ВЫБОР МЕТОДА ПОИСКА ЛАЗЕРА
+            ############################################################################################################
+            if EXTRACTION_MODE == 'max_peak':
+                fine_laser_center = predict_laser(blur, row_start, row_stop)
+            elif EXTRACTION_MODE == 'log':
+                derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
+                derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
+                derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
+                fine_laser_center = predict_laser(derivative, row_start,
+                                                  row_stop)  # расчитать субпиксельные позиции лазера
+            elif EXTRACTION_MODE == 'ggm':
+                fine_laser_center = gray_gravity(blur, row_start, row_stop)
+            elif EXTRACTION_MODE == 'iggm':
+                pass
+            else:
+                raise Error(f'Unknown extraction mode {EXTRACTION_MODE}')
+            ############################################################################################################
             # если по производной положений лазера есть всплески отклонение которых от среднего больше чем пять
             # среднеквадратичных, то считать эту точку невалидной и занулить её
             fine_laser_center_deriv = cv2.Sobel(fine_laser_center, -1, 0, 1, None, 1).flatten()
             fine_laser_center[
                 abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
-            # расчёт угла и положения нулевой линии
-            zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1)
-            # if stability_counter < STABILITY_TIME:  # если параметры не были стабильны в течении заданного времени
-            #     # найти нулевую линию и её угол
-            #     zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
-            #     angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))  # abs(laser_tangent - tangent)
-            #     pos_error = abs(laser_row_pos - zero_level[0])
-            #     #  если параметры линии отклоняются в допустимых пределах
-            #     if angle_error < LASER_ANGLE_TOLERANCE and pos_error < LASER_POS_TOLERANCE:
-            #         stability_counter += 1  # расчитать средние параметры линии по кадрам
-            #         laser_row_pos = (laser_row_pos * (stability_counter - 1) + zero_level[0]) / stability_counter
-            #         laser_tangent = (laser_tangent * (stability_counter - 1) + tangent) / stability_counter
-            #     else:  # иначе принять найденные параметры за новые и обнулить счётчик
-            #         laser_row_pos, laser_tangent, stability_counter = zero_level[0], tangent, 0
-            #     # TODO: вставить предупреждение если лазер долго нестабилен
-            #     # расчитать нулевой уровень по расчитанным параметрам
-            #     zero_level = np.array([-x * laser_tangent + zero_level[0] for x in range(fine_laser_center.size)])
-            #     zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
+            fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), 'constant')
+            ############################################################################################################
+            # РАСЧЁТ ПОЛОЖЕНИЯ И УГЛА НУЛЕВОЙ ЛИНИИ #
+            ############################################################################################################
+            if AVG_TIME <= 0:  # если не задано усреднять лазер, то считать нулевой уровень в каждом кадре
+                zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1)
+            elif avg_counter < AVG_TIME:  # если задано усреднять и лазер ещё не усреднён
+                # найти нулевую линию, её угол и отклонение от предыдущего значения
+                zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
+                angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))
+                pos_error = abs(laser_row_pos - zero_level[0])
+                #  если параметры линии отклоняются в допустимых пределах
+                if angle_error < LASER_ANGLE_TOLERANCE and pos_error < LASER_POS_TOLERANCE:
+                    avg_counter += 1  # расчитать средние параметры линии по кадрам
+                    laser_row_pos = (laser_row_pos * (avg_counter - 1) + zero_level[0]) / avg_counter
+                    laser_tangent = (laser_tangent * (avg_counter - 1) + tangent) / avg_counter
+                else:  # иначе принять найденные параметры за новые и обнулить счётчик
+                    laser_row_pos, laser_tangent, avg_counter = zero_level[0], tangent, 0
+                # TODO: вставить предупреждение если лазер долго нестабилен
+                # расчитать нулевой уровень по расчитанным параметрам и обрезать по roi
+                zero_level = np.array([x * laser_tangent + zero_level[0] for x in range(fine_laser_center.size)])
+            zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
+            ############################################################################################################
             # занулить точки где положение "лазера" ниже нулевой линии
             fine_laser_center[fine_laser_center < zero_level] = zero_level[fine_laser_center < zero_level]
             try:  # расчитать физические координаты точек лазера
                 height_map[frame_idx] = find_coords(frame_idx, fine_laser_center, zero_level, frame_shape=FRAME_SHAPE,
-                                                    **kwargs)
+                                                    reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
             except OutOfScanArea:  # если точки вне зоны, значит закончить обработку
                 cap.release()  # закрыть видео
                 print('достигнута граница зоны сканирования')
@@ -575,14 +530,16 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
                 f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
                 f'  X: {height_map[frame_idx][0, X]:4.2f} мм; Zmax: {height_map[frame_idx][:, Z].max():4.2f} мм')
             frame_idx += 1
-            ##########################################################################
-            if debug:  # for debug purposes
-                for column, row in enumerate(fine_laser_center, col_start):
-                    frame[int(row), column] = (0, 255, 0)
-                    frame[int(zero_level[column]), column] = (255, 0, 0)
-                max_column = fine_laser_center.argmax()
-                max_row = int(fine_laser_center[max_column])
-                cv2.circle(frame, (max_column + col_start, max_row), 3, (0, 0, 255), -1)
+            ############################################################################################################
+            # ВЫВОД НА ЭКРАН ИЗОБРАЖЕНИЙ ДЛЯ ОТЛАДКИ
+            ############################################################################################################
+            if DEBUG:
+                frame[row_start:row_stop, [col_start, col_stop - 1]] = (255, 0, 255)
+                frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
+                frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
+                frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
+                cv2.circle(frame, (fine_laser_center.argmax() + col_start, int(np.amax(fine_laser_center))), 3,
+                           (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
                 cv2.imshow('height map', height_map.copy()[..., Z] / np.amax(height_map[..., Z]))
@@ -593,10 +550,10 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, colored: bool = 
     else:  # когда видео кончилось
         time_passed = time.time() - start
         print(f'Готово. Потрачено времени на анализ рельефа: {time_passed:3.2f} с\n')
-        height_map[:, :, Z][height_map[:, :, Z] < 0] = 0  # везде где Z < 0 приравнять к нулю
-        if kwargs.get('reverse', False):
+        height_map[..., Z][height_map[..., Z] < 0] = 0  # везде где Z < 0 приравнять к нулю
+        if REVERSE:  # если скан с конца области, ориентировать массив соответственно
             height_map = np.flipud(height_map)
-        if kwargs.get('mirrored', False):
+        if MIRRORED:  # если скан зеркальный, ориентировать массив соответственно
             height_map = np.fliplr(height_map)
         return height_map
 
@@ -622,20 +579,28 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     :keyword debug: флаг отладки для функций
     :return: None
     """
+    col_start = 30
+    col_stop = 610
+    row_start = 100
+    row_stop = 400
 
-    settings_values = globalValues.get_settings_values(**globalValues.settings_sections)  # параметры из конфига
+    settings_values = get_settings_values(
+        **{k: settings_sections[k] for k in settings if k in settings_sections})  # параметры из конфига
 
     cap = cv2.VideoCapture(path_to_video)  # чтение видео
     calibrate_kx(cap.get(cv2.CAP_PROP_FPS))  # откалибровать kx согласно FPS
+    if 'roi' not in kwargs:
+        kwargs.update({'roi': (row_start, row_stop, col_start, col_stop)})
 
+    kwargs = {**settings_values, **kwargs}
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
     if colored:
-        thresh = kwargs.get('thresh', 0.6)
-        detector = detect_start(cap, startMask, thresh)
+        start_thresh = kwargs.pop('start_thresh', 0.6)
+        detector = detect_start(cap, startMask, start_thresh)
     else:
-        thresh = kwargs.get('thresh', 104)
-        detector = detect_start3(cap, thresh)
+        start_thresh = kwargs.pop('start_thresh', 104)
+        detector = detect_start3(cap, start_thresh)
     start = next(detector)
     while not start or start == -1:
         if start == -1:
@@ -648,11 +613,11 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     print(f'Точка начала сканирования: {initial_frame_idx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    height_map = scanning(cap, initial_frame_idx, **settings_values, **kwargs)
+    height_map = scanning(cap, initial_frame_idx, colored=colored, **kwargs)
     globalValues.height_map = height_map
 
     # массив для нахождения позиций объектов
-    height_map_z = np.dsplit(height_map, 3)[Z].reshape(height_map.shape[0], height_map.shape[1])
+    height_map_z = height_map[..., Z]
     height_map_8bit = (height_map_z / np.amax(height_map_z) * 255).astype(np.uint8)
 
     height_map_8bit[height_map_z < 1] = 0
