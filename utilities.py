@@ -4,7 +4,8 @@ from functools import reduce, wraps
 import numpy as np
 import cv2
 import open3d
-from numpy import arctan, sqrt, tan, arccos
+import imutils
+from numpy import arctan, sqrt, tan, arccos, pi
 from ezdxf.math.vector import Vector
 
 """ Some tools for convenience """
@@ -25,6 +26,62 @@ def get_pcd_of_height_map(height_map: np.ndarray):
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.Vector3dVector(height_map.copy().reshape(height_map.size // 3, 3))
     return pcd
+
+
+def find_contours(img: Union[np.ndarray, str]):
+    # проверка параметр строка или нет
+    original = None
+    gray = None
+    if isinstance(img, str):
+        original = cv2.imread(img)
+        gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+    elif isinstance(img, np.ndarray):
+        if img.ndim == 3:
+            original = img.copy()
+            gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+        elif img.ndim == 2:
+            original = cv2.merge((img.copy(), img.copy(), img.copy()))
+            gray = img.copy()
+    else:
+        raise TypeError(f'передан {type(img)}, ожидалось str или numpy.ndarray')
+
+    # избавление от минимальных шумов с помощью гауссова фильтра и отсу трешхолда
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # нахождение замкнутых объектов на картинке с помощью морфологических алгоритмов
+    kernel = np.ones((5, 5), np.uint8)
+    closing = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
+    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=2)
+    # найти однозначный задний фон
+    sureBg = cv2.dilate(opening, kernel, iterations=3)
+    distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
+    # однозначно объекты
+    ret, sureFg = cv2.threshold(distTrans, 0.1 * distTrans.max(), 255, 0)
+    sureFg = np.uint8(sureFg)
+    # область в которой находятся контура
+    unknown = cv2.subtract(sureBg, sureFg)
+    # назначение маркеров
+    ret, markers = cv2.connectedComponents(sureFg)
+    # отмечаем всё так, чтобы у заднего фона было точно 1
+    markers += 1
+    # помечаем граничную область нулём
+    markers[unknown == 255] = 0
+    markers = cv2.watershed(original, markers)
+    # выделяем контуры на изображении
+    original[markers == -1] = [0, 0, 255]
+    # количество печенек на столе (уникальные маркеры минус фон и контур всего изображения)
+    numOfCookies = len(np.unique(markers)) - 2
+    # вырезаем ненужный контур всей картинки
+    blankSpace = np.full(gray.shape, 255, dtype='uint8')
+    blankSpace[markers == 1] = 0
+    blankSpaceCropped = np.pad(blankSpace[1:-1, 1:-1], 1, 'constant')
+    # находим контуры на изображении
+    contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours = imutils.grab_contours(contours)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
+    # применяем на изначальную картинку маску с задним фоном
+    result = cv2.bitwise_and(original, original, mask=blankSpace)
+    return contours, result
 
 
 def get_colored_point_in_pcd(height_map: np.ndarray, idx, fg_color=(1, 0, 0), bg_color=(1, 0.706, 0)):
@@ -79,6 +136,22 @@ def mid_idx(arr: Sequence[T], shift: Optional[int] = 0) -> Union[T, int]:
         return arr[slice(mid - 1, mid + 1)], mid - 1
     else:
         return arr[mid], mid
+
+
+def find_center_and_rotation(contour, rotation=True):
+    # Найти центр и поворот контура
+    moments = cv2.moments(contour)
+    center_x = moments['m10'] / moments['m00']
+    center_y = moments['m01'] / moments['m00']
+    center = (center_x, center_y)
+    if rotation:
+        a = moments['m20'] / moments['m00'] - center_x ** 2
+        b = 2 * (moments['m11'] / moments['m00'] - center_x * center_y)
+        c = moments['m02'] / moments['m00'] - center_y ** 2
+        theta = 1 / 2 * np.arctan(b / (a - c)) + (a < c) * pi / 2
+        return center, theta
+    else:
+        return center
 
 
 def pairwise(iterable):

@@ -1,24 +1,29 @@
 from math import pi
-from utilities import X, Y, Z
+from typing import Union
+from utilities import X, Y, Z, find_center_and_rotation, find_contours
 import numpy as np
 import cv2
 
 
 class Cookie:
     def __init__(self, height_map, contour, bounding_box=None):
-        self._contour = contour  # контур из целой карты высот
-        self._contour_mm = None
+        self._contour = contour  # контур из целой карты высот (col, row)
+        self._contour_local = None  # контур в локальной карте высот (col, row)
+        self._contour_mm = None  # контур в мм в глобальных координатах (Y,X)
         self._height_map = height_map  # область печеньки на карте высот
-        self._center = None  # центр печенья в мм (X, Y, Z)
-        self._pixel_center = None  # центр печенья в пикселях на целой карте высот
-        self._bounding_box = bounding_box  # центр, высота и ширина области печеньки на карте высот
-        self._bounding_box_mm = None
-        self._min_bounding_box = None
-        self._min_bounding_box_mm = None
-        self._width = None  # размер печеньки вдоль Y оси в мм
-        self._length = None  # размер печеньки вдоль X оси в мм
-        self._max_height = None  # максимальная высота в контуре ограничивающем печенье в мм
+        self._center = None  # центр контура печенья в мм (X, Y, Z)
+        self._center_true = None  # центр печенья с учетом искажения сканирования (X, Y, Z)
+        self._center_pixel = None  # центр печенья в пикселях на целой карте высот (col, row)
+        self._center_local = None  # центр печенья в пикселях на локальной карте высот (col, row)
         self._rotation = None  # ориентация печеньки в пространстве в радианах
+        self._rotation_true = None
+        self._bounding_box = bounding_box  # центр, высота и ширина области печеньки на карте высот (col, row, w, h)
+        self._bounding_box_mm = None  # (Y, X, w, h) в мм
+        self._min_bounding_box = None  # ((col, row), (w, h), angle_deg) пиксели
+        self._min_bounding_box_mm = None  # ((Y, X), (w, h), angle_deg) в мм
+        self._width = None  # shorthand for min_bounding_box_mm[1,0] в мм
+        self._length = None  # shorthand for min_bounding_box_mm[1,1] в мм
+        self._max_height = None  # максимальная высота в контуре ограничивающем печенье в мм
 
     @property
     def height_map(self):
@@ -101,20 +106,29 @@ class Cookie:
             self._max_height = self.height_map[:, :, Z].max()
         return self._max_height
 
+    @property
+    def contour_idx(self) -> tuple:
+        return tuple(np.hsplit(np.fliplr(self.contour_local.reshape(self.contour_local.shape[0], 2)), 2))
+
+    @property
+    def contour_coords(self) -> np.ndarray:
+        return self.height_map[self.contour_idx]
+
+    @property
+    def contour_mean(self, axis=None):
+        return self.contour_coords.mean(axis)
+
+    @property
+    def contour_std(self, axis=None):
+        return self.contour_coords.std(axis)
+
     def find_center_and_rotation(self):
         # TODO: допилить под нахождение true центра
-        center_row, center_col = self.pixel_center
-        col, row, w, h = self.bounding_box  # кординаты описывающего прямоугольника
-        center_z = self.height_map[center_row - row, center_col - col, Z]
+        center_col, center_row = self.center_local
+        center_z = self.height_map[center_row, center_col, Z]
         # Найти центр и поворот контура по точкам в мм
-        moments = cv2.moments(self.contour_mm)
-        center_x = moments['m10'] / moments['m00']
-        center_y = moments['m01'] / moments['m00']
-        a = moments['m20'] / moments['m00'] - center_x ** 2
-        b = 2 * (moments['m11'] / moments['m00'] - center_x * center_y)
-        c = moments['m02'] / moments['m00'] - center_y ** 2
-        theta = 1 / 2 * np.arctan(b / (a - c)) + (a < c) * pi / 2
-        center = (center_y, center_x, center_z)  # координаты свапнуты из-за opencv
+        center, theta = find_center_and_rotation(self.contour_mm)
+        center = (*center[::-1], center_z)  # координаты свапнуты из-за opencv
         rotation = pi / 2 - theta  # перевод в СК принтера
         self._center = center
         self._rotation = rotation
@@ -126,3 +140,30 @@ class Cookie:
                f'    Z: {self.center[Z]: 4.2f} мм\n' + \
                f'Поворот: {self.rotation * 180 / pi:4.2f} градусов\n' + \
                f'Максимальная высота: {self.max_height:4.2f} мм'
+
+
+def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray'):
+    """
+    Функция нахождения расположения и габаритов объектов на столе из полученной карты высот
+    :param Union[np.ndarray, str] img: карта высот
+    :param np.ndarray height_map: облако точек соответствующее карте высот
+    :return cookies, result: параметры печенек, картинка с визуализацией, параметры боксов
+            ограничивающих печеньки, контура границ печенья
+    """
+
+    contours, result = find_contours(img)
+
+    cookies = []
+    for contour in contours:
+        mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
+        cv2.drawContours(mask, [contour], -1, 255, -1)
+        col, row, w, h = cv2.boundingRect(contour)
+        height_map_masked = height_map.copy()
+        height_map_masked[..., Z][mask == 0] = 0
+        height_map_fragment = height_map_masked[row:row + h, col:col + w]
+        cookie = Cookie(height_map=height_map_fragment, contour=contour, bounding_box=(col, row, w, h))
+        cookies.append(cookie)
+        cv2.circle(result, cookie.center_pixel, 3, (0, 255, 0), -1)
+
+    print('Положения печений найдены.')
+    return cookies, result
