@@ -17,6 +17,7 @@ from ezdxf.math.bspline import BSpline
 from re import findall
 import numpy as np
 from numpy import sign
+import utilities
 from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, apprx_point_height, triangle_area
 from numpy import sqrt, cos, sin, pi, arctan
 
@@ -717,11 +718,9 @@ class Drawing:
             for element in cookie_contour_layer.get_elements():
                 element.slice(0.1)
                 points += element.get_points()
-            points = np.asarray([list(v.vec2) for v in points])
-            # TODO: проверить с cv2.fitEllipse или найти способ расчёта поворота
-            centroid = get_centroid(points)
-            return Vector(centroid), 0
-            # return NULLVEC, 0
+            points = np.asarray([list(v.vec2) for v in points], dtype=np.float32)
+            center, rotation = utilities.find_center_and_rotation(points[:, np.newaxis, :], True)
+            return center, rotation
 
     @property
     def length(self) -> float:

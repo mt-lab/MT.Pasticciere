@@ -293,7 +293,7 @@ def height_by_trigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
     return height
 
 
-def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False, **kwargs) -> float:
+def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx='nearest', **kwargs) -> float:
     # find closest point in height_map(ndarray)
     # determine if given point above or below closest, take corresponding upper/lower point in map
     # determine side on which given point is relative to 2 points from map
@@ -304,6 +304,8 @@ def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False,
     # if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
     #     print(f'point {point} not in the area')
     #     return 0
+    if height_map is None and point_apprx != 'constant':
+        raise Error('cannot approximate height without point cloud. use constant height or provide cloud')
     if not inside_polygon(point, height_map[ind][:, :2]):
         print(f'point {point} not in the area')
         return 0
@@ -313,7 +315,7 @@ def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False,
         return first.z
     elif point_apprx == 'constant':
         return kwargs.get('height', 0)
-    elif point_apprx is None or 'triangle':
+    elif point_apprx == 'triangle':
         above = point[Y] > first[Y]
         idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
         try:
@@ -335,6 +337,10 @@ def apprx_point_height(point: Vector, height_map: np.ndarray, point_apprx=False,
             height = height_by_trigon(point, first, second, third)
             return height
         return first.z
+
+
+def update_existing_keys(old: dict, new: dict):
+    return {k: new[k] if k in new else old[k] for k in old}
 
 
 def read_point_cloud(path):
