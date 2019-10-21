@@ -480,6 +480,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             fine_laser_center_deriv = cv2.Sobel(fine_laser_center, -1, 0, 1, None, 1).flatten()
             fine_laser_center[
                 abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
+            # сделать паддинг для правильного нахождения Y координаты в дальнейшем
             fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), 'constant')
             ############################################################################################################
             # РАСЧЁТ ПОЛОЖЕНИЯ И УГЛА НУЛЕВОЙ ЛИНИИ #
