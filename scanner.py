@@ -96,13 +96,16 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
         tan_alphaPgamma = ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma))
         tan_thetaMgamma = (tan_theta - tan_gamma) / (1 + tan_theta * tan_gamma)
         tan_alphaPtheta = (tan_alpha + tan_theta) / (1 - tan_alpha * tan_theta)
-        try:
-            sin_thetaMgamma = 1 / (sqrt(1 + (1 / tan_thetaMgamma) ** 2))
-            sin_alphaPtheta = 1 / (sqrt(1 + (1 / tan_alphaPtheta) ** 2))
-            cos_alphaPgamma = 1 / (sqrt(1 + tan_alphaPgamma ** 2))
-            z = camera_height * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)
-        except ZeroDivisionError:
+        if tan_thetaMgamma == 0 or tan_alphaPgamma == 0 or tan_alphaPtheta == 0:
             z = 0
+        else:
+            try:
+                sin_thetaMgamma = 1 / (sqrt(1 + (1 / tan_thetaMgamma) ** 2))
+                sin_alphaPtheta = 1 / (sqrt(1 + (1 / tan_alphaPtheta) ** 2))
+                cos_alphaPgamma = 1 / (sqrt(1 + tan_alphaPgamma ** 2))
+                z = camera_height * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)
+            except ZeroDivisionError:
+                z = 0.0
         y = (camera_height - z) * tan_rho
         y = camera_shift + y if not mirrored else camera_shift - y
         x = frame_idx * kx
@@ -130,14 +133,13 @@ def find_laser_center(p=(0, 0), m=(0, 0), n=(0, 0)) -> Tuple[float, float]:
     y = ax^2 + bx + c
     """
     # TODO: обработка багов связанных с вычислениями
-    if p[X] == m[X] or m[X] == n[X]:  # если точки совпадают, аппроксимация не получится, вернуть среднюю
+    if p[0] == m[0] or m[0] == n[0]:  # если точки совпадают, аппроксимация не получится, вернуть среднюю
         return m
-    a = ((m[Y] - p[Y]) * (p[X] - n[X]) + (n[Y] - p[Y]) * (m[X] - p[X])) / (
-            (p[X] - n[X]) * (m[X] ** 2 - p[X] ** 2) + (m[X] - p[X]) * (n[X] ** 2 - p[X] ** 2))
+    a = .5 * (n[1] + p[1]) - m[1]
     if a == 0:  # если а = 0, то получилась линия, вершины нет, вернуть среднюю точку
         return m
-    b = ((m[Y] - p[Y]) - a * (m[X] ** 2 - p[X] ** 2))
-    c = p[Y] - a * p[X] ** 2 - b * p[X]
+    b = (m[1] - p[1]) - a * (2 * m[0] - 1)
+    c = p[1] - p[0] * (a * p[0] + b)
     xc = -b / (2 * a)
     yc = a * xc ** 2 + b * xc + c
     return xc, yc
@@ -192,9 +194,9 @@ def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
             continue
         prevRow = row - 1
         nextRow = row + 1 if row < deriv.shape[0] - 1 else deriv.shape[0] - 1
-        p1 = (1.0 * prevRow, deriv[prevRow, column])
-        p2 = (1.0 * row, deriv[row, column])
-        p3 = (1.0 * nextRow, deriv[nextRow, column])
+        p1 = (1. * prevRow, 1. * deriv[prevRow, column])
+        p2 = (1. * row, 1. * deriv[row, column])
+        p3 = (1. * nextRow, 1. * deriv[nextRow, column])
         fine_laser_center[column] = find_laser_center(p1, p2, p3)[0] + min_row
     fine_laser_center[fine_laser_center > max_row - 1] = max_row
     return fine_laser_center
@@ -420,6 +422,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     colored = kwargs.pop('colored', False)
     hsv_upper_bound = kwargs.pop('hsv_upper_bound', (0, 0, 0))
     hsv_lower_bound = kwargs.pop('hsv_lower_bound', (255, 255, 255))
+    verbosity = kwargs.pop('verbosity', 0)
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
     DEBUG = kwargs.pop('debug', False)
     kwargs = {k: kwargs[k] for k in kwargs if k in settings}
@@ -447,11 +450,11 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                     _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
                 else:
                     _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            blur = cv2.bitwise_and(blur, blur, mask=mask)
             ############################################################################################################
             # ВЫБОР МЕТОДА ПОИСКА ЛАЗЕРА
             ############################################################################################################
             if EXTRACTION_MODE == 'max_peak':
+                blur = cv2.bitwise_and(blur, blur, mask=mask)
                 fine_laser_center = predict_laser(blur, row_start, row_stop)
             elif EXTRACTION_MODE == 'log':
                 derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
@@ -460,6 +463,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 fine_laser_center = predict_laser(derivative, row_start,
                                                   row_stop)  # расчитать субпиксельные позиции лазера
             elif EXTRACTION_MODE == 'ggm':
+                blur = cv2.bitwise_and(blur, blur, mask=mask)
                 fine_laser_center = gray_gravity(blur, row_start, row_stop)
             elif EXTRACTION_MODE == 'iggm':
                 pass
