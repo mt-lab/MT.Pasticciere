@@ -124,9 +124,9 @@ def find_laser_center(p=(0, 0), m=(0, 0), n=(0, 0)) -> Tuple[float, float]:
     Аппроксимирует по трём точкам параболу и находит её вершину
     Таким образом более точно находит позицию лазера в изображении
 
-    :param Tuple[int, float] p: предыдущая точка от m
+    :param Tuple[int, float] p: предыдущая точка от m (m-1)
     :param Tuple[int, float] m: точка с максимальной интенсивностью, (ряд, интенсивность)
-    :param Tuple[int, float] n: следующая точка от m
+    :param Tuple[int, float] n: следующая точка от m (m+1)
     :return: уточнённая позиция лазера с субпиксельной точностью и её аппроксимированная интенсивность
 
     a, b, c - параметры квадратичной функции
@@ -175,8 +175,6 @@ def gray_gravity(img: np.ndarray, row_start=0, row_stop=480) -> np.ndarray:
 
 def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
     # TODO: написать варианты не использующие LoG:
-    #       1. применять квадратичную аппроксимацию сразу на изображение (отсутствие возможности цветного скана или в ярком освещении)
-    #       2. применять GGM (возможно ухудшение точности)
     #       3. применять IGGM (возможно замедление работы алгоритма)
     #       4. применять фильтр по фону на LoG и всё бышеперечисленное
     """
@@ -403,7 +401,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             (default) 29
         :keyword log_sigma: среднеквардратичное отклонение для 'log'
             (default) 4.45
-    :return: карту высот формы (TOTAL_FRAMES, col+stop-col_start, 3), где каждый пиксель это [X, Y, Z] координата
+    :return: карту высот формы (TOTAL_FRAMES, col_stop - col_start, 3), где каждый пиксель это [X, Y, Z] координата
     """
     FPS = cap.get(cv2.CAP_PROP_FPS)  # частота кадров видео
     TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # всего кадров в видео
