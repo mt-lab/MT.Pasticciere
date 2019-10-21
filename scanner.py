@@ -165,7 +165,7 @@ def laplace_of_gauss(img: np.ndarray, ksize: int, sigma: float = .0, delta: floa
 
 
 def gray_gravity(img: np.ndarray, row_start=0, row_stop=480) -> np.ndarray:
-    ggm = img.copy() / np.amax(img)
+    ggm = img.copy().astype(np.float32) / np.amax(img)
     centers = np.sum(ggm * (np.mgrid[:ggm.shape[0], :ggm.shape[1]][0] + 1), axis=0) / np.sum(ggm,
                                                                                              axis=0) + row_start - 1
     centers[centers > row_stop - 1] = row_stop - 1
@@ -173,21 +173,21 @@ def gray_gravity(img: np.ndarray, row_start=0, row_stop=480) -> np.ndarray:
     return centers
 
 
-def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
+def predict_laser(deriv: np.ndarray, row_start=0, row_stop=None) -> np.ndarray:
     # TODO: написать варианты не использующие LoG:
     #       3. применять IGGM (возможно замедление работы алгоритма)
     #       4. применять фильтр по фону на LoG и всё бышеперечисленное
     """
 
-    :param deriv: laplace_of_gauss transformed img
-    :param min_row: минимально возможный ряд
-    :param max_row: максимально возможный ряд
-    :return fine_laser_center: list of predicted laser subpixel positions
+    :param deriv: preprocessed img
+    :param row_start: минимально возможный ряд
+    :param row_stop: максимально возможный ряд
+    :return fine_laser: list of predicted laser subpixel positions
     """
-    approx_laser_center = np.argmax(deriv, axis=0)
-    approx_laser_center[approx_laser_center > (max_row - min_row - 1)] = 0
-    fine_laser_center = np.zeros(approx_laser_center.shape)
-    for column, row in enumerate(approx_laser_center):
+    laser = np.argmax(deriv, axis=0)
+    laser[laser > (row_stop - row_start - 1)] = 0
+    fine_laser = np.zeros(laser.shape)
+    for column, row in enumerate(laser):
         if row == 0:
             continue
         prevRow = row - 1
@@ -195,9 +195,9 @@ def predict_laser(deriv: np.ndarray, min_row=0, max_row=None) -> np.ndarray:
         p1 = (1. * prevRow, 1. * deriv[prevRow, column])
         p2 = (1. * row, 1. * deriv[row, column])
         p3 = (1. * nextRow, 1. * deriv[nextRow, column])
-        fine_laser_center[column] = find_laser_center(p1, p2, p3)[0] + min_row
-    fine_laser_center[fine_laser_center > max_row - 1] = max_row
-    return fine_laser_center
+        fine_laser[column] = find_laser_center(p1, p2, p3)[0] + row_start
+    fine_laser[fine_laser > row_stop - 1] = row_stop
+    return fine_laser
 
 
 def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239) -> Tuple[np.ndarray, float]:
@@ -270,35 +270,33 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
     TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    angle_tol = tan(1 / 180 * pi)
     firstLine = False
     row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     if row_start >= row_stop and col_start >= col_stop:
-        raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
+        raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
     while True:
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
         if ret is not True or not cap.isOpened():
             yield -1
-        if row_start <= row_stop and col_start <= col_stop:
-            roi = frame[row_start:row_stop, col_start:col_stop]
-        else:
-            raise Exception('Incorrect bounds of image')
+        roi = frame[row_start:row_stop, col_start:col_stop]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        derivative = laplace_of_gauss(gray, 29, 4.45)
         blur = cv2.GaussianBlur(gray, (33, 33), 0)
-        _, mask = cv2.threshold(blur, 5, 255, cv2.THRESH_BINARY)
-        derivative = cv2.bitwise_and(derivative, derivative, mask=mask)
-        derivative[derivative < 0] = 0
-        laser = predict_laser(derivative, row_start, row_stop)
+        _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        derivative = laplace_of_gauss(gray, 29, 4.45)  # выделить точки похожие на лазер
+        derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
+        derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
+        laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
         thresh = np.zeros(frame.shape[:2], dtype='uint8')
-        thresh[laser.astype(int), np.array([i for i in range(laser.size)])] = 255
+        thresh[laser.astype(int), np.mgrid[col_start:col_stop]] = 255
         thresh = cv2.GaussianBlur(thresh, (5, 5), 0)
         # TODO: проверку стабильности пропажи и появления лазера
-        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.6, 10)
+        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.9, 10)
         if lines is not None:
             for count, line in enumerate(lines):
                 for x1, y1, x2, y2 in line:
-                    if (y2 - y1) / (x2 - x1) > tan(1 / 180 * pi):
+                    if (y2 - y1) / (x2 - x1) > angle_tol:
                         del lines[count]
                         continue
                     #####################################################
@@ -323,7 +321,8 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
             if lines is not None:
                 start = True
         while start:
-            print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадр. Начало сканирования')
+            print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадр. Начало зоны сканирования')
+            cv2.destroyAllWindows()
             yield True
         if verbosity >= 1:
             print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров пропущенно в ожидании точки старта')
@@ -430,14 +429,13 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     hsv_lower_bound = kwargs.pop('hsv_lower_bound', (255, 255, 255))
     verbosity = kwargs.pop('verbosity', 0)
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
-    DEBUG = kwargs.pop('debug', False)
+    debug = kwargs.pop('debug', False)
     kwargs = {k: kwargs[k] for k in kwargs if k in settings}
     frame_idx = 0  # счетчик обработанных кадров
     avg_counter, laser_tangent, laser_row_pos = 0, 0, 0  # метрики стабильности нулевой линии лазера
     zero_level = None  # переменная для нулевой линии
-    fine_laser_center = None  # переменная для лазера
     if row_start >= row_stop and col_start >= col_stop:
-        raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
+        raise Exception('Incorrect bounds of image. row_start should be strictly less then row_stop.')
     height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, col_stop - col_start, 3), dtype='float32')  # карта высот
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)  # читать видео с кадра initialFrameIdx
     print('Идёт обработка данных...')
@@ -512,7 +510,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                                                     reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
             except OutOfScanArea:  # если точки вне зоны, значит закончить обработку
                 cap.release()  # закрыть видео
-                print('достигнута граница зоны сканирования')
+                print('Достигнута граница зоны сканирования')
             if verbosity == 1:
                 print(f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано')
             elif verbosity == 2:
@@ -523,7 +521,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             # ВЫВОД НА ЭКРАН ИЗОБРАЖЕНИЙ ДЛЯ ОТЛАДКИ
             ############################################################################################################
-            if DEBUG:
+            if debug:
                 frame[row_start:row_stop, [col_start, col_stop - 1]] = (255, 0, 255)
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
@@ -548,7 +546,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         return height_map
 
 
-def scan(path_to_video: str, colored: bool = False, **kwargs):
+def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **kwargs):
     """
     Функция обработки видео (сканирования)
     Находит начало области сканирования, и с этого момента обрабатывает видео поток, получает карту высот.
@@ -599,7 +597,7 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     print(f'Точка начала сканирования: {initial_frame_idx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    height_map = scanning(cap, initial_frame_idx, colored=colored, **kwargs)
+    height_map = scanning(cap, initial_frame_idx, colored=colored, verbosity=verbosity, debug=debug, **kwargs)
     globalValues.height_map = height_map
 
     # массив для нахождения позиций объектов
