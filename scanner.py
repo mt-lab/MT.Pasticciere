@@ -262,7 +262,7 @@ def normalize(img, value=1):
     return array
 
 
-def detect_start3(cap, threshhold=50, roi=None):
+def detect_start3(cap, threshhold=50, roi=None, debug=False):
     if threshhold < 0:
         yield True
     start = False
@@ -303,12 +303,15 @@ def detect_start3(cap, threshhold=50, roi=None):
                         continue
                     #####################################################
                     # """ for debug purposes """
-                    # cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    if debug:
+                        cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
         #################################################################
         # """ for debug purposes """
-        # cv2.imshow('thresh', thresh)  #
-        # cv2.imshow('frame', frame)  #
-        # cv2.waitKey(150)  #
+        if debug:
+            cv2.imshow('thresh', thresh)
+            cv2.imshow('frame', frame)
+            cv2.imshow('mask', mask)
+            cv2.waitKey(15)
         #####################################
         if not firstLine:
             if lines is not None:
@@ -581,13 +584,8 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     kwargs = {**settings_values, **kwargs}
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
-    if colored:
-        # TODO: либо отказаться от цвета совсем, либо уже придумать что то
-        start_thresh = kwargs.pop('start_thresh', 104)
-        detector = detect_start3(cap, start_thresh)
-    else:
-        start_thresh = kwargs.pop('start_thresh', 104)
-        detector = detect_start3(cap, start_thresh)
+    start_thresh = kwargs.pop('start_thresh', 104)
+    detector = detect_start3(cap, start_thresh, debug=debug)
     start = next(detector)
     while not start or start == -1:
         if start == -1:
