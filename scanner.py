@@ -518,7 +518,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
-                cv2.circle(frame, (fine_laser_center.argmax() + col_start, int(np.amax(fine_laser_center))), 3,
+                cv2.circle(frame, (fine_laser_center.argmax(), int(np.amax(fine_laser_center))), 3,
                            (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
