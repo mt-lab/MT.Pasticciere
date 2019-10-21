@@ -382,6 +382,10 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         :keyword debug: флаг отладки
             (default) False - отключена
                       True - включена визуализауция процесса
+        :keyword verbosity: подробность вывода информации
+            (default) 0 - только конечный результат
+                      1 - + сколько кадров обработано
+                      2 - + координаты и время обработки
     Параметры из конфига:
         :keyword hsv_upper_bound:       верхняя граница hsv фильтра для цветного скана
         :keyword hsv_lower_bound:       нижняя граница hsv фильтра для цветного скана
@@ -432,6 +436,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         raise Exception('Incorrect bounds of image. min_row should be strictly less then max_row.')
     height_map = np.zeros((TOTAL_FRAMES - initial_frame_idx, col_stop - col_start, 3), dtype='float32')  # карта высот
     cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame_idx)  # читать видео с кадра initialFrameIdx
+    print('Идёт обработка данных...')
     start = time.time()
     while cap.isOpened():  # пока видео открыто
         ret, frame = cap.read()
@@ -504,9 +509,12 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             except OutOfScanArea:  # если точки вне зоны, значит закончить обработку
                 cap.release()  # закрыть видео
                 print('достигнута граница зоны сканирования')
-            print(
-                f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
-                f'  X: {height_map[frame_idx][0, X]:4.2f} мм; Zmax: {height_map[frame_idx][:, Z].max():4.2f} мм')
+            if verbosity == 1:
+                print(f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано')
+            elif verbosity == 2:
+                print(
+                    f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
+                    f'  X: {height_map[frame_idx][0, X]:4.2f} мм; Zmax: {np.amax(height_map[frame_idx][:, Z]):4.2f} мм')
             frame_idx += 1
             ############################################################################################################
             # ВЫВОД НА ЭКРАН ИЗОБРАЖЕНИЙ ДЛЯ ОТЛАДКИ
