@@ -464,7 +464,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 blur = cv2.bitwise_and(blur, blur, mask=mask)
                 fine_laser_center = gray_gravity(blur, row_start, row_stop)
             elif EXTRACTION_MODE == 'iggm':
-                pass
+                raise NotImplemented('IGGM laser extraction.')
             else:
                 raise Error(f'Unknown extraction mode {EXTRACTION_MODE}')
             ############################################################################################################

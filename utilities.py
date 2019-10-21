@@ -579,7 +579,13 @@ class OutOfScanArea(Error):
             msg += f'. Real position {pos}'
         if bounds is not None:
             msg += f'. Allowed Range {bounds}'
-        self.message = msg
+        super().__init__(msg)
+
+
+class NotImplemented(Error):
+    def __init__(self, msg=''):
+        msg = 'Not implemented yet. ' + msg
+        super().__init__(msg)
 
 
 def decor_stream2img(img_func):
