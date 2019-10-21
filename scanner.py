@@ -262,7 +262,7 @@ def normalize(img, value=1):
     return array
 
 
-def detect_start3(cap, threshhold=50, roi=None, debug=False):
+def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
     if threshhold < 0:
         yield True
     start = False
@@ -325,7 +325,8 @@ def detect_start3(cap, threshhold=50, roi=None, debug=False):
         while start:
             print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадр. Начало сканирования')
             yield True
-        print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров пропущенно в ожидании точки старта')
+        if verbosity >= 1:
+            print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров пропущенно в ожидании точки старта')
         yield False
 
 
@@ -585,7 +586,7 @@ def scan(path_to_video: str, colored: bool = False, **kwargs):
     # найти кадр начала сканирования
     print('Ожидание точки старта...')
     start_thresh = kwargs.pop('start_thresh', 104)
-    detector = detect_start3(cap, start_thresh, debug=debug)
+    detector = detect_start3(cap, start_thresh, verbosity=verbosity, debug=debug)
     start = next(detector)
     while not start or start == -1:
         if start == -1:
