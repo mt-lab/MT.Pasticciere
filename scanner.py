@@ -462,10 +462,12 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 blur = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
             else:
                 blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
-                if THRESH_VALUE > 0:
+                if THRESH_VALUE == 0:
+                    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                elif THRESH_VALUE > 0:
                     _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
                 else:
-                    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    mask = np.full_like(blur, 255, np.uint8)
             ############################################################################################################
             # ВЫБОР МЕТОДА ПОИСКА ЛАЗЕРА
             ############################################################################################################
@@ -523,6 +525,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 height_map[frame_idx] = find_coords(frame_idx, fine_laser_center, zero_level, frame_shape=FRAME_SHAPE,
                                                     reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
             except OutOfScanArea:  # если точки вне зоны, значит закончить обработку
+                height_map = height_map[:frame_idx]
                 cap.release()  # закрыть видео
                 print('Достигнута граница зоны сканирования')
             if verbosity == 1:
