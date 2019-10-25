@@ -206,7 +206,8 @@ def predict_laser(deriv: np.ndarray, row_start=0, row_stop=None) -> np.ndarray:
     return fine_laser
 
 
-def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239) -> Tuple[np.ndarray, float]:
+def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, col_start=0, col_stop=640, padl=50,
+                       padr=50) -> Tuple[np.ndarray, float]:
     """
     Расчитывает положение нулевой линии и её угол по крайним точкам из массива
 
@@ -214,16 +215,19 @@ def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239) -> T
     :param mid_row: средний ряд кадра, значение по умолчанию если расчёт не получится
     :return: массив точек нулевой линии и тангенс наклона линии от горизонтали
     """
-    zero_level = np.full_like(laser, mid_row)
-    tangent = .0
-    nonzero_indices = laser.nonzero()[0]
-    if nonzero_indices.size:
-        first_nonzero = nonzero_indices[0]
-        last_nonzero = nonzero_indices[-1]
-        tangent = (laser[last_nonzero] - laser[first_nonzero]) / (last_nonzero - first_nonzero)
-        tangent = .0 if tangent == np.inf else tangent
-        zero_level = np.array(
-            [(column - first_nonzero) * tangent + laser[first_nonzero] for column in range(laser.size)])
+    if padl < 0 or padr < 0:
+        raise Error
+    data_x = laser.nonzero()[0]
+    data_x = data_x[(data_x < col_start + padl) | (data_x > col_stop - padr)]
+    if data_x.size:
+        data_y = laser[data_x]
+        k = np.polyfit(data_x, data_y, 1)
+        line = np.poly1d(k)
+        zero_level = np.array([line(col) for col in range(laser.size)])
+        tangent = k[0]
+    else:
+        zero_level = np.full_like(laser, mid_row)
+        tangent = 0
     return zero_level, tangent
 
 
@@ -435,6 +439,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     hsv_lower_bound = kwargs.pop('hsv_lower_bound', (255, 255, 255))
     verbosity = kwargs.pop('verbosity', 0)
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
+    zero_level_padl, zero_level_padr = kwargs.pop('zero_level_zone', (10, 10))
     debug = kwargs.pop('debug', False)
     kwargs = {k: kwargs[k] for k in kwargs if k in settings}
     frame_idx = 0  # счетчик обработанных кадров
@@ -492,10 +497,12 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             # РАСЧЁТ ПОЛОЖЕНИЯ И УГЛА НУЛЕВОЙ ЛИНИИ #
             ############################################################################################################
             if AVG_TIME <= 0:  # если не задано усреднять лазер, то считать нулевой уровень в каждом кадре
-                zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1)
+                zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
+                                                   zero_level_padl, zero_level_padr)
             elif avg_counter < AVG_TIME:  # если задано усреднять и лазер ещё не усреднён
                 # найти нулевую линию, её угол и отклонение от предыдущего значения
-                zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT / 2 - 1)
+                zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
+                                                         zero_level_padl, zero_level_padr)
                 angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))
                 pos_error = abs(laser_row_pos - zero_level[0])
                 #  если параметры линии отклоняются в допустимых пределах
@@ -530,6 +537,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             if debug:
                 frame[row_start:row_stop, [col_start, col_stop - 1]] = (255, 0, 255)
+                frame[row_start:row_stop, [col_start + zero_level_padl, col_stop - zero_level_padl]] = (127, 255, 127)
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
