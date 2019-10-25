@@ -225,7 +225,7 @@ def getScan():
     time.sleep(1)
     console.send('G0 F2000 Z46\n')
     time.sleep(2)
-    console.send('G0 X200 Y100\n')
+    console.send('G0 X200 Y112\n')
     time.sleep(10)
     client.exec_command(r'ffmpeg -y -f video4linux2 -r 30 -video_size 640x480 \
                         -i /dev/video0 -t 00:00:43 -vcodec mpeg4 \
