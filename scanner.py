@@ -612,7 +612,14 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     height_map_8bit = (height_map_z / np.amax(height_map_z) * 255).astype(np.uint8)
 
     height_map_8bit[height_map_z < 1] = 0
+    factory = np.abs(height_map[0, 0, Y] - height_map[0, -1, Y]) / height_map.shape[1]
+    factorx = np.abs(height_map[0, 0, X] - height_map[-1, 0, X]) / height_map.shape[0]
+    scale_factor = factory / factorx
+    height_map_8bit_real = cv2.resize(height_map_8bit, None, fx=scale_factor, fy=1)
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
+    cookies, detected_contours = procecc_cookies(cookies, height_map, img=detected_contours)
+    detected_contours_real = cv2.resize(detected_contours, None, fx=scale_factor, fy=1)
+    print('Положения печений найдены.')
     if len(cookies) != 0:
         globalValues.cookies = cookies
         print_objects(cookies, f'Объектов найдено: {len(cookies):{3}}')
@@ -620,8 +627,10 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
 
     # сохранить карты
     cv2.imwrite('height_map.png', height_map_8bit)
-    save_height_map(height_map)
+    cv2.imwrite('height_map_real.png', height_map_8bit_real)
+    cv2.imwrite('cookies_real.png', detected_contours_real)
     cv2.imwrite('cookies.png', detected_contours)
+    save_height_map(height_map)
 
     cap.release()
     cv2.destroyAllWindows()

@@ -1,14 +1,16 @@
 from math import pi
-from typing import Union
+from typing import Union, List
 from utilities import X, Y, Z, find_center_and_rotation, find_contours
 import numpy as np
 import cv2
 
 
 class Cookie:
-    def __init__(self, height_map, contour, bounding_box=None):
-        self._contour = contour  # контур из целой карты высот (col, row)
+    def __init__(self, height_map, contour_global, bounding_box=None, contour_center=None):
+        self._contour_global = contour_global  # контур из целой карты высот (col, row)
         self._contour_local = None  # контур в локальной карте высот (col, row)
+        self._contour_center = contour_center
+        # TODO: изменить координаты на (X,Y) для избежания путаницы с углом поворота печенья
         self._contour_mm = None  # контур в мм в глобальных координатах (Y,X)
         self._height_map = height_map  # область печеньки на карте высот
         self._center = None  # центр контура печенья в мм (X, Y, Z)
@@ -30,23 +32,41 @@ class Cookie:
         return self._height_map
 
     @property
-    def contour(self):
-        return self._contour
+    def contour_global(self):
+        return self._contour_global
 
     @property
     def contour_local(self):
-        if self._contour_local is None:
-            col, row, *_ = self.bounding_box
-            self._contour_local = self.contour - np.array([col, row])
-        return self._contour_local
+        col, row, *_ = self.bounding_box
+        return self.contour_global - np.array([col, row])
 
     @property
-    def contour_mm(self):
-        if self._contour_mm is None:
-            self._contour_mm = np.asarray([[(self.height_map[point[0, 1], point[0, 0], Y],
-                                             self.height_map[point[0, 1], point[0, 0], X])]
-                                           for point in self.contour_local], dtype=np.float32)
-        return self._contour_mm
+    def contour_center(self):
+        if self._contour_center is None:
+            return self.contour_global
+        return self._contour_center
+
+    @property
+    def contour_center_local(self):
+        if self._contour_center is None:
+            return self.contour_local
+        col, row, *_ = self.bounding_box
+        return self._contour_center - np.array([col, row])
+
+    @contour_center.setter
+    def contour_center(self, contour):
+        self._contour_center = contour
+
+    def contour_mm(self, contour='local'):
+        if contour == 'local':
+            contour = self.contour_local
+        elif contour == 'center':
+            contour = self.contour_center_local
+        else:
+            raise
+        return np.asarray([[(self.height_map[point[0, 1], point[0, 0], Y],
+                             self.height_map[point[0, 1], point[0, 0], X])]
+                           for point in contour], dtype=np.float32)
 
     @property
     def center(self):
@@ -56,16 +76,14 @@ class Cookie:
 
     @property
     def center_pixel(self):
-        if self._center_pixel is None:
-            self._center_pixel = find_center_and_rotation(self.contour, False)
-            self._center_pixel = tuple(int(round(c)) for c in self._center_pixel)
+        self._center_pixel = find_center_and_rotation(self.contour_center, False)
+        self._center_pixel = tuple(int(round(c)) for c in self._center_pixel)
         return self._center_pixel
 
     @property
     def center_local(self):
-        if self._center_local is None:
-            self._center_local = (self.center_pixel[0] - self.bounding_box[0],
-                                  self.center_pixel[1] - self.bounding_box[1])
+        self._center_local = (self.center_pixel[0] - self.bounding_box[0],
+                              self.center_pixel[1] - self.bounding_box[1])
         return self._center_local
 
     @property
@@ -76,38 +94,34 @@ class Cookie:
 
     @property
     def width(self):
-        if self._width is None:
-            self._width = self.min_bounding_box_mm[1][1]
-        return self._width
+        return self.min_bounding_box_mm[1][1]
 
     @property
     def length(self):
-        if self._length is None:
-            self._length = self.min_bounding_box_mm[1][0]
-        return self._length
+        return self.min_bounding_box_mm[1][0]
 
     @property
     def bounding_box(self):
         if self._bounding_box is None:
-            self._bounding_box = cv2.boundingRect(self.contour)
+            self._bounding_box = cv2.boundingRect(self.contour_global)
         return self._bounding_box
 
     @property
     def bounding_box_mm(self):
         if self._bounding_box_mm is None:
-            self._bounding_box_mm = cv2.boundingRect(self.contour_mm)
+            self._bounding_box_mm = cv2.boundingRect(self.contour_mm('global'))
         return self._bounding_box_mm
 
     @property
     def min_bounding_box(self):
         if self._min_bounding_box is None:
-            self._min_bounding_box = cv2.minAreaRect(self.contour)
+            self._min_bounding_box = cv2.minAreaRect(self.contour_global)
         return self._min_bounding_box
 
     @property
     def min_bounding_box_mm(self):
         if self._min_bounding_box_mm is None:
-            self._min_bounding_box_mm = cv2.minAreaRect(self.contour_mm)
+            self._min_bounding_box_mm = cv2.minAreaRect(self.contour_mm('global'))
         return self._min_bounding_box_mm
 
     @property
@@ -116,32 +130,45 @@ class Cookie:
             self._max_height = self.height_map[:, :, Z].max()
         return self._max_height
 
-    @property
-    def contour_idx(self) -> tuple:
-        return tuple(np.hsplit(np.fliplr(self.contour_local.reshape(self.contour_local.shape[0], 2)), 2))
+    def contour_idx(self, contour='local') -> tuple:
+        if contour == 'local':
+            contour = self.contour_local
+        elif contour == 'center':
+            contour = self.contour_center_local
+        else:
+            raise
+        return tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))
 
-    @property
-    def contour_coords(self) -> np.ndarray:
-        return self.height_map[self.contour_idx]
+    def contour_coords(self, contour='local') -> np.ndarray:
+        return self.height_map[self.contour_idx(contour)]
 
-    @property
-    def contour_mean(self, axis=None):
-        return self.contour_coords.mean(axis)
+    def contour_z_mean(self, contour='local'):
+        return self.contour_coords(contour)[..., Z].mean()
 
-    @property
-    def contour_std(self, axis=None):
-        return self.contour_coords.std(axis)
+    def contour_z_max(self, contour='local'):
+        return np.amax(self.contour_coords(contour)[..., Z])
+
+    def contour_z_min(self, contour='local'):
+        return np.amin(self.contour_coords(contour)[..., Z])
+
+    def contour_z_std(self, contour='local'):
+        return self.contour_coords(contour)[..., Z].std()
 
     def find_center_and_rotation(self):
         # TODO: допилить под нахождение true центра
         center_col, center_row = self.center_local
         center_z = self.height_map[center_row, center_col, Z]
         # Найти центр и поворот контура по точкам в мм
-        center, theta = find_center_and_rotation(self.contour_mm)
+        center, theta = find_center_and_rotation(self.contour_mm('center'))
         center = (*center[::-1], center_z)  # координаты свапнуты из-за opencv
         rotation = pi / 2 - theta  # перевод в СК принтера
         self._center = center
         self._rotation = rotation
+
+    def copy(self):
+        return self.__class__(self.height_map, self.contour_global, self.bounding_box, self.contour_center)
+
+    __copy__ = copy
 
     def __str__(self):
         return 'Центр:\n' + \
@@ -171,9 +198,39 @@ def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray'):
         height_map_masked = height_map.copy()
         height_map_masked[..., Z][mask == 0] = 0
         height_map_fragment = height_map_masked[row:row + h, col:col + w]
-        cookie = Cookie(height_map=height_map_fragment, contour=contour, bounding_box=(col, row, w, h))
+        cookie = Cookie(height_map=height_map_fragment, contour_global=contour, bounding_box=(col, row, w, h))
         cookies.append(cookie)
         cv2.circle(result, cookie.center_pixel, 3, (0, 255, 0), -1)
-
-    print('Положения печений найдены.')
     return cookies, result
+
+
+def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 0.1, img: np.ndarray = None):
+    pos_img = (height_map[..., Z].copy() / np.amax(height_map[..., Z]) * 255).astype(np.uint8) if img is None else img
+    processed = []
+    while len(cookies) != 0:
+        cookie = cookies.pop()
+        mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
+        cv2.drawContours(mask, [cookie.contour_global], 0, 255, -1)
+        height_map_masked = height_map.copy()
+        height_map_masked[..., Z][mask == 0] = 0
+        p_std = 0
+        std = cookie.contour_z_std('center')
+        mean = cookie.contour_z_mean('center')
+        while abs(p_std - std) > tol:
+            height_map_masked[..., Z][height_map_masked[..., Z] < mean] = 0
+            img = (height_map_masked[..., Z] / np.amax(height_map_masked[..., Z]) * 255).astype(np.uint8)
+            new_cookies, _ = find_cookies(img, height_map_masked)
+            if len(new_cookies) == 1:
+                cookie.contour_center = new_cookies[0].contour_global
+                p_std = std
+                std = cookie.contour_z_std('center')
+                mean = cookie.contour_z_mean('center')
+            elif len(new_cookies) == 0:
+                break
+            elif len(new_cookies) > 1:
+                cookies += new_cookies
+                break
+        processed.append(cookie)
+        cv2.drawContours(pos_img, [cookie.contour_center], 0, (255, 0, 255), 1)
+        cv2.circle(pos_img, cookie.center_pixel, 3, (255, 0, 0), -1)
+    return processed, pos_img
