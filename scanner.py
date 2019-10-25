@@ -28,6 +28,12 @@ kx = 1 / 3  # мм/кадр
 
 settings = ['hsv_upper_bound',
             'hsv_lower_bound',
+            'reverse',
+            'mirrored',
+            'extraction_mode',
+            'avg_time',
+            'laser_angle_tol',
+            'laser_pos_tol',
             'distance_camera2laser',
             'camera_shift',
             'camera_angle',
