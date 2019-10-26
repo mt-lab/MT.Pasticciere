@@ -25,6 +25,7 @@ class Cookie:
         self._min_bounding_box_mm = None  # ((Y, X), (w, h), angle_deg) в мм
         self._width = None  # shorthand for min_bounding_box_mm[1,0] в мм
         self._length = None  # shorthand for min_bounding_box_mm[1,1] в мм
+        self._area = None
         self._max_height = None  # максимальная высота в контуре ограничивающем печенье в мм
 
     @property
@@ -48,10 +49,8 @@ class Cookie:
 
     @property
     def contour_center_local(self) -> np.ndarray:
-        if self._contour_center is None:
-            return self.contour_local
         col, row, *_ = self.bounding_box
-        return self._contour_center - np.array([col, row])
+        return self.contour_center - np.array([col, row])
 
     @contour_center.setter
     def contour_center(self, contour):
@@ -165,6 +164,10 @@ class Cookie:
         self._center = center
         self._rotation = rotation
 
+    @property
+    def area(self):
+        return cv2.moments(self.contour_mm())['m00']
+
     def copy(self):
         return self.__class__(self.height_map, self.contour_global, self.bounding_box, self.contour_center)
 
@@ -210,9 +213,10 @@ def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 
     processed = []
     while len(cookies) != 0:
         cookie = cookies.pop()
-        mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
-        cv2.drawContours(mask, [cookie.contour_global], 0, 255, -1)
-        height_map_masked = height_map.copy()
+        anchor = np.array(cookie.bounding_box[:2])
+        mask = np.zeros(cookie.height_map.shape[:2], dtype=np.uint8)
+        cv2.drawContours(mask, [cookie.contour_local], 0, 255, -1)
+        height_map_masked = cookie.height_map.copy()
         height_map_masked[..., Z][mask == 0] = 0
         p_std = 0
         c_cnt_z = cookie.contour_coords('center')[..., Z]
@@ -224,7 +228,7 @@ def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 
             img = (height_map_masked[..., Z] / np.amax(height_map_masked[..., Z]) * 255).astype(np.uint8)
             new_cookies, _ = find_cookies(img, height_map_masked)
             if len(new_cookies) == 1:
-                cookie.contour_center = new_cookies[0].contour_global
+                cookie.contour_center = new_cookies[0].contour_global + anchor
                 p_std = std
                 c_cnt_z = cookie.contour_coords('center')[..., Z]
                 c_cnt_z[c_cnt_z == 0] = c_cnt_z.mean()
@@ -233,7 +237,8 @@ def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 
             elif len(new_cookies) == 0:
                 break
             elif len(new_cookies) > 1:
-                cookies += new_cookies
+                cookies += [Cookie(new_cookie.height_map, new_cookie.contour_global + anchor) for new_cookie in
+                            new_cookies if new_cookie.area / cookie.area >= .5]
                 break
         processed.append(cookie)
         cv2.drawContours(pos_img, [cookie.contour_center], 0, (255, 0, 255), 1)
