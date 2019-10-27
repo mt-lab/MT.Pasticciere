@@ -448,16 +448,15 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             if EXTRACTION_MODE == 'max_peak':
                 blur = cv2.bitwise_and(blur, blur, mask=mask)
-                fine_laser_center = predict_laser(blur, row_start, row_stop)
+                laser = predict_laser(blur, row_start, row_stop)
             elif EXTRACTION_MODE == 'log':
                 derivative = laplace_of_gauss(gray, ksize, sigma)  # выделить точки похожие на лазер
                 derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
                 derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
-                fine_laser_center = predict_laser(derivative, row_start,
-                                                  row_stop)  # расчитать субпиксельные позиции лазера
+                laser = predict_laser(derivative, row_start, row_stop)  # расчитать субпиксельные позиции лазера
             elif EXTRACTION_MODE == 'ggm':
                 blur = cv2.bitwise_and(blur, blur, mask=mask)
-                fine_laser_center = gray_gravity(blur, row_start, row_stop)
+                laser = gray_gravity(blur, row_start, row_stop)
             elif EXTRACTION_MODE == 'iggm':
                 raise NotImplemented('IGGM laser extraction.')
             else:
@@ -465,20 +464,19 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             # если по производной положений лазера есть всплески отклонение которых от среднего больше чем пять
             # среднеквадратичных, то считать эту точку невалидной и занулить её
-            fine_laser_center_deriv = cv2.Sobel(fine_laser_center, -1, 0, 1, None, 1).flatten()
-            fine_laser_center[
-                abs(fine_laser_center_deriv.mean() - fine_laser_center_deriv) > 5 * fine_laser_center_deriv.std()] = 0
+            laser_deriv = cv2.Sobel(laser, -1, 0, 1, None, 1).flatten()
+            laser[abs(laser_deriv.mean() - laser_deriv) > 5 * laser_deriv.std()] = 0
             # сделать паддинг для правильного нахождения Y координаты в дальнейшем
-            fine_laser_center = np.pad(fine_laser_center, (col_start, FRAME_WIDTH - col_stop), 'constant')
+            laser = np.pad(laser, (col_start, FRAME_WIDTH - col_stop), 'constant')
             ############################################################################################################
             # РАСЧЁТ ПОЛОЖЕНИЯ И УГЛА НУЛЕВОЙ ЛИНИИ #
             ############################################################################################################
             if AVG_TIME <= 0:  # если не задано усреднять лазер, то считать нулевой уровень в каждом кадре
-                zero_level, _ = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
+                zero_level, _ = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
                                                    zero_level_padl, zero_level_padr)
             elif avg_counter < AVG_TIME:  # если задано усреднять и лазер ещё не усреднён
                 # найти нулевую линию, её угол и отклонение от предыдущего значения
-                zero_level, tangent = predict_zero_level(fine_laser_center, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
+                zero_level, tangent = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
                                                          zero_level_padl, zero_level_padr)
                 angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))
                 pos_error = abs(laser_row_pos - zero_level[0])
@@ -491,13 +489,13 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                     laser_row_pos, laser_tangent, avg_counter = zero_level[0], tangent, 0
                 # TODO: вставить предупреждение если лазер долго нестабилен
                 # расчитать нулевой уровень по расчитанным параметрам и обрезать по roi
-                zero_level = np.mgrid[:fine_laser_center.size] * laser_tangent + laser_row_pos
+                zero_level = np.mgrid[:laser.size] * laser_tangent + laser_row_pos
             zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
             ############################################################################################################
             # занулить точки где положение "лазера" ниже нулевой линии
-            fine_laser_center[fine_laser_center < zero_level] = zero_level[fine_laser_center < zero_level]
+            laser[laser < zero_level] = zero_level[laser < zero_level]
             try:  # расчитать физические координаты точек лазера
-                height_map[frame_idx] = find_coords(frame_idx, fine_laser_center, zero_level, frame_shape=FRAME_SHAPE,
+                height_map[frame_idx] = find_coords(frame_idx, laser, zero_level, frame_shape=FRAME_SHAPE,
                                                     reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
             except OutOfScanArea:  # если точки вне зоны, значит закончить обработку
                 height_map = height_map[:frame_idx]
@@ -517,9 +515,9 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 frame[row_start:row_stop, [col_start, col_stop - 1]] = (255, 0, 255)
                 frame[row_start:row_stop, [col_start + zero_level_padl, col_stop - zero_level_padr]] = (127, 255, 127)
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
-                frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
+                frame[laser.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
-                cv2.circle(frame, (fine_laser_center.argmax(), int(np.amax(fine_laser_center))), 3,
+                cv2.circle(frame, (laser.argmax(), int(np.amax(laser))), 3,
                            (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
