@@ -22,6 +22,10 @@ from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, ap
 from numpy import sqrt, cos, sin, pi, arctan
 
 
+# TODO: нарзека одновременно с расчётом Z координаты
+# TODO: MLS для расчёта Z координаты
+
+
 class Element():
     """
     Общий класс с функциями общими для всех элементов, многие оверрайдятся в конкретных случаях
