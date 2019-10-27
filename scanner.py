@@ -522,7 +522,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             if debug:
                 frame[row_start:row_stop, [col_start, col_stop - 1]] = (255, 0, 255)
-                frame[row_start:row_stop, [col_start + zero_level_padl, col_stop - zero_level_padl]] = (127, 255, 127)
+                frame[row_start:row_stop, [col_start + zero_level_padl, col_stop - zero_level_padr]] = (127, 255, 127)
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[fine_laser_center.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
