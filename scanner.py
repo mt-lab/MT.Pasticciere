@@ -6,7 +6,7 @@ Author: bedlamzd of MT.lab
 """
 
 import numpy as np
-from numpy import cos, tan, sqrt, pi
+from numpy import cos, sin, tan, pi, arctan
 import cv2
 from typing import Tuple
 from utilities import save_height_map, OutOfScanArea, Error, mid_idx, print_objects
@@ -48,7 +48,7 @@ settings = ['hsv_upper_bound',
             ]
 
 
-def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray,
+def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
                 frame_shape: Tuple = (480, 640),
                 mirrored: bool = False, reverse: bool = False,
                 distance_camera2laser: float = 94,
@@ -62,7 +62,7 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
     Расчёт физических координат точек по их положению в кадре и положению нулевой линии
 
     :param int frame_idx: номер кадра
-    :param np.ndarray laser_points: массив длины frame_shape[1], позиции лазера
+    :param np.ndarray laser: массив длины frame_shape[1], позиции лазера
     :param np.ndarray zero_level: массив длины frame_shape[1], позиции нулевой линии
     :param Tuple frame_shape: размеры кадра
     :param bool mirrored: ориентация. 0 слева - False, 0 справа - True
@@ -81,48 +81,30 @@ def find_coords(frame_idx: int, laser_points: np.ndarray, zero_level: np.ndarray
     :raises OutOfScanArea: если точка вне зоны сканирования по X
     :return: массив физических координат точек в глобальной системе координат
     """
-    positions = np.zeros((frame_shape[1], 3))  # массив для координат точек
+    # TODO: посчитать расстояние между лазером и соплом
+    # TODO: добавить переключение взаимного расположения камеры и лазера (добавлять координату или убавлять)
+    row_mid, col_mid = frame_shape[0] / 2 - 1, frame_shape[1] / 2 - 1
     row = mid_idx(zero_level)[0]  # найти центр лазера
     if isinstance(row, np.ndarray):
         row = row.mean()
     # найти высоту камеры по центральной точке
-    tan_alpha = tan(camera_angle)
-    cos_alpha = cos(camera_angle)
-    dpy0 = (row - (frame_shape[0] / 2 - 1)) * pixel_size
-    tan_gamma = dpy0 / focal_length
-    tan_alphaPgamma = ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma))
-    camera_height = distance_camera2laser / tan_alphaPgamma  # высота камеры
-    for column in range(laser_points.size):
-        dpy0 = (zero_level[column] - (frame_shape[0] / 2 - 1)) * pixel_size
-        dpy = (laser_points[column] - (frame_shape[0] / 2 - 1)) * pixel_size
-        dpx = (column - (frame_shape[1] / 2) - 1) * pixel_size
-        tan_gamma = dpy0 / focal_length
-        tan_theta = dpy / focal_length
-        tan_rho = dpx / (focal_length * cos_alpha)
-        tan_alphaPgamma = ((tan_alpha + tan_gamma) / (1 - tan_alpha * tan_gamma))
-        tan_thetaMgamma = (tan_theta - tan_gamma) / (1 + tan_theta * tan_gamma)
-        tan_alphaPtheta = (tan_alpha + tan_theta) / (1 - tan_alpha * tan_theta)
-        if tan_thetaMgamma == 0 or tan_alphaPgamma == 0 or tan_alphaPtheta == 0:
-            z = 0
-        else:
-            try:
-                sin_thetaMgamma = 1 / (sqrt(1 + (1 / tan_thetaMgamma) ** 2))
-                sin_alphaPtheta = 1 / (sqrt(1 + (1 / tan_alphaPtheta) ** 2))
-                cos_alphaPgamma = 1 / (sqrt(1 + tan_alphaPgamma ** 2))
-                z = camera_height * sin_thetaMgamma / (sin_alphaPtheta * cos_alphaPgamma)
-            except ZeroDivisionError:
-                z = 0.0
-        y = (camera_height - z) * tan_rho
-        y = camera_shift + y if not mirrored else camera_shift - y
-        x = frame_idx * kx
-        x = x if not reverse else - x
-        if x0 + x < 0 or abs(x) > table_length:  # если x вне зоны сканирования райзнуть ошибку
-            raise OutOfScanArea(pos=x + x0, bounds=table_length)
-        if 0 <= z <= table_height:
-            positions[column] = np.array([x + x0, y + y0, z + z0])
-        else:
-            positions[column] = np.array([x + x0, y + y0, z0])
-    return positions
+    dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
+    gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
+    camera_height = distance_camera2laser / tan(camera_angle + gamma)  # высота камеры
+    dpy0 = (zero_level - row_mid) * pixel_size  # массив отклонений точек нулевой линии от центра кадра по вертикали
+    dpy = (laser - row_mid) * pixel_size  # массив отклонений точек лазера от центра кадра по вертикале
+    dpx = (np.mgrid[:laser.size] - col_mid) * pixel_size  # массив отклоненний точек лазера от центра по горизонтали
+    gamma = arctan(dpy0 / focal_length)  # массив углов отклонения нулевой линии от оси камеры
+    theta = arctan(dpy / focal_length)  # массив углом отклонения точек лазера от оси камеры
+    z = camera_height * sin(theta - gamma) / (sin(camera_angle + theta) * cos(camera_angle + gamma))  # высоты
+    z[(z < 0) | (z > table_height)] = 0  # всё, что вне диапазона занулить
+    y = (camera_height - z) * dpx / (focal_length * cos(camera_angle))  # массив Y координат
+    y = camera_shift + y if not mirrored else camera_shift - y  # если зеркально, то отзеркалить
+    x = frame_idx * kx - camera_height * tan(camera_angle + gamma)  # массив X координат
+    x = x if not reverse else - x  # развернуть если скан наоборот
+    if np.any(abs(x) > table_length):  # проверка конца сканирования
+        raise OutOfScanArea
+    return np.column_stack([x + x0, y + y0, z + z0])
 
 
 def find_laser_center(p=(0, 0), m=(0, 0), n=(0, 0)) -> Tuple[float, float]:
@@ -223,7 +205,7 @@ def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, col_
         data_y = laser[data_x]
         k = np.polyfit(data_x, data_y, 1)
         line = np.poly1d(k)
-        zero_level = np.array([line(col) for col in range(laser.size)])
+        zero_level = line(np.mgrid[:laser.size])
         tangent = k[0]
     else:
         zero_level = np.full_like(laser, mid_row)
@@ -516,7 +498,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                     laser_row_pos, laser_tangent, avg_counter = zero_level[0], tangent, 0
                 # TODO: вставить предупреждение если лазер долго нестабилен
                 # расчитать нулевой уровень по расчитанным параметрам и обрезать по roi
-                zero_level = np.array([x * laser_tangent + zero_level[0] for x in range(fine_laser_center.size)])
+                zero_level = np.mgrid[:fine_laser_center.size] * laser_tangent + laser_row_pos
             zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
             ############################################################################################################
             # занулить точки где положение "лазера" ниже нулевой линии
