@@ -8,7 +8,7 @@ Author: bedlamzd of MT.lab
 import numpy as np
 from numpy import cos, sin, tan, pi, arctan
 import cv2
-from typing import Tuple
+from typing import Union, Optional, Tuple
 from utilities import save_height_map, OutOfScanArea, Error, mid_idx, print_objects
 import globalValues
 from globalValues import get_settings_values, settings_sections
@@ -20,26 +20,46 @@ import time
 # масштабные коэффициенты для построения облака точек
 kx = 1 / 3  # мм/кадр
 
-settings = ['hsv_upper_bound',
-            'hsv_lower_bound',
-            'reverse',
-            'mirrored',
-            'extraction_mode',
-            'avg_time',
-            'laser_angle_tol',
-            'laser_pos_tol',
-            'distance_camera2laser',
-            'camera_shift',
-            'camera_angle',
-            'focal_length',
-            'pixel_size',
-            'table_length',
-            'table_width',
-            'table_height',
-            'x0',
-            'y0',
-            'z0',
-            ]
+
+def find_chekpoint(coords: np.ndarray,
+                   height: float,
+                   width: Optional[float] = None,
+                   gaps: Union[np.ndarray, float, None] = None,
+                   n: Optional[int] = None, tol: float = 0.1, **kwargs):
+    gap_tol = kwargs.get('gap_tol', tol)
+    h_tol = kwargs.get('height_tol', tol)
+    w_tol = kwargs.get('width_tol', tol)
+    pulses = np.where(np.abs(coords[..., Z] - height) < h_tol, 1, 0)  # найти все точки где высота подходящая
+    pulses_pos = np.diff(pulses, prepend=0, append=0)[1:-1]  # найти переходы высот
+    starts = np.where(pulses_pos > 0)[0] + 1  # индексы начала переходов
+    if not starts.size:
+        return False, None, None
+    ends, = np.where(pulses_pos < 0)  # индексы концов переходов
+    starts_coords = coords[starts, Y]  # координата по Y начал переходов
+    ends_coords = coords[ends, Y]  # координата по Y концов переходов
+    w = ends_coords - starts_coords  # ширина переходов в мм
+    g = starts_coords[1:] - ends_coords[:-1]
+    if width is not None:
+        cond = np.abs(w - width) < w_tol  # условие что переход подходит
+        starts = starts[cond]
+        if not starts.size:
+            return False, None, None
+        ends = ends[cond]
+        starts_coords = starts_coords[cond]  # координата начал переходов, где переход нужной ширины
+        ends_coords = ends_coords[cond]  # координата концов переходов, где переход нужной ширины
+        w = w[cond]  # ширина правильных переходов
+        g = starts_coords[1:] - ends_coords[:-1]
+    if gaps is not None:
+        if isinstance(gaps, float) or isinstance(gaps, int) or (isinstance(gaps, np.ndarray) and gaps.size == g.size):
+            if np.any(np.abs(g - gaps) > gap_tol):
+                return False, None, None
+        else:
+            return False, None, None
+    if n is not None:
+        if w.size != n:
+            return False, None, None
+    marks = np.column_stack((starts_coords, ends_coords, w, np.insert(g, 0, starts_coords[0])))
+    return True, marks, np.column_stack((starts, ends))
 
 
 def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
