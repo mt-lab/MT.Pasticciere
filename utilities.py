@@ -582,12 +582,6 @@ class OutOfScanArea(Error):
         super().__init__(msg)
 
 
-class NotImplemented(Error):
-    def __init__(self, msg=''):
-        msg = 'Not implemented yet. ' + msg
-        super().__init__(msg)
-
-
 def decor_stream2img(img_func):
     """
     Декоратор позволяющий использовать функции для кадров с видео
