@@ -306,6 +306,8 @@ def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx
     #     return 0
     if height_map is None and point_apprx != 'constant':
         raise Error('cannot approximate height without point cloud. use constant height or provide cloud')
+    if point_apprx == 'constant':
+        return kwargs.get('height', 0)
     if not inside_polygon(point, height_map[ind][:, :2]):
         print(f'point {point} not in the area')
         return 0
@@ -313,8 +315,6 @@ def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx
     first = Vector(height_map[idx_first])
     if point_apprx == 'nearest':
         return first.z
-    elif point_apprx == 'constant':
-        return kwargs.get('height', 0)
     elif point_apprx == 'triangle':
         above = point[Y] > first[Y]
         idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
