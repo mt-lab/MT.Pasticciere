@@ -416,7 +416,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
     zero_level_padl, zero_level_padr = kwargs.pop('zero_level_zone', (10, 10))
     debug = kwargs.pop('debug', False)
-    kwargs = {k: kwargs[k] for k in kwargs if k in settings}
+    kwargs = {k: kwargs[k] for k in kwargs if k in settings_sections}
     frame_idx = 0  # счетчик обработанных кадров
     avg_counter, laser_tangent, laser_row_pos = 0, 0, 0  # метрики стабильности нулевой линии лазера
     zero_level = None  # переменная для нулевой линии
@@ -563,8 +563,9 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     row_start = 100
     row_stop = 400
 
-    settings_values = get_settings_values(
-        **{k: settings_sections[k] for k in settings if k in settings_sections})  # параметры из конфига
+    settings_values = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
+                                             settings_sections[k][0] in ['Scanner', 'Camera',
+                                                                         'Table']})  # параметры из конфига
 
     cap = cv2.VideoCapture(path_to_video)  # чтение видео
     calibrate_kx(cap.get(cv2.CAP_PROP_FPS))  # откалибровать kx согласно FPS

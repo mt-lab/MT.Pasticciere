@@ -11,6 +11,7 @@ from gcodeGen import *
 from elements import *
 from utilities import read_point_cloud, print_objects
 import globalValues
+from globalValues import get_settings_values, settings_sections
 from scanner import find_cookies
 from cookie import Cookie
 
@@ -130,8 +131,9 @@ def dxf2gcode(path_to_dxf: str, *args, **kwargs):
     :return: None
     """
 
-    settings_values = globalValues.get_settings_values(**globalValues.settings_sections)
-    kwargs.update(settings_values)
+    settings_values = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
+                                             settings_sections[k][0] in ['GCoder', 'Table']})
+    kwargs = {**settings_values, **kwargs}
 
     # прочесть dxf
     dxf = ez.readfile(path_to_dxf)
