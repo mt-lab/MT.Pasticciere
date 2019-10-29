@@ -26,7 +26,7 @@ def find_chekpoint(coords: np.ndarray,
                    width: Optional[float] = None,
                    gaps: Union[np.ndarray, float, None] = None,
                    n: Optional[int] = None, tol: float = 0.1, **kwargs):
-    gap_tol = kwargs.get('gap_tol', tol)
+    gap_tol = kwargs.get('gap_tol', 2 * tol)
     h_tol = kwargs.get('height_tol', tol)
     w_tol = kwargs.get('width_tol', tol)
     pulses = np.where(np.abs(coords[..., Z] - height) < h_tol, 1, 0)  # найти все точки где высота подходящая
@@ -332,6 +332,44 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
         if verbosity >= 1:
             print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров пропущенно в ожидании точки старта')
         yield False
+
+
+def detect_start4(cap, height=5, width=5, gaps=5, n=5, tol=0.5, roi=None, verbosity=0, debug=False, **kwargs):
+    mirror = False
+    reverse = False
+    TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    padl = kwargs.get('padl', 10)
+    padr = kwargs.get('padr', 10)
+    row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
+    if row_start >= row_stop and col_start >= col_stop:
+        raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
+    while True:
+        frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        ret, frame = cap.read()
+        if ret is not True or not cap.isOpened():
+            yield -1
+        roi = frame[row_start:row_stop, col_start:col_stop]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (33, 33), 0)
+        _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        derivative = laplace_of_gauss(gray, 29, 4.45)  # выделить точки похожие на лазер
+        derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
+        derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
+        laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
+        zero_level, _ = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop, padl, padr)
+        coords = find_coords(frameIdx, laser, zero_level, (FRAME_HEIGHT, FRAME_WIDTH), mirror, reverse, **kwargs)
+        start, pos, idx = find_chekpoint(coords, height, width, gaps, n, tol)
+        #################################################################
+        # """ for debug purposes """
+        if debug:
+            cv2.imshow('frame', frame)
+            cv2.imshow('mask', mask)
+            cv2.waitKey(15)
+        #####################################
+        yield start
+
 
 
 def skeletonize(img):
