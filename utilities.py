@@ -321,11 +321,12 @@ def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx
         sup_r = 1
         deg = (2, 2)
         data = height_map.reshape(height_map.size // 3, 3)
-        cond = np.sum(np.power(data - point, 2), axis=1) <= sup_r ** 2
+        cond = np.sum(np.power(data[:, :2] - point[:2], 2), axis=1) <= sup_r ** 2
         data = data[cond]
+        data = data - (point[X], point[Y], 0)
         if data.size:
-            c = mls3d(data, point, sup_r, deg).reshape((deg[0] + 1, deg[1] + 1))
-            z = polyval2d(point[X], point[Y], c)
+            c = mls3d(data, (0, 0), sup_r, deg).reshape((deg[0] + 1, deg[1] + 1))
+            z = polyval2d(0, 0, c)
             return z
         else:
             return 0
