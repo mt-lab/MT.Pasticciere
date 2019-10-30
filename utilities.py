@@ -2,6 +2,8 @@ from typing import List, Union, Tuple, Iterable, Sequence, Optional, Any, TypeVa
 from itertools import tee
 from functools import reduce, wraps
 import numpy as np
+from numpy.linalg import inv
+from numpy.polynomial.polynomial import polyvander, polyvander2d, polyval2d
 import cv2
 import open3d
 import imutils
@@ -315,6 +317,18 @@ def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx
     first = Vector(height_map[idx_first])
     if point_apprx == 'nearest':
         return first.z
+    elif point_apprx == 'mls':
+        sup_r = 1
+        deg = (2, 2)
+        data = height_map.reshape(height_map.size // 3, 3)
+        cond = np.sum(np.power(data - point, 2), axis=1) <= sup_r ** 2
+        data = data[cond]
+        if data.size:
+            c = mls3d(data, point, sup_r, deg).reshape((deg[0] + 1, deg[1] + 1))
+            z = polyval2d(point[X], point[Y], c)
+            return z
+        else:
+            return 0
     elif point_apprx == 'triangle':
         above = point[Y] > first[Y]
         idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
@@ -724,36 +738,50 @@ def apprx_x(coords: np.ndarray, height_map: np.ndarray, d, y, h, w, tol):
     return height_map
 
 
-def polynom(deg: int = 0):
-    return lambda n: n ** deg
+def mls2d(x, y, p=0, r=1, deg: int = 1):
+    B = polyvander(x, deg)
+    rj = np.sqrt(np.power(x - p, 2)) / r
+    W = np.diag(np.where(rj <= 1, 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4, 0))
+    c = inv(B.T @ W @ B) @ B.T @ W @ y
+    return c
 
 
-def eval(x: float):
-    return lambda f: f(x)
+def mls3d(data: np.ndarray, p=(0, 0), r=1, deg=(0, 0)):
+    B = polyvander2d(data[:, 0], data[:, 1], deg)
+    rj = np.sqrt(np.sum(np.power(data[:, :2] - p[:2], 2), axis=1)) / r
+    W = np.diag(np.where(rj <= 1, 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4, 0))
+    try:
+        c = inv(B.T @ W @ B) @ B.T @ W @ data[:, 2]
+    except np.linalg.LinAlgError:
+        print('fuck')
+        return np.zeros((deg[0] + 1) * (deg[0] + 1))
+    return c
 
 
-def mat_eval(val, arr):
-    return list(map(eval(val), arr))
+def tnc(x, poly: np.poly1d):
+    p1 = poly.deriv(1)
+    p2 = poly.deriv(2)
+    tangent = p1(x)
+    normal = -1 / tangent
+    curv = p2(x) / (p1(x) ^ 2 + 1) ** 1.5
+    return tangent, normal, curv
 
 
-def weight(rj):
-    if rj <= 1:
-        return 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4
-    else:
-        return 0
-
-
-def rj(Cj, Cp, Rs: float):
-    return np.sqrt((Cj[0] - Cp[0]) ** 2 + (Cj[1] - Cp[1]) ** 2) / Rs
-
-
-def fit(m, n, values):
-    if len(values) != n:
-        raise Error
-    pT = np.array([polynom(i) for i in range(m)])
-    P = np.array([list(map(eval(value), pT)) for value in values])
-    W = np.diag(list(map(weight, values)))
-    A = P.T @ W @ P
-    A_inv = np.linalg.inv(A)
-    B = P.T @ W
-    F = lambda val: mat_eval(val, pT) @ A_inv @ B
+def iggm(data: np.ndarray, points: np.ndarray, **kwargs):
+    rho_min = kwargs.get('rho_min', 1)
+    s = kwargs.get('s', 3)
+    rho_max = kwargs.get('rho_max', s * rho_min)
+    w_min = kwargs.get('w_min', 1)
+    w_max = kwargs.get('w_max', 1)
+    l = kwargs.get('l', 30)
+    support = kwargs.get('supporting_radius', 10)
+    deg = kwargs.get('deg', 3)
+    new_centers = np.array(data.shape[1])
+    for point in points:
+        poly = np.poly1d(mls2d(data, point, support, 3)[::-1])
+        t, n, rho = tnc(point, poly)
+        if rho > rho_max:
+            rho = rho_max
+        elif rho < rho_min:
+            rho = rho_min
+        w = (rho - rho_min) / (rho_max - rho_min) * w_max + (rho - rho_max) / (rho_min - rho_max) * w_min
