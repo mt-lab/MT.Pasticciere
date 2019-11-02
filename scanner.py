@@ -119,9 +119,9 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
     gamma = arctan(dpy0 / focal_length)  # массив углов отклонения нулевой линии от оси камеры
     theta = arctan(dpy / focal_length)  # массив углом отклонения точек лазера от оси камеры
     z = camera_height * sin(theta - gamma) / (sin(camera_angle + theta) * cos(camera_angle + gamma))  # высоты
-    y = (camera_height - z) * dpx / (focal_length * cos(camera_angle))  # массив Y координат
+    y = (camera_height - z * (camera_height > z)) * dpx / (focal_length * cos(camera_angle))  # массив Y координат
     y = camera_shift + y if not mirrored else camera_shift - y  # если зеркально, то отзеркалить
-    x = frame_idx * kx - camera_height * tan(camera_angle + gamma)  # массив X координат
+    x = frame_idx * kx + camera_height * tan(camera_angle + gamma) - distance_camera2laser  # массив X координат
     x = x if not reverse else - x  # развернуть если скан наоборот
     return np.column_stack([x, y, z])
 
@@ -298,11 +298,13 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
         derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
         derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
         laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
+        fit, tang = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop, (col_stop - col_start) // 2,
+                                       (col_stop - col_start) // 2)
         thresh = np.zeros(frame.shape[:2], dtype='uint8')
-        thresh[laser.astype(int), np.mgrid[col_start:col_stop]] = 255
+        thresh[laser.astype(int)[laser.astype(int).nonzero()], laser.astype(int).nonzero()] = 255
         thresh = cv2.GaussianBlur(thresh, (5, 5), 0)
         # TODO: проверку стабильности пропажи и появления лазера
-        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.9, 10)
+        lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.96, 10)
         if lines is not None:
             for count, line in enumerate(lines):
                 for x1, y1, x2, y2 in line:
@@ -321,15 +323,15 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
             cv2.imshow('mask', mask)
             cv2.waitKey(15)
         #####################################
-        if not firstLine:
-            if lines is not None:
-                firstLine = True
-        elif not mirror:
-            if lines is None:
-                mirror = True
-        else:
-            if lines is not None:
-                start = True
+        # if not firstLine:
+        #     if lines is not None:
+        #         firstLine = True
+        # elif not mirror:
+        #     if lines is None:
+        #         mirror = True
+        # else:
+        if lines is not None and tang <= angle_tol:
+            start = True
         while start:
             print(f'{frameIdx + 1:{3}}/{TOTAL_FRAMES:{3}} кадр. Начало зоны сканирования')
             cv2.destroyAllWindows()
@@ -567,8 +569,8 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             # если по производной положений лазера есть всплески отклонение которых от среднего больше чем пять
             # среднеквадратичных, то считать эту точку невалидной и занулить её
-            laser_deriv = cv2.Sobel(laser, -1, 0, 1, None, 1).flatten()
-            laser[abs(laser_deriv.mean() - laser_deriv) > 5 * laser_deriv.std()] = 0
+            # laser_deriv = cv2.Sobel(laser, -1, 0, 1, None, 1).flatten()
+            # laser[abs(laser_deriv.mean() - laser_deriv) > 5 * laser_deriv.std()] = 0
             # сделать паддинг для правильного нахождения Y координаты в дальнейшем
             laser = np.pad(laser, (col_start, FRAME_WIDTH - col_stop), 'constant')
             ############################################################################################################
@@ -603,6 +605,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 height_map = height_map[:frame_idx]
                 cap.release()  # закрыть видео
                 print('Достигнута граница зоны сканирования')
+                print(f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано')
             if verbosity == 1:
                 print(f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано')
             elif verbosity == 2:
@@ -679,7 +682,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     try:  # найти кадр начала сканирования
         print('Ожидание точки старта...')
         start_thresh = kwargs.pop('start_thresh', 104)
-        detector = detect_start3(cap, start_thresh, verbosity=verbosity, debug=debug)
+        detector = detect_start3(cap, start_thresh, roi=kwargs.get('roi'), verbosity=verbosity, debug=debug)
         start = next(detector)
         while not start:
             start = next(detector)

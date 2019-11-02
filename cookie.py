@@ -63,7 +63,7 @@ class Cookie:
         elif contour == 'center':
             contour = self.contour_center_local
         else:
-            raise
+            raise Exception
         return np.asarray([[(self.height_map[point[0, 1], point[0, 0], Y],
                              self.height_map[point[0, 1], point[0, 0], X])]
                            for point in contour], dtype=np.float32)
@@ -109,7 +109,7 @@ class Cookie:
     @property
     def bounding_box_mm(self) -> np.ndarray:
         if self._bounding_box_mm is None:
-            self._bounding_box_mm = cv2.boundingRect(self.contour_mm('global'))
+            self._bounding_box_mm = cv2.boundingRect(self.contour_mm('local'))
         return self._bounding_box_mm
 
     @property
@@ -121,7 +121,7 @@ class Cookie:
     @property
     def min_bounding_box_mm(self) -> np.ndarray:
         if self._min_bounding_box_mm is None:
-            self._min_bounding_box_mm = cv2.minAreaRect(self.contour_mm('global'))
+            self._min_bounding_box_mm = cv2.minAreaRect(self.contour_mm('local'))
         return self._min_bounding_box_mm
 
     @property
