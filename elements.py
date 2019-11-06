@@ -6,20 +6,15 @@ Author: bedlamzd of MT.lab
 т.к. ezdxf не предоставляет методов необходимых для решения задачи.
 """
 
-from typing import List, Union, Any, Optional, Tuple, Dict
+from typing import List, Union, Optional, Tuple, Dict
 from itertools import count
-from cv2 import moments
-import math
-import ezdxf as ez
-import ezdxf.math as geom
 from ezdxf.math.vector import Vector, NULLVEC
 from ezdxf.math.bspline import BSpline
 from re import findall
 import numpy as np
-from numpy import sign
 import utilities
-from utilities import X, Y, Z, pairwise, diap, find_point_in_cloud, distance, apprx_point_height, triangle_area
-from numpy import sqrt, cos, sin, pi, arctan
+from utilities import X, Y, Z, pairwise, apprx_point_height, triangle_area
+from numpy import cos, sin, pi
 
 
 # TODO: нарзека одновременно с расчётом Z координаты

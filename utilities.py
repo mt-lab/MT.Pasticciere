@@ -1,3 +1,10 @@
+"""
+utilities.py
+Author: bedlamzd of MT.lab
+
+Различные функции необходимые в процессе работы
+"""
+
 from typing import List, Union, Tuple, Iterable, Sequence, Optional, Any, TypeVar
 from itertools import tee
 from functools import reduce, wraps
@@ -14,23 +21,64 @@ from ezdxf.math.vector import Vector
 
 # TODO: рефактор и комментарии
 
-X, Y, Z = 0, 1, 2
+X, Y, Z = 0, 1, 2  # переменные для более явного обращения к координатам в массиве вместо цифр
 
 T = TypeVar('T')
 
 
 def show_height_map(height_map: np.ndarray):
+    """
+    Показать карту высот в виде облака точек
+
+    :param height_map: карта высот
+    """
     pcd = get_pcd_of_height_map(height_map)
     open3d.draw_geometries_with_editing([pcd])
 
 
-def get_pcd_of_height_map(height_map: np.ndarray):
+def get_pcd_of_height_map(height_map: np.ndarray) -> open3d.geometry.PointCloud:
+    """
+    преобразует карту высот в open3d.PointCloud
+
+    :param height_map: карта высот
+    :return: облако точек
+    """
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.Vector3dVector(height_map.copy().reshape(height_map.size // 3, 3))
     return pcd
 
 
+def get_pcd_of_height_map_with_normals(height_map: np.ndarray, radius=None, knn=None, ref=np.array([0, 0, 1])):
+    """
+    преобразует карту высот в облако точек с расчитанными нормалями для каждой точки
+
+    :param height_map: карта высот
+    :param radius: в каком радиусе учитывать точки
+    :param knn: максимальное количество точек для расчета
+    :param ref: опорный вектор относительно которого располагать остальные нормали
+    :return: облако точек
+    """
+    pcd = get_pcd_of_height_map(height_map)
+    if radius is None and knn is None:
+        raise
+    elif knn is None:
+        param = open3d.geometry.KDTreeSearchParamRadius(radius)
+    elif radius is None:
+        param = open3d.geometry.KDTreeSearchParamKNN(knn)
+    else:
+        param = open3d.geometry.KDTreeSearchParamHybrid(radius, knn)
+    open3d.geometry.estimate_normals(pcd, param)
+    open3d.geometry.orient_normals_to_align_with_direction(pcd, ref)
+    return pcd
+
+
 def find_contours(img: Union[np.ndarray, str]):
+    """
+    Находит контуры в изображении
+
+    :param img: картинка либо путь до картинки
+    :return: возвращает контуры из изображения и изображение с отмеченными на нём контурами
+    """
     # проверка параметр строка или нет
     original = None
     gray = None
@@ -88,12 +136,13 @@ def find_contours(img: Union[np.ndarray, str]):
 
 def get_colored_point_in_pcd(height_map: np.ndarray, idx, fg_color=(1, 0, 0), bg_color=(1, 0.706, 0)):
     """
+    раскрашивает точки из idx в fg_color а всё остальное в bg_color
 
-    :param height_map:
-    :param idx: flat_idx
-    :param fg_color:
-    :param bg_color:
-    :return:
+    :param height_map: карта высот для покраски
+    :param idx: индексы flatten карты высот
+    :param fg_color: цвет для выбранных точек
+    :param bg_color: цвет остальных точек
+    :return: облако точек
     """
     pcd = get_pcd_of_height_map(height_map)
     if idx:
@@ -107,14 +156,34 @@ def get_colored_point_in_pcd(height_map: np.ndarray, idx, fg_color=(1, 0, 0), bg
 
 
 def get_max_height_coords(height_map: np.ndarray):
+    """
+    возвращает координаты точки с максимальной высотой в карте высот
+
+    :param height_map: карта высот
+    :return: np.array([X,Y,Z]) координаты точки
+    """
     return height_map[height_map[..., Z].argmax()]
 
 
 def get_max_height_idx(height_map: np.ndarray):
+    """
+    возвращает индекс точки с максимальной высотой в карте
+
+    :param height_map: карта высот
+    :return: индекс размера height_map.ndim - 1
+    """
     return np.unravel_index(height_map[..., Z].argmax(), height_map.shape[:2])
 
 
 def get_nearest(point, height_map: np.ndarray, planar=True):
+    """
+    возвращает индекс точки ближайшей к данной в плоскости или в пространстве
+
+    :param point: точка относительно которой поиск
+    :param height_map: карта высот
+    :param planar: в плоскости или в пространстве
+    :return: индекс размера height_map.ndim - 1
+    """
     if len(point) < 2 or len(point) > 3:
         raise TypeError('only 2D or 3D points')
     if planar:
@@ -124,6 +193,14 @@ def get_nearest(point, height_map: np.ndarray, planar=True):
 
 
 def get_furthest(point, height_map: np.ndarray, planar=True):
+    """
+    возвращает индекс точки самой удалённой от данной в плоскости или в пространстве
+
+    :param point: точка относительно которой поиск
+    :param height_map: карта высот
+    :param planar: в плоскости или в пространстве
+    :return: индекс размера height_map.ndim - 1
+    """
     if len(point) < 2 or len(point) > 3:
         raise TypeError('only 2D or 3D points')
     if planar:
@@ -133,15 +210,30 @@ def get_furthest(point, height_map: np.ndarray, planar=True):
 
 
 def mid_idx(arr: Sequence[T], shift: Optional[int] = 0) -> Union[T, int]:
+    """
+    находит средний элемент(ы) в массиве и его индекс(ы)
+
+    :param arr: массив для поиска
+    :param shift: сдвиг от центра
+    :return: элемент массива и его индекс если len(arr)%2==1 или слайс двух средних элементов и индекс первого из них
+    """
     mid = int(len(arr) / 2) + shift
     if len(arr) % 2 == 0:
-        return arr[slice(mid - 1, mid + 1)], mid - 1
+        return arr[mid - 1: mid + 1], mid - 1
     else:
         return arr[mid], mid
 
 
 def find_center_and_rotation(contour, rotation=True):
-    # Найти центр и поворот контура
+    """
+    Найти центр и поворот контура
+
+    :param contour: контур для расчётв
+    :param rotation: находить ли его поворот
+    :return:
+        центр контура
+        центр контура и его поворот
+    """
     moments = cv2.moments(contour)
     center_x = moments['m10'] / moments['m00']
     center_y = moments['m01'] / moments['m00']
@@ -165,6 +257,14 @@ def pairwise(iterable):
 
 def print_objects(objects: Any, pre_msg: Optional[str] = None, object_msg: Optional[str] = '',
                   sep: Optional[str] = '#'):
+    """
+    Печатает коллекцию объектов поддерживающих функцию print с каким то однотипным сообщением перед каждым
+    :param objects: коллекция объектов
+    :param pre_msg: сообщение в самом начале
+    :param object_msg: сообщение под каждым объектом
+    :param sep: разделитель объектов
+    :return: None
+    """
     if pre_msg is not None:
         print(pre_msg)
     print(sep * 30)
@@ -227,6 +327,7 @@ def distance(p1, p2: Union[List[float], Tuple[float]] = (.0, .0, .0), simple=Fal
 
 
 def line_side(m: Vector, p1: Vector = (0, 0, 0), p2: Vector = (1, 1, 0)) -> Union['-1', '0', '1']:
+    # TODO: какая то туфта - удалить
     """
     check to which side of the line (p1,p2) the point m is
     :param m: point to check
@@ -239,13 +340,15 @@ def line_side(m: Vector, p1: Vector = (0, 0, 0), p2: Vector = (1, 1, 0)) -> Unio
     return pos
 
 
-def triangle_area(a, b, c, signed=False):
+def triangle_area(a, b, c, signed=False) -> float:
+    # считает площадь треугольника по 3 точкам
     # TODO: вынести в elements
     area = (a[X] * (b[Y] - c[Y]) + b[X] * (c[Y] - a[Y]) + c[X] * (a[Y] - b[Y])) / 2.0
     return area if signed else abs(area)
 
 
-def polygon_area(poly: List):
+def polygon_area(poly: List) -> float:
+    # считает площадь полигона без самопересечений по точкам
     total_area = 0
     for i in range(len(poly) - 2):
         a, b, c = poly[0], poly[i + 1], poly[i + 2]
@@ -254,7 +357,8 @@ def polygon_area(poly: List):
     return abs(total_area)
 
 
-def inside_polygon(p, poly: List[List[float]]):
+def inside_polygon(p, poly: List[List[float]]) -> bool:
+    # проверка точка p внутри полигона или нет
     # TODO: use cv.polygonTest
     p = [round(coord, 2) for coord in p]
     boundary_area = round(polygon_area(poly))
@@ -266,7 +370,8 @@ def inside_polygon(p, poly: List[List[float]]):
     return True
 
 
-def inside_triangle(p, a, b, c):
+def inside_triangle(p, a, b, c) -> bool:
+    # проверка точка p внутри треугольника или нет
     # TODO: вынести в elements
     total_area = round(triangle_area(a, b, c), 3)
     area_pab = triangle_area(p, a, b)
@@ -279,6 +384,7 @@ def inside_triangle(p, a, b, c):
 
 
 def height_by_trigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
+    # расчёт высоты по трём точкам внутри которых данная p
     # TODO: вынести в elements
     axy = np.asarray(a)
     bxy = np.asarray(b)
@@ -296,97 +402,74 @@ def height_by_trigon(p=(0, 0), a=(0, 0, 0), b=(0, 0, 0), c=(0, 0, 0)):
 
 
 def apprx_point_height(point: Vector, height_map: np.ndarray = None, point_apprx='nearest', **kwargs) -> float:
-    # find closest point in height_map(ndarray)
-    # determine if given point above or below closest, take corresponding upper/lower point in map
-    # determine side on which given point is relative to 2 points from map
-    # take corresponding left or right points
-    # check if point inside the triangle formed by founded 3 points
-    # calculate height for a point
+    """
+    аппроксимация высоты для данной точки p по карте высот по алгоритму
+    :param point: точка для аппроксимации
+    :param height_map: карта высот
+    :param point_apprx: метод аппроксимации
+        (default)   nearest - высота ближайшей точки к данной в облаке
+                    constant - вернуть заданную высоту или 0 если не указано
+                    mls - moving least squares аппроксимация
+    :param kwargs: параметры для каджого из методов
+                    constant:
+                        height - высота которую надо вернуть (default - 0)
+                    mls:
+                        support_radius - радиус в пределах которого учитывать точки (default - 1.)
+                        degree - порядок полинома для аппроксимации в формате (xm, ym) (default - (1,1))
+    :return: аппроксимированная высота точки
+    """
     ind = ((0, 0, -1, -1), (0, -1, -1, 0))
-    # if cv2.pointPolygonTest(height_map[ind][:, :2].astype(np.float32), tuple(point[:2]), False) <= 0:
-    #     print(f'point {point} not in the area')
-    #     return 0
     if height_map is None and point_apprx != 'constant':
         raise Error('cannot approximate height without point cloud. use constant height or provide cloud')
     if point_apprx == 'constant':
         return kwargs.get('height', 0)
-    if not inside_polygon(point, height_map[ind][:, :2]):
+    elif inside_polygon(point, height_map[ind][:, :2]):
+        if point_apprx == 'mls':
+            return mls_height_apprx(height_map, point, **kwargs)
+        elif point_apprx == 'nearest':
+            idx_first = get_nearest(point, height_map, True)
+            first = Vector(height_map[idx_first])
+            return first.z
+        else:
+            raise Error(f'no such algorithm {point_apprx}')
+    else:
         print(f'point {point} not in the area')
         return 0
-    idx_first = get_nearest(point, height_map, True)
-    first = Vector(height_map[idx_first])
-    if point_apprx == 'nearest':
-        return first.z
-    elif point_apprx == 'mls':
-        sup_r = 1
-        deg = (2, 2)
-        data = height_map.reshape(height_map.size // 3, 3)
-        cond = np.sum(np.power(data[:, :2] - point[:2], 2), axis=1) <= sup_r ** 2
-        data = data[cond]
-        data = data - (point[X], point[Y], 0)
-        if data.size:
-            c = mls3d(data, (0, 0), sup_r, deg).reshape((deg[0] + 1, deg[1] + 1))
-            z = polyval2d(0, 0, c)
-            return z
-        else:
-            return 0
-    elif point_apprx == 'triangle':
-        above = point[Y] > first[Y]
-        idx_second = (idx_first[X], idx_first[Y] + 1) if above else (idx_first[X], idx_first[Y] - 1)
-        try:
-            second = Vector(height_map[idx_second])
-        except IndexError:
-            return first.z
-        first2second = first.distance(second)
-        side = line_side(point, first, second)
-        if side == 0:
-            height = first.lerp(second, point.distance(first) / first2second).z
-            return height
-        else:
-            idx_third = (idx_first[X] + int(side), idx_first[Y])
-        try:
-            third = height_map[idx_third]
-        except IndexError:
-            return first.z
-        if inside_triangle(point, first, second, third):
-            height = height_by_trigon(point, first, second, third)
-            return height
-        return first.z
+
+
+def mls_height_apprx(height_map, point, **kwargs) -> float:
+    """
+    аппроксимация высоты точки по облаку с помощью moving least squares
+
+    :param height_map: карта высот
+    :param point: точка для аппроксимации
+    :param kwargs:
+        support_radius - радиус в пределах которого учитывать точки (default - 1.)
+        degree - порядок полинома для аппроксимации в формате (xm, ym) (default - (1,1))
+    :return:
+    """
+    sup_r = kwargs.get('support_radius', 1.)
+    deg = kwargs.get('degree', (1, 1))
+    data = height_map.reshape(height_map.size // 3, 3)
+    cond = np.sum(np.power(data[:, :2] - point[:2], 2), axis=1) <= sup_r ** 2
+    data = data[cond] - (point[X], point[Y], 0)
+    if data.size >= ((deg[0] + 1) * (deg[1] + 1)):
+        c = mls3d(data, (0, 0), sup_r, deg).reshape((deg[0] + 1, deg[1] + 1))
+        z = polyval2d(0, 0, c)
+        return z
+    else:
+        return 0
 
 
 def update_existing_keys(old: dict, new: dict):
     return {k: new[k] if k in new else old[k] for k in old}
 
 
-def read_point_cloud(path):
-    """ Read PLY point cloud into numpy array, also split it for xy and z coordinates """
-    pcd = []
-    with open(path) as cld:
-        ply = cld.readlines()
-    ply = ply[8:]
-    for row in ply:
-        pcd.append([float(x) for x in row.split()])
-    pcd = np.asarray(pcd)
-    pcd_xy, pcd_z = np.split(pcd, [Z], axis=1)
-    return pcd, pcd_xy, pcd_z
-
-
-def find_point_in_cloud(point, pcd_xy, pcd_z):
-    """ Find corresponding Z coordinate for a given point in given point cloud """
-    point = list(point)[:2]
-    # closest_points = sorted(pcd, key=lambda p:distance(p, point[:2], simple=True))[:3]
-    # point[X] += offset[X] #-50
-    # point[Y] += offset[Y] #120
-    # z = apprx_point_height(point, closest_points)
-    z = pcd_z[np.sum(np.abs(pcd_xy - point), axis=1).argmin()][0]
-    # point.append(z if z else 0)
-    return z if z else 0
-
-
 def find_angle_of_view(view_range: int = 640,
                        focal: float = 2.9,
                        pxl_size: float = 0.005) -> float:
     """
+    расчитывает угол обзора камеры
 
     :param view_range: длинна обзора в пикселях
     :param focal: фокусное расстояние
@@ -504,6 +587,11 @@ def angle_from_video(video: Union[str, int], **kwargs):
 
 
 def select_hsv_values(video):
+    """
+    функция помощник для подбора hsv значений для фильтра
+    :param video: видеопоток либо с камеры либо из файла
+    :return:
+    """
     params = {'h1': 0, 'h2': 255, 's1': 0, 's2': 255, 'v1': 0, 'v2': 255}
     setwin = 'hsv_set'
     reswin = 'result'
@@ -542,59 +630,16 @@ def select_hsv_values(video):
     return lowerb, upperb
 
 
-def save_height_map(height_map: np.ndarray, filename='height_map.txt'):
-    with open(filename, 'w') as outfile:
-        outfile.write('{0}\n'.format(height_map.shape))
-        outfile.write('# Data starts here\n')
-        for dimension in height_map:
-            np.savetxt(outfile, dimension, fmt='%-7.3f')
-            outfile.write('# New dimension\n')
-
-
-def generate_ply(points_array, filename='cloud.ply'):
-    """
-    Генерирует файл облака точек
-
-    :param points_array - массив точек с координатами
-    :param filename - имя файла для записи, по умолчанию cloud.ply
-    :return: None
-    """
-    print('Generating point cloud...')
-    ply = []
-    for count, point in enumerate(points_array, 1):
-        ply.append(f'{point[X]:.3f} {point[Y]:.3f} {point[Z]:.3f}\n')
-    with open(filename, 'w+') as cloud:
-        cloud.write("ply\n"
-                    "format ascii 1.0\n"
-                    f"element vertex {len(ply)}\n"
-                    "property float x\n"
-                    "property float y\n"
-                    "property float z\n"
-                    "end_header\n")
-        for count, point in enumerate(ply, 1):
-            cloud.write(point)
-    print(f'{len(ply):{6}} points recorded')
-
-
 def nothing(*args, **kwargs):
     pass
 
 
 class Error(Exception):
+    """
+    класс для ошибок внутри моего кода и алгоритмов
+    """
     def __init__(self, msg=None):
         self.message = f'Unknown error' if msg is None else msg
-
-
-class OutOfScanArea(Error):
-    def __init__(self, message='Out of scaning area', **kwargs):
-        pos = kwargs.get('pos')
-        bounds = kwargs.get('bounds')
-        msg = message
-        if pos is not None:
-            msg += f'. Real position {pos}'
-        if bounds is not None:
-            msg += f'. Allowed Range {bounds}'
-        super().__init__(msg)
 
 
 def decor_stream2img(img_func):
@@ -631,8 +676,9 @@ def decor_stream2img(img_func):
                 if max_loops is None or count_loops < max_loops:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     count_loops += 1
-                print('max loops reached')
-                cap.release()
+                else:
+                    print('max loops reached')
+                    cap.release()
             else:
                 print('video ended or crashed')
                 cap.release()
@@ -739,17 +785,36 @@ def apprx_x(coords: np.ndarray, height_map: np.ndarray, d, y, h, w, tol):
     return height_map
 
 
-def mls2d(x, y, p=0, r=1, deg: int = 1):
+def mls2d(x, y, p=0, support_radius=1, deg: int = 1):
+    """
+    двумерный moving least squares
+
+    :param x: данные по x
+    :param y: данные по y соответствующие x
+    :param p: опорная точка
+    :param support_radius: радиус влияния
+    :param deg: степень полинома
+    :return: коэффициенты полинома
+    """
     B = polyvander(x, deg)
-    rj = np.sqrt(np.power(x - p, 2)) / r
+    rj = np.sqrt(np.power(x - p, 2)) / support_radius
     W = np.diag(np.where(rj <= 1, 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4, 0))
     c = inv(B.T @ W @ B) @ B.T @ W @ y
     return c
 
 
-def mls3d(data: np.ndarray, p=(0, 0), r=1, deg=(0, 0)):
+def mls3d(data: np.ndarray, p=(0, 0), support_radius=1, deg=(0, 0)):
+    """
+    трехмерный moving least squares
+
+    :param data: набор (x,y,z) точек для аппроксимации
+    :param p: опорная точка
+    :param support_radius: радиус влияния
+    :param deg: степень полинома
+    :return: коэффициенты полинома
+    """
     B = polyvander2d(data[:, 0], data[:, 1], deg)
-    rj = np.sqrt(np.sum(np.power(data[:, :2] - p[:2], 2), axis=1)) / r
+    rj = np.sqrt(np.sum(np.power(data[:, :2] - p[:2], 2), axis=1)) / support_radius
     W = np.diag(np.where(rj <= 1, 1 - 6 * rj ** 2 + 8 * rj ** 3 - 3 * rj ** 4, 0))
     try:
         c = inv(B.T @ W @ B) @ B.T @ W @ data[:, 2]
@@ -769,6 +834,7 @@ def tnc(x, poly: np.poly1d):
 
 
 def iggm(data: np.ndarray, points: np.ndarray, **kwargs):
+    # черновик для внедрения improved grey gravity method
     rho_min = kwargs.get('rho_min', 1)
     s = kwargs.get('s', 3)
     rho_max = kwargs.get('rho_max', s * rho_min)

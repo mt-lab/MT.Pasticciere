@@ -9,7 +9,7 @@ import ezdxf as ez
 from typing import Union, Optional
 from gcodeGen import *
 from elements import *
-from utilities import read_point_cloud, print_objects
+from utilities import print_objects
 import globalValues
 from globalValues import get_settings_values, settings_sections
 from scanner import find_cookies

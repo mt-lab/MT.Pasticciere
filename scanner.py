@@ -9,7 +9,7 @@ import numpy as np
 from numpy import cos, sin, tan, pi, arctan
 import cv2
 from typing import Union, Optional, Tuple
-from utilities import save_height_map, OutOfScanArea, Error, mid_idx, print_objects
+from utilities import Error, mid_idx, print_objects
 import globalValues
 from globalValues import get_settings_values, settings_sections
 from cookie import *
@@ -43,9 +43,6 @@ def find_chekpoint(coords: np.ndarray,
     gap_tol = kwargs.get('gap_tol', 2 * tol)
     h_tol = kwargs.get('height_tol', tol)
     w_tol = kwargs.get('width_tol', tol)
-    analys = np.where(np.abs(coords[..., Z] - height) < h_tol and np.abs(coords[..., Z]) < h_tol)
-    if np.any():
-        pass
     pulses = np.where(np.abs(coords[..., Z] - height) < h_tol, 1, 0)  # найти все точки где высота подходящая
     pulses_pos = np.diff(pulses, prepend=0, append=0)[1:-1]  # найти переходы высот
     starts = np.where(pulses_pos > 0)[0] + 1  # индексы начала переходов
@@ -54,8 +51,8 @@ def find_chekpoint(coords: np.ndarray,
     ends, = np.where(pulses_pos < 0)  # индексы концов переходов
     starts_coords = coords[starts, Y]  # координата по Y начал переходов
     ends_coords = coords[ends, Y]  # координата по Y концов переходов
-    w = ends_coords - starts_coords  # ширина переходов в мм
-    g = starts_coords[1:] - ends_coords[:-1]
+    w = np.abs(ends_coords - starts_coords)  # ширина переходов в мм
+    g = np.abs(starts_coords[1:] - ends_coords[:-1])
     if width is not None:
         cond = np.abs(w - width) < w_tol  # условие что переход подходит
         starts = starts[cond]
@@ -65,7 +62,7 @@ def find_chekpoint(coords: np.ndarray,
         starts_coords = starts_coords[cond]  # координата начал переходов, где переход нужной ширины
         ends_coords = ends_coords[cond]  # координата концов переходов, где переход нужной ширины
         w = w[cond]  # ширина правильных переходов
-        g = starts_coords[1:] - ends_coords[:-1]
+        g = np.abs(starts_coords[1:] - ends_coords[:-1])
     if gaps is not None:
         if isinstance(gaps, float) or isinstance(gaps, int) or (isinstance(gaps, np.ndarray) and gaps.size == g.size):
             if np.any(np.abs(g - gaps) > gap_tol):
@@ -83,10 +80,11 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
                 frame_shape: Tuple = (480, 640),
                 mirrored: bool = False, reverse: bool = False,
                 distance_camera2laser: float = 94,
+                camera_height: float = 150,
                 camera_shift: float = 113,
                 camera_angle: float = pi / 6,
                 focal_length: float = 2.9,
-                pixel_size: float = 0.005) -> np.ndarray:
+                pixel_size: float = 0.005, **kwargs) -> np.ndarray:
     """
     Расчёт физических координат точек по их положению в кадре и положению нулевой линии
 
@@ -103,16 +101,26 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
     :param float pixel_size: размер пикселя камеры
     :return: массив физических координат точек в глобальной системе координат
     """
-    # TODO: посчитать расстояние между лазером и соплом
-    # TODO: добавить переключение взаимного расположения камеры и лазера (добавлять координату или убавлять)
     row_mid, col_mid = frame_shape[0] / 2 - 1, frame_shape[1] / 2 - 1
-    row = mid_idx(zero_level)[0]  # найти центр лазера
-    if isinstance(row, np.ndarray):
-        row = row.mean()
-    # найти высоту камеры по центральной точке
-    dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
-    gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
-    camera_height = distance_camera2laser / tan(camera_angle + gamma)  # высота камеры
+    if camera_height is None and distance_camera2laser is None:
+        raise Error
+    elif camera_height is None:
+        row = mid_idx(zero_level)[0]  # найти центр лазера
+        if isinstance(row, np.ndarray):
+            row = row.mean()
+        # найти высоту камеры по центральной точке
+        dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
+        gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
+        camera_height = distance_camera2laser / tan(camera_angle + gamma)  # высота камеры
+    elif distance_camera2laser is None:
+        row = mid_idx(zero_level)[0]  # найти центр лазера
+        if isinstance(row, np.ndarray):
+            row = row.mean()
+        # найти расстояние до лазера по центральной точке
+        dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
+        gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
+        distance_camera2laser = camera_height * tan(camera_angle + gamma)
+    ####################################################################################################################
     dpy0 = (zero_level - row_mid) * pixel_size  # массив отклонений точек нулевой линии от центра кадра по вертикали
     dpy = (laser - row_mid) * pixel_size  # массив отклонений точек лазера от центра кадра по вертикале
     dpx = (np.mgrid[:laser.size] - col_mid) * pixel_size  # массив отклоненний точек лазера от центра по горизонтали
@@ -139,7 +147,6 @@ def find_laser_center(p=(0, 0), m=(0, 0), n=(0, 0)) -> Tuple[float, float]:
     a, b, c - параметры квадратичной функции
     y = ax^2 + bx + c
     """
-    # TODO: обработка багов связанных с вычислениями
     if p[0] == m[0] or m[0] == n[0]:  # если точки совпадают, аппроксимация не получится, вернуть среднюю
         return m
     a = .5 * (n[1] + p[1]) - m[1]
@@ -173,8 +180,8 @@ def laplace_of_gauss(img: np.ndarray, ksize: int, sigma: float = .0, delta: floa
 
 def gray_gravity(img: np.ndarray, row_start=0, row_stop=480) -> np.ndarray:
     ggm = img.copy().astype(np.float32) / np.amax(img)
-    centers = np.sum(ggm * (np.mgrid[:ggm.shape[0], :ggm.shape[1]][0] + 1), axis=0) / np.sum(ggm,
-                                                                                             axis=0) + row_start - 1
+    centers = np.sum(ggm * (np.mgrid[:ggm.shape[0], :ggm.shape[1]][0] + 1), axis=0) / np.sum(ggm, axis=0) \
+              + row_start - 1
     centers[centers > row_stop - 1] = row_stop - 1
     centers[np.isinf(centers) | np.isnan(centers)] = 0
     return centers
@@ -202,12 +209,12 @@ def predict_laser(deriv: np.ndarray, row_start=0, row_stop=None) -> np.ndarray:
         p2 = (1. * row, 1. * deriv[row, column])
         p3 = (1. * nextRow, 1. * deriv[nextRow, column])
         fine_laser[column] = find_laser_center(p1, p2, p3)[0] + row_start
-    fine_laser[fine_laser > row_stop - 1] = row_stop
+    fine_laser[fine_laser > row_stop - 1] = row_stop - 1
     return fine_laser
 
 
-def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, col_start=0, col_stop=640, padl=50,
-                       padr=50) -> Tuple[np.ndarray, float]:
+def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, pad=None, n=None,
+                       **kwargs) -> Tuple[np.ndarray, float]:
     """
     Расчитывает положение нулевой линии и её угол по крайним точкам из массива
 
@@ -215,16 +222,22 @@ def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, col_
     :param mid_row: средний ряд кадра, значение по умолчанию если расчёт не получится
     :return: массив точек нулевой линии и тангенс наклона линии от горизонтали
     """
-    if padl < 0 or padr < 0:
+    padl = kwargs.get('padl', abs(pad) if pad is not None else None)
+    padr = kwargs.get('padr', abs(pad) if pad is not None else None)
+    nl = kwargs.get('nl', abs(n) // 2 if n is not None else None)
+    nr = kwargs.get('nr', abs(n) // 2 if n is not None else None)
+    col_start = kwargs.get('col_start', 0)
+    col_stop = kwargs.get('col_stop', laser.size)
+    if (padl is None or padr is None) and (nl is None or nr is None):
         raise Error
     data_x = laser.nonzero()[0]
-    data_x = data_x[(data_x < col_start + padl) | (data_x > col_stop - padr)]
+    data_x = np.concatenate((data_x[:nl], data_x[data_x.size - nr:])) if nl and nr else \
+        data_x[(data_x < col_start + padl) | (data_x > col_stop - padr)]
     if data_x.size:
         data_y = laser[data_x]
         k = np.polyfit(data_x, data_y, 1)
         zero_level = np.polyval(k, np.mgrid[:laser.size])
         tangent = k[0]
-        # zero_level = np.mgrid[:laser.size] * tangent + k[1]
     else:
         zero_level = np.full_like(laser, mid_row)
         tangent = 0
@@ -298,8 +311,8 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
         derivative = cv2.bitwise_and(derivative, derivative, mask=mask)  # убрать всё что точно не лазер
         derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
         laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
-        fit, tang = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop, (col_stop - col_start) // 2,
-                                       (col_stop - col_start) // 2)
+        fit, tang = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, (col_stop - col_start) // 2,
+                                       col_start=col_start, col_stop=col_stop)
         thresh = np.zeros(frame.shape[:2], dtype='uint8')
         thresh[laser.astype(int)[laser.astype(int).nonzero()], laser.astype(int).nonzero()] = 255
         thresh = cv2.GaussianBlur(thresh, (5, 5), 0)
@@ -341,14 +354,15 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
         yield False
 
 
-def detect_start_img(img, height=5, width=5, gaps=5, n=5, tol=0.5, roi=None, debug=False, **kwargs):
-    mirror = kwargs.get('mirrored', False)
-    reverse = kwargs.get('reverse', False)
-    padl = kwargs.get('padl', 10)
-    padr = kwargs.get('padr', 10)
+def detect_start_img(img, height, width=None, gaps=None, n=None, tol=0.5, roi=None, debug=False, **kwargs):
+    mirror = kwargs.pop('mirrored', False)
+    reverse = kwargs.pop('reverse', False)
     row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, img.shape[0], 0, img.shape[1])
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
+    pad = kwargs.pop('pad', int((col_stop - col_start) * 0.2 // 2))
+    padl = kwargs.pop('padl', pad)
+    padr = kwargs.pop('padr', pad)
     roi = img[row_start:row_stop, col_start:col_stop]
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (33, 33), 0)
@@ -358,7 +372,11 @@ def detect_start_img(img, height=5, width=5, gaps=5, n=5, tol=0.5, roi=None, deb
     derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
     laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
     laser = np.pad(laser, (col_start, img.shape[1] - col_stop))
-    zero_level, _ = predict_zero_level(laser, img.shape[0] // 2 - 1, col_start, col_stop, padl, padr)
+    zero_level, _ = predict_zero_level(laser, img.shape[0] // 2 - 1, col_start=col_start, col_stop=col_stop,
+                                       padl=padl, padr=padr)
+    zero_level[zero_level < row_start] = row_start
+    zero_level[zero_level > row_stop - 1] = row_stop - 1
+    laser[laser < zero_level] = zero_level[laser < zero_level]
     coords = find_coords(0, laser, zero_level, (img.shape[0], img.shape[1]), mirror, reverse, **kwargs)
     start, pos, idx = find_chekpoint(coords, height, width, gaps, n, tol)
     ####################################################################################################################
@@ -372,14 +390,17 @@ def detect_start_img(img, height=5, width=5, gaps=5, n=5, tol=0.5, roi=None, deb
         img[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)  # zero_lvl
         if idx is not None:
             for s, e in idx:  # найденные импульсы
-                img[laser.astype(np.int)[s:e + 1], s:e + 1] = (0, 0, 255)
+                img[laser.astype(np.int)[s:e + 1], np.mgrid[s:e + 1]] = (0, 0, 255)
     ####################################################################################################################
     return start, img if debug else None, mask if debug else None
 
 
-def detect_start4(cap: cv2.VideoCapture, height=5, width=5, gaps=5, n=5, tol=0.5, roi=None, verbosity=0, debug=False,
-                  **kwargs):
+def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=None, ref_n=None, tol=0.5, roi=None,
+                  verbosity=0,
+                  debug=False, **kwargs):
     detected = False
+    if tol <= 0:
+        yield True
     TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -390,7 +411,8 @@ def detect_start4(cap: cv2.VideoCapture, height=5, width=5, gaps=5, n=5, tol=0.5
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
         if ret is True:
-            start, frame, mask = detect_start_img(frame, height, width, gaps, n, tol, roi, debug, **kwargs)
+            start, frame, mask = detect_start_img(frame, ref_height, ref_width, ref_gap, ref_n, tol, roi, debug,
+                                                  **kwargs)
             #################################################################
             # """ for debug purposes """
             if debug:
@@ -409,26 +431,6 @@ def detect_start4(cap: cv2.VideoCapture, height=5, width=5, gaps=5, n=5, tol=0.5
             cap.release()
             cv2.destroyAllWindows()
             return
-
-
-def skeletonize(img):
-    size = np.size(img)
-    skel = np.zeros(img.shape, np.uint8)
-
-    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-    done = False
-
-    while not done:
-        eroded = cv2.erode(img, element)
-        temp = cv2.dilate(eroded, element)
-        temp = cv2.subtract(img, temp)
-        skel = cv2.bitwise_or(skel, temp)
-        img = eroded.copy()
-
-        zeros = size - cv2.countNonZero(img)
-        if zeros == size:
-            done = True
-    return skel
 
 
 def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.ndarray:
@@ -513,8 +515,9 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     verbosity = kwargs.pop('verbosity', 0)
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
     zero_level_padl, zero_level_padr = kwargs.pop('zero_level_zone', (10, 10))
+    zero_level_n = kwargs.pop('zero_level_n', None)
     debug = kwargs.pop('debug', False)
-    kwargs = {k: kwargs[k] for k in kwargs if k in settings_sections and k not in ['camera_height']}
+    kwargs = {k: kwargs[k] for k in kwargs if k in settings_sections}
     table_width = kwargs.pop('table_width', 200)
     table_length = kwargs.pop('table_length', 200)
     table_height = kwargs.pop('table_height', 46)
@@ -536,18 +539,13 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         if ret is True:  # пока кадры есть - сканировать
             roi = frame[row_start:row_stop, col_start:col_stop]  # обрезать кадр по зоне интереса
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
-            if colored:  # сделать маску для выделения зоны лазера в кадре
-                blur = cv2.GaussianBlur(roi, (ksize, ksize), 0)
-                mask = get_hsv_mask(blur, hsv_upper_bound, hsv_lower_bound)
-                blur = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
+            if THRESH_VALUE == 0:
+                _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            elif THRESH_VALUE > 0:
+                _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
             else:
-                blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
-                if THRESH_VALUE == 0:
-                    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                elif THRESH_VALUE > 0:
-                    _, mask = cv2.threshold(blur, THRESH_VALUE, 255, cv2.THRESH_BINARY)
-                else:
-                    mask = np.full_like(blur, 255, np.uint8)
+                mask = np.full_like(blur, 255, np.uint8)
             ############################################################################################################
             # ВЫБОР МЕТОДА ПОИСКА ЛАЗЕРА
             ############################################################################################################
@@ -577,12 +575,13 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             # РАСЧЁТ ПОЛОЖЕНИЯ И УГЛА НУЛЕВОЙ ЛИНИИ #
             ############################################################################################################
             if AVG_TIME <= 0:  # если не задано усреднять лазер, то считать нулевой уровень в каждом кадре
-                zero_level, _ = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
-                                                   zero_level_padl, zero_level_padr)
+                zero_level, _ = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start=col_start, col_stop=col_stop,
+                                                   padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n)
             elif avg_counter < AVG_TIME:  # если задано усреднять и лазер ещё не усреднён
                 # найти нулевую линию, её угол и отклонение от предыдущего значения
-                zero_level, tangent = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start, col_stop,
-                                                         zero_level_padl, zero_level_padr)
+                zero_level, tangent = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1,
+                                                         col_start=col_start, col_stop=col_stop,
+                                                         padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n)
                 angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))
                 pos_error = abs(laser_row_pos - zero_level[0])
                 #  если параметры линии отклоняются в допустимых пределах
@@ -643,7 +642,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         return height_map
 
 
-def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **kwargs):
+def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **kw):
     """
     Функция обработки видео (сканирования)
     Находит начало области сканирования, и с этого момента обрабатывает видео поток, получает карту высот.
@@ -656,33 +655,31 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     :param str path_to_video: путь к видео, по умолчанию путь из settings.ini
     :param bool colored: видео цветное или нет
     :param kwargs: дополнительные параметры для сканирования
-    :keyword start_thresh: параметр для детекта начала. start_thresh < 0 без детекта.
-                    если видео цветное то поиск по мастер маске и 0 < start_thresh < 1 - степень схожести
-                    если видео чб то поиск по пропаже/появлению линии и start_thresh - минимально количество точек на линии
+    :keyword start_tol: параметр для детекта начала. start_tol < 0 без детекта.
+                    если видео цветное то поиск по мастер маске и 0 < start_tol < 1 - степень схожести
+                    если видео чб то поиск по пропаже/появлению линии и start_tol - минимально количество точек на линии
     :keyword mirrored: ориентация сканирования. 0 слева - False, 0 справа - True
     :keyword reverse: направление сканирования. от нуля - False, к нулю - True
     :keyword debug: флаг отладки для функций
     :return: None
     """
-    col_start = 30
-    col_stop = 610
-    row_start = 100
-    row_stop = 400
 
-    settings_values = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
-                                             settings_sections[k][0] in ['Scanner', 'Camera',
-                                                                         'Table']})  # параметры из конфига
+    table_sets = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
+                                        settings_sections[k][0] == 'Table'})
+    camera_sets = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
+                                         settings_sections[k][0] == 'Camera'})
+    scanner_sets = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
+                                          settings_sections[k][0] == 'Scanner'})
 
     cap = cv2.VideoCapture(path_to_video)  # чтение видео
     calibrate_kx(cap.get(cv2.CAP_PROP_FPS))  # откалибровать kx согласно FPS
-    if 'roi' not in kwargs:
-        kwargs.update({'roi': (row_start, row_stop, col_start, col_stop)})
 
-    kwargs = {**settings_values, **kwargs}
     try:  # найти кадр начала сканирования
         print('Ожидание точки старта...')
-        start_thresh = kwargs.pop('start_thresh', 104)
-        detector = detect_start3(cap, start_thresh, roi=kwargs.get('roi'), verbosity=verbosity, debug=debug)
+        start_tol = kw.pop('start_tol', 104)
+        kwargs = {**camera_sets, **scanner_sets, **kw}
+        # detector = detect_start3(cap, start_tol, roi=kwargs.get('roi'), verbosity=verbosity, debug=debug)
+        detector = detect_start4(cap, verbosity=verbosity, debug=debug, tol=start_tol, **kwargs)
         start = next(detector)
         while not start:
             start = next(detector)
@@ -695,7 +692,8 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     print(f'Точка начала сканирования: {initial_frame_idx + 1: 3d} кадр')
 
     # сканировать от найденного кадра до конца
-    height_map = scanning(cap, initial_frame_idx, colored=colored, verbosity=verbosity, debug=debug, **kwargs)
+    kwargs = {**table_sets, **camera_sets, **scanner_sets, **kw}
+    height_map = scanning(cap, initial_frame_idx, verbosity=verbosity, debug=debug, **kwargs)
     globalValues.height_map = height_map
 
     # массив для нахождения позиций объектов
@@ -708,7 +706,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     scale_factor = factory / factorx
     height_map_8bit_real = cv2.resize(height_map_8bit, None, fx=scale_factor, fy=1)
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
-    cookies, detected_contours = procecc_cookies(cookies, height_map, img=detected_contours)
+    # cookies, detected_contours = procecc_cookies(cookies, height_map, img=detected_contours)
     detected_contours_real = cv2.resize(detected_contours, None, fx=scale_factor, fy=1)
     print('Положения печений найдены.')
     if len(cookies) != 0:
@@ -721,7 +719,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     cv2.imwrite('height_map_real.png', height_map_8bit_real)
     cv2.imwrite('cookies_real.png', detected_contours_real)
     cv2.imwrite('cookies.png', detected_contours)
-    save_height_map(height_map)
+    globalValues.save_height_map(height_map)
 
     cap.release()
     cv2.destroyAllWindows()
