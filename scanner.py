@@ -289,12 +289,6 @@ def get_max_height(contour, height_map: 'np.ndarray' = globalValues.height_map):
     return maxHeight
 
 
-def normalize(img, value=1):
-    array = img.copy().astype(np.float64)
-    array = (array - array.min()) / (array.max() - array.min()) * value
-    return array
-
-
 def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
     if threshhold < 0:
         yield True

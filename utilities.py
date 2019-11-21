@@ -26,6 +26,12 @@ X, Y, Z = 0, 1, 2  # переменные для более явного обр�
 T = TypeVar('T')
 
 
+def normalize(img, value=1):
+    array = img.copy().astype(np.float64)
+    array = (array - array.min()) / (array.max() - array.min()) * value
+    return array
+
+
 def show_height_map(height_map: np.ndarray):
     """
     Показать карту высот в виде облака точек
