@@ -370,7 +370,7 @@ def detect_start_img(img, height, width=None, gaps=None, n=None, tol=0.5, roi=No
     row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, img.shape[0], 0, img.shape[1])
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
-    pad = kwargs.pop('pad', int((col_stop - col_start) * 0.2 // 2))
+    pad = kwargs.pop('pad', int((col_stop - col_start) * 0.1 // 2))
     padl = kwargs.pop('padl', pad)
     padr = kwargs.pop('padr', pad)
     roi = img[row_start:row_stop, col_start:col_stop]
@@ -382,12 +382,13 @@ def detect_start_img(img, height, width=None, gaps=None, n=None, tol=0.5, roi=No
     derivative[derivative < 0] = 0  # отрицательная производная точно не лазер
     laser = predict_laser(derivative, row_start, row_stop)  # расчитать позиции лазера
     laser = np.pad(laser, (col_start, img.shape[1] - col_stop))
-    zero_level, _ = predict_zero_level(laser, img.shape[0] // 2 - 1, col_start=col_start, col_stop=col_stop,
-                                       padl=padl, padr=padr)
+    zero_level, tangent = predict_zero_level(laser, img.shape[0] // 2 - 1, col_start=col_start, col_stop=col_stop,
+                                             padl=padl, padr=padr)
     zero_level[zero_level < row_start] = row_start
     zero_level[zero_level > row_stop - 1] = row_stop - 1
     laser[(laser > zero_level) | (laser == 0)] = zero_level[(laser > zero_level) | (laser == 0)]
     coords = find_coords(0, laser, zero_level, (img.shape[0], img.shape[1]), mirror, reverse, **kwargs)
+    width = None if width is None else width * (tangent ** 2 + 1) ** .5
     start, pos, idx = find_chekpoint(coords, height, width, gaps, n, tol)
     ####################################################################################################################
     # """ for debug purposes """
@@ -692,7 +693,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
 
     try:  # найти кадр начала сканирования
         print('Ожидание точки старта...')
-        start_tol = kw.pop('start_tol', 104)
+        start_tol = kw.pop('start_tol', 0.5)
         kwargs = {**camera_sets, **scanner_sets, **kw}
         # detector = detect_start3(cap, start_tol, roi=kwargs.get('roi'), verbosity=verbosity, debug=debug)
         detector = detect_start4(cap, verbosity=verbosity, debug=debug, tol=start_tol, **kwargs)
@@ -720,7 +721,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     factory = np.abs(height_map[0, 0, Y] - height_map[0, -1, Y]) / height_map.shape[1]
     factorx = np.abs(height_map[0, 0, X] - height_map[-1, 0, X]) / height_map.shape[0]
     scale_factor = factory / factorx
-    height_map_8bit_real = cv2.resize(height_map_8bit, None, fx=scale_factor, fy=1)
+    height_map_8bit_real = cv2.resize(height_map_8bit, None, fx=scale_factor if scale_factor > 0 else 1, fy=1)
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
     # cookies, detected_contours = procecc_cookies(cookies, height_map, img=detected_contours)
     detected_contours_real = cv2.resize(detected_contours, None, fx=scale_factor, fy=1)
