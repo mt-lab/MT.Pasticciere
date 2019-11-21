@@ -83,6 +83,7 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
                 camera_height: float = 150,
                 camera_shift: float = 113,
                 camera_angle: float = pi / 6,
+                camera_angle_2: float = 0,
                 focal_length: float = 2.9,
                 pixel_size: float = 0.005, **kwargs) -> np.ndarray:
     """
@@ -110,6 +111,8 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
             row = row.mean()
         # найти высоту камеры по центральной точке
         dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
+        if mirrored:
+            dpy0 = -dpy0
         gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
         camera_height = distance_camera2laser / tan(camera_angle + gamma)  # высота камеры
     elif distance_camera2laser is None:
@@ -118,20 +121,27 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
             row = row.mean()
         # найти расстояние до лазера по центральной точке
         dpy0 = (row - row_mid) * pixel_size  # отклонение середины нулевой линии от центра кадра по вертикали
+        if mirrored:
+            dpy0 = -dpy0
         gamma = arctan(dpy0 / focal_length)  # угол отклонения середины нулевой линии от оси камеры
         distance_camera2laser = camera_height * tan(camera_angle + gamma)
+    R = np.array([[cos(camera_angle_2), -sin(camera_angle_2), 0],
+                  [sin(camera_angle_2), cos(camera_angle_2), 0],
+                  [0, 0, 1]]) if camera_angle_2 else np.identity(3)
     ####################################################################################################################
     dpy0 = (zero_level - row_mid) * pixel_size  # массив отклонений точек нулевой линии от центра кадра по вертикали
     dpy = (laser - row_mid) * pixel_size  # массив отклонений точек лазера от центра кадра по вертикале
+    if mirrored:
+        dpy0, dpy = -dpy0, -dpy
     dpx = (np.mgrid[:laser.size] - col_mid) * pixel_size  # массив отклоненний точек лазера от центра по горизонтали
     gamma = arctan(dpy0 / focal_length)  # массив углов отклонения нулевой линии от оси камеры
     theta = arctan(dpy / focal_length)  # массив углом отклонения точек лазера от оси камеры
     z = camera_height * sin(theta - gamma) / (sin(camera_angle + theta) * cos(camera_angle + gamma))  # высоты
     y = (camera_height - z * (camera_height > z)) * dpx / (focal_length * cos(camera_angle))  # массив Y координат
-    y = camera_shift + y if not mirrored else camera_shift - y  # если зеркально, то отзеркалить
+    y = camera_shift + y
     x = frame_idx * kx + camera_height * tan(camera_angle + gamma) - distance_camera2laser  # массив X координат
     x = x if not reverse else - x  # развернуть если скан наоборот
-    return np.column_stack([x, y, z])
+    return (R @ np.column_stack([x, y, z]).T).T if camera_angle_2 else np.column_stack([x, y, z])
 
 
 def find_laser_center(p=(0, 0), m=(0, 0), n=(0, 0)) -> Tuple[float, float]:
@@ -376,7 +386,7 @@ def detect_start_img(img, height, width=None, gaps=None, n=None, tol=0.5, roi=No
                                        padl=padl, padr=padr)
     zero_level[zero_level < row_start] = row_start
     zero_level[zero_level > row_stop - 1] = row_stop - 1
-    laser[laser < zero_level] = zero_level[laser < zero_level]
+    laser[(laser > zero_level) | (laser == 0)] = zero_level[(laser > zero_level) | (laser == 0)]
     coords = find_coords(0, laser, zero_level, (img.shape[0], img.shape[1]), mirror, reverse, **kwargs)
     start, pos, idx = find_chekpoint(coords, height, width, gaps, n, tol)
     ####################################################################################################################
@@ -404,6 +414,7 @@ def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=Non
     TOTAL_FRAMES = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    upside_down = kwargs.get('camera_upside_down', True)
     row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
@@ -411,6 +422,8 @@ def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=Non
         frameIdx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
         if ret is True:
+            if upside_down:
+                cv2.rotate(frame, cv2.ROTATE_180, frame)
             start, frame, mask = detect_start_img(frame, ref_height, ref_width, ref_gap, ref_n, tol, roi, debug,
                                                   **kwargs)
             #################################################################
@@ -502,6 +515,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     FRAME_SHAPE = (FRAME_HEIGHT, FRAME_WIDTH)
     REVERSE = kwargs.pop('reverse', False)
     MIRRORED = kwargs.pop('mirrored', False)
+    UPSIDE_DOWN = kwargs.pop('upside_down', True)
     EXTRACTION_MODE = kwargs.pop('extraction_mode', 'max_peak').lower()  # метод для расчёта лазера
     THRESH_VALUE = kwargs.pop('threshold', 0)  # пороговое значение для создания маски с простым трешхолдом
     AVG_TIME = round(kwargs.pop('avg_time', 0) * FPS)  # время на усреднение стабильного лазера; при <=0 то не усреднять
@@ -537,6 +551,8 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     while cap.isOpened():  # пока видео открыто
         ret, frame = cap.read()
         if ret is True:  # пока кадры есть - сканировать
+            if UPSIDE_DOWN:
+                cv2.rotate(frame, cv2.ROTATE_180, frame)
             roi = frame[row_start:row_stop, col_start:col_stop]  # обрезать кадр по зоне интереса
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
@@ -597,7 +613,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             zero_level[(zero_level < row_start) | (zero_level > row_stop - 1)] = row_stop - 1
             ############################################################################################################
             # занулить точки где положение "лазера" ниже нулевой линии
-            laser[laser < zero_level] = zero_level[laser < zero_level]
+            laser[(laser > zero_level) | (laser == 0)] = zero_level[(laser > zero_level) | (laser == 0)]
             height_map[frame_idx] = find_coords(frame_idx, laser, zero_level, frame_shape=FRAME_SHAPE,
                                                 reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
             if abs(height_map[0, 0, X] - height_map[-1, 0, X]) > table_length:  # проверка конца сканирования
