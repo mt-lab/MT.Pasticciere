@@ -140,6 +140,7 @@ class Cookie:
         return tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))
 
     def contour_coords(self, contour='local') -> np.ndarray:
+        # TODO: повторяет по функционалу contour_mm, удалить последний и решить конфликты
         return self.height_map[self.contour_idx(contour)]
 
     def contour_z_mean(self, contour='local') -> float:
@@ -155,11 +156,19 @@ class Cookie:
         return self.contour_coords(contour)[..., Z].std()
 
     def find_center_and_rotation(self):
-        center_col, center_row = self.center_local
-        center_z = self.height_map[center_row, center_col, Z]
+        # center_col, center_row = self.center_local
+        # center_z = self.height_map[center_row, center_col, Z]
         # Найти центр и поворот контура по точкам в мм
-        center, theta = find_center_and_rotation(self.contour_mm('center'))
-        center = (*center[::-1], center_z)  # координаты свапнуты из-за opencv
+        contour_idx = self.contour_idx()  # индексы границы контура
+        contour = self.contour_coords()  # координаты границы контура
+        contour_idx = contour_idx[contour[..., Z] > self.contour_z_mean()]  # индексы границы где высота выше средней
+        contour = contour[contour[..., Z] > self.contour_z_mean()]  # координаты границы где высота выше средней
+        center_idx = find_center_and_rotation(contour_idx, False)  # индекс центра границы
+        center_idx = tuple(int(round(c)) for c in center_idx)  # округление и перевод в int индекса центра
+        center, theta = find_center_and_rotation(contour)  # плоская координата центра граниы
+        center_z = self.height_map[(*center_idx[::-1], Z)]  # высота центра границы
+        # center, theta = find_center_and_rotation(self.contour_mm('center'))
+        center = (*center[::-1], center_z)  # простанственные координаты центра (свапнуты из-за opencv)
         rotation = pi / 2 - theta  # перевод в СК принтера
         self._center = center
         self._rotation = rotation
