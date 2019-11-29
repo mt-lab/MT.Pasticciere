@@ -746,8 +746,8 @@ def height_from_stream(video):
         laser = predict_laser(der, row_start, row_stop)
         laser = np.pad(laser, (col_start, frame.shape[1] - col_stop), mode='constant')
         zero_lvl, _ = predict_zero_level(laser, frame.shape[0] // 2)
-        # zero_lvl[(zero_lvl < row_start) | (zero_lvl > row_stop)] = row_stop
-        laser[laser < zero_lvl] = zero_lvl[laser < zero_lvl]
+        zero_lvl[(zero_lvl < row_start) | (zero_lvl > row_stop)] = row_stop - 1
+        laser[laser > zero_lvl] = zero_lvl[laser > zero_lvl]
         coords = find_coords(0, laser, zero_lvl, frame.shape,
                              focal_length=2.9,
                              pixel_size=0.005,
@@ -860,10 +860,19 @@ def iggm(data: np.ndarray, points: np.ndarray, **kwargs):
         w = (rho - rho_min) / (rho_max - rho_min) * w_max + (rho - rho_max) / (rho_min - rho_max) * w_min
 
 
-def find_camera_params(video, grid, delay=0.5, samples=10, win_size=(5, 5), zero_zone=(-1, -1), square_size=1):
+def camera_calibration(video,  # видео с которого брать кадры
+                       grid,  # размеры сетки
+                       delay=0.5,  # задержка между снимками
+                       samples=10,  # количество необходимых кадров
+                       win_size=(5, 5),  # не помню
+                       zero_zone=(-1, -1),  # не помню
+                       square_size=1,  # размер квадрата сетки
+                       iterations=30,  # количество итераций для cornerSubPix
+                       eps=0.01):  # точность для cornerSubPix
     import time
+    mtx, rvecs, tvecs, dist, newcameramtx, roi = None, None, None, None, None, None
     once = False
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, iterations, eps)
 
     points = np.zeros((grid[0] * grid[1], 3), np.float32)
     points[:, :2] = np.mgrid[:grid[0], :grid[1]].T.reshape(-1, 2) * square_size
@@ -915,3 +924,46 @@ def find_camera_params(video, grid, delay=0.5, samples=10, win_size=(5, 5), zero
     cap.release()
     cv2.destroyAllWindows()
     return mtx, newcameramtx, dist, rvecs, tvecs, roi
+
+
+def find_camera_pose(mtx, rvec, tvec):
+    R = cv2.Rodrigues(rvec)[0].T  # матрица поворота мира относительно камеры
+    pos = -R @ tvec  # координаты камеры относительно центра мира
+    roll = np.arctan2(-R[2, 1], R[2, 2])
+    pitch = np.arcsin(R[2, 0])
+    yaw = np.arctan2(-R[1, 0], R[0, 0])
+    return pos, np.array((roll, pitch, yaw))
+
+
+def camera_pose_img(img, mtx,  # изображение с шахматкой и матрица параметров камеры
+                    grid, square_size=1, first_corner_coord=(0, 0),
+                    # размер сетки, размер клетки, координата первого угла
+                    win_size=(5, 5), zero_zone=(-1, -1), criteria=None,  # параметры поиска углов на изображении
+                    draw=False):  # отрисовывать результат или нет
+    if criteria is None:
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+    objp = np.zeros((7 * 7, 3), dtype=np.float32)
+    objp[:, :2] = np.mgrid[:7, :7].T.reshape(-1, 2) * square_size + first_corner_coord
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ret, corners = cv2.findChessboardCorners(gray, grid)
+    if ret:
+        cv2.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
+        if draw:
+            cv2.drawChessboardCorners(img, grid, corners, ret)
+        ret, rvec, tvec = cv2.solvePnP(objp, corners, mtx, None)
+        coords, angles = find_camera_pose(mtx, rvec, tvec)
+    else:
+        coords, angles = None, None
+    return coords, angles, img if draw else coords, angles
+
+
+def generate_chessboard(square_size=30, grid=(8, 8)):
+    chessboard = np.full(np.multiply(square_size, grid), 255, dtype=np.uint8)
+    for m in range(grid[0]):
+        row_start = square_size * m
+        row_stop = square_size * (m + 1)
+        for n in range(grid[1]):
+            col_start = square_size * (2 * n + (m % 2))
+            col_stop = col_start + square_size
+            chessboard[row_start:row_stop, col_start:col_stop] = 0
+    return chessboard
