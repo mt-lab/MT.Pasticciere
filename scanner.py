@@ -223,7 +223,7 @@ def predict_laser(deriv: np.ndarray, row_start=0, row_stop=None) -> np.ndarray:
     return fine_laser
 
 
-def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, pad=None, n=None,
+def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, pad=None, n=20,
                        **kwargs) -> Tuple[np.ndarray, float]:
     """
     Расчитывает положение нулевой линии и её угол по крайним точкам из массива
