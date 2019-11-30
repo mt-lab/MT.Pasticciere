@@ -867,12 +867,12 @@ def camera_calibration(video,  # видео с которого брать ка�
                        win_size=(5, 5),  # не помню
                        zero_zone=(-1, -1),  # не помню
                        square_size=1,  # размер квадрата сетки
-                       iterations=30,  # количество итераций для cornerSubPix
-                       eps=0.01):  # точность для cornerSubPix
+                       criteria=None):  # критерии для субпиксельных углов шахматки
     import time
     mtx, rvecs, tvecs, dist, newcameramtx, roi = None, None, None, None, None, None
     once = False
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, iterations, eps)
+    if criteria is None:
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
 
     points = np.zeros((grid[0] * grid[1], 3), np.float32)
     points[:, :2] = np.mgrid[:grid[0], :grid[1]].T.reshape(-1, 2) * square_size
@@ -923,16 +923,17 @@ def camera_calibration(video,  # видео с которого брать ка�
             cap.release()
     cap.release()
     cv2.destroyAllWindows()
+    # TODO: сохранение mtx и etc. в файл
     return mtx, newcameramtx, dist, rvecs, tvecs, roi
 
 
-def find_camera_pose(mtx, rvec, tvec):
+def find_camera_pose(rvec, tvec):
     R = cv2.Rodrigues(rvec)[0].T  # матрица поворота мира относительно камеры
     pos = -R @ tvec  # координаты камеры относительно центра мира
     roll = np.arctan2(-R[2, 1], R[2, 2])
     pitch = np.arcsin(R[2, 0])
     yaw = np.arctan2(-R[1, 0], R[0, 0])
-    return pos, np.array((roll, pitch, yaw))
+    return pos.reshape(3, ), np.array((roll, pitch, yaw))
 
 
 def camera_pose_img(img, mtx,  # изображение с шахматкой и матрица параметров камеры
@@ -947,11 +948,11 @@ def camera_pose_img(img, mtx,  # изображение с шахматкой и
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     ret, corners = cv2.findChessboardCorners(gray, grid)
     if ret:
-        cv2.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
+        corners = cv2.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
         if draw:
             cv2.drawChessboardCorners(img, grid, corners, ret)
         ret, rvec, tvec = cv2.solvePnP(objp, corners, mtx, None)
-        coords, angles = find_camera_pose(mtx, rvec, tvec)
+        coords, angles = find_camera_pose(rvec, tvec) if ret else None, None
     else:
         coords, angles = None, None
     return coords, angles, img if draw else coords, angles
@@ -967,3 +968,23 @@ def generate_chessboard(square_size=30, grid=(8, 8)):
             col_stop = col_start + square_size
             chessboard[row_start:row_stop, col_start:col_stop] = 0
     return chessboard
+
+
+def find_pose_video(video, grid=(8, 8), square_size=20, first_corner_coord=(0, 0)):
+    # TODO: после калибровки прописать углы и расстояния в конфиг автоматически
+    gen = decor_stream2img(camera_pose_img)
+    cv2.imshow('chb', generate_chessboard(75, grid))
+    cv2.waitKey(500)
+    mtx, newmtx, dist, r, t, roi = camera_calibration(video, (grid[0] - 1, grid[1] - 1), 1, square_size=square_size)
+    cv2.imshow('chb', generate_chessboard(75, grid))
+    cv2.waitKey(500)
+    for res in gen(video, mtx=mtx, grid=(grid[0] - 1, grid[1] - 1), draw=True, square_size=square_size,
+                   first_corner_coord=first_corner_coord):
+        if res[0] is not None:
+            print(f'X: {res[0][X]:4.2f} units, {np.rad2deg(res[1][X]):4.1f} grad\n'
+                  f'Y: {res[0][Y]:4.2f} units, {np.rad2deg(res[1][Y]):4.1f} grad\n'
+                  f'Z: {-res[0][Z]:4.2f} units, {np.rad2deg(res[1][Z]):4.1f} grad\n')
+        cv2.imshow('res', res[2])
+        if cv2.waitKey(20) == 27:
+            break
+    cv2.destroyAllWindows()
