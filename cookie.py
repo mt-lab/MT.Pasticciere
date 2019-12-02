@@ -159,16 +159,18 @@ class Cookie:
         # center_col, center_row = self.center_local
         # center_z = self.height_map[center_row, center_col, Z]
         # Найти центр и поворот контура по точкам в мм
-        contour_idx = self.contour_idx()  # индексы границы контура
-        contour = self.contour_coords()  # координаты границы контура
-        contour_idx = contour_idx[contour[..., Z] > self.contour_z_mean()]  # индексы границы где высота выше средней
-        contour = contour[contour[..., Z] > self.contour_z_mean()]  # координаты границы где высота выше средней
-        center_idx = find_center_and_rotation(contour_idx, False)  # индекс центра границы
-        center_idx = tuple(int(round(c)) for c in center_idx)  # округление и перевод в int индекса центра
-        center, theta = find_center_and_rotation(contour)  # плоская координата центра граниы
-        center_z = self.height_map[(*center_idx[::-1], Z)]  # высота центра границы
+        # contour_idx = self.contour_idx()  # индексы границы контура
+        mean = self.contour_z_mean()
+        contour = find_contours(np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8))[0][
+            0]  # координаты границы где высота выше средней
+        # center_idx = find_center_and_rotation(contour_idx, False)  # индекс центра границы
+        # center_idx = tuple(int(round(c)) for c in center_idx)  # округление и перевод в int индекса центра
+        center, theta = find_center_and_rotation(
+            self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
+            :Z])  # плоская координата центра граниы
+        center_z = utilities.mls_height_apprx(self.height_map, center)
         # center, theta = find_center_and_rotation(self.contour_mm('center'))
-        center = (*center[::-1], center_z)  # простанственные координаты центра (свапнуты из-за opencv)
+        center = (*center, center_z)  # простанственные координаты центра (свапнуты из-за opencv)
         rotation = pi / 2 - theta  # перевод в СК принтера
         self._center = center
         self._rotation = rotation
