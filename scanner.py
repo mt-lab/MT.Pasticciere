@@ -648,7 +648,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         height_map += origin  # добавить смещение к началу координат по принтеру
         if REVERSE:  # если скан с конца области, ориентировать массив соответственно
             height_map = np.flipud(height_map)
-        if MIRRORED:  # если скан зеркальный, ориентировать массив соответственно
+        if not MIRRORED:  # если скан зеркальный, ориентировать массив соответственно
             height_map = np.fliplr(height_map)
         return height_map
 
