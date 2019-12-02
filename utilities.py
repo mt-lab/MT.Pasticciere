@@ -862,7 +862,7 @@ def iggm(data: np.ndarray, points: np.ndarray, **kwargs):
 
 def camera_calibration(video,  # видео с которого брать кадры
                        grid,  # размеры сетки
-                       delay=0.5,  # задержка между снимками
+                       *, delay=0.5,  # задержка между снимками
                        samples=10,  # количество необходимых кадров
                        win_size=(5, 5),  # не помню
                        zero_zone=(-1, -1),  # не помню
@@ -881,6 +881,10 @@ def camera_calibration(video,  # видео с которого брать ка�
     imgpoints = []
 
     cap = cv2.VideoCapture(video)
+    cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+    cv2.namedWindow("Video")
+    focus = int(min(cap.get(cv2.CAP_PROP_FOCUS) * 100, 2 ** 31 - 1))
+    cv2.createTrackbar("Focus", "Video", focus, 1000, lambda v: cap.set(cv2.CAP_PROP_FOCUS, v))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_shape = (frame_width, frame_height)
@@ -913,6 +917,7 @@ def camera_calibration(video,  # видео с которого брать ка�
                       f'radial vectors:     \n{rvecs}\n'
                       f'tangential vectors: \n{tvecs}\n'
                       f'roi:                \n{roi}')
+                print(f'camera intrinsic:\n{mtx}')
             else:
                 dst = cv2.undistort(frame, mtx, dist, None, newcameramtx)
                 x, y, w, h = roi
@@ -940,7 +945,9 @@ def camera_pose_img(img, mtx,  # изображение с шахматкой и
                     grid, square_size=1, first_corner_coord=(0, 0),
                     # размер сетки, размер клетки, координата первого угла
                     win_size=(5, 5), zero_zone=(-1, -1), criteria=None,  # параметры поиска углов на изображении
-                    draw=False):  # отрисовывать результат или нет
+                    draw=False, rotate=False):  # отрисовывать результат или нет
+    if rotate:
+        img = cv2.rotate(img, cv2.ROTATE_180)
     if criteria is None:
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
     objp = np.zeros((7 * 7, 3), dtype=np.float32)
@@ -952,7 +959,7 @@ def camera_pose_img(img, mtx,  # изображение с шахматкой и
         if draw:
             cv2.drawChessboardCorners(img, grid, corners, ret)
         ret, rvec, tvec = cv2.solvePnP(objp, corners, mtx, None)
-        coords, angles = find_camera_pose(rvec, tvec) if ret else None, None
+        (coords, angles) = find_camera_pose(rvec, tvec) if ret else (None, None)
     else:
         coords, angles = None, None
     return coords, angles, img if draw else coords, angles
@@ -970,16 +977,18 @@ def generate_chessboard(square_size=30, grid=(8, 8)):
     return chessboard
 
 
-def find_pose_video(video, grid=(8, 8), square_size=20, first_corner_coord=(0, 0)):
+def find_pose_video(video, grid=(8, 8), **kwargs):
     # TODO: после калибровки прописать углы и расстояния в конфиг автоматически
     gen = decor_stream2img(camera_pose_img)
     cv2.imshow('chb', generate_chessboard(75, grid))
     cv2.waitKey(500)
-    mtx, newmtx, dist, r, t, roi = camera_calibration(video, (grid[0] - 1, grid[1] - 1), 1, square_size=square_size)
-    cv2.imshow('chb', generate_chessboard(75, grid))
-    cv2.waitKey(500)
-    for res in gen(video, mtx=mtx, grid=(grid[0] - 1, grid[1] - 1), draw=True, square_size=square_size,
-                   first_corner_coord=first_corner_coord):
+    # mtx, newmtx, dist, r, t, roi = camera_calibration(video, (grid[0] - 1, grid[1] - 1), square_size=square_size,
+    #                                                   **kwargs)
+    # cv2.imshow('chb', generate_chessboard(75, grid))
+    # cv2.waitKey(500)
+    for res in gen(video, mtx=np.array([[2.9 / 0.005, 0, 319],
+                                        [0, 2.9 / 0.005, 239],
+                                        [0, 0, 1]]), grid=(grid[0] - 1, grid[1] - 1), draw=True, **kwargs):
         if res[0] is not None:
             print(f'X: {res[0][X]:4.2f} units, {np.rad2deg(res[1][X]):4.1f} grad\n'
                   f'Y: {res[0][Y]:4.2f} units, {np.rad2deg(res[1][Y]):4.1f} grad\n'
