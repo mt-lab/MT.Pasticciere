@@ -161,14 +161,18 @@ class Cookie:
         # Найти центр и поворот контура по точкам в мм
         # contour_idx = self.contour_idx()  # индексы границы контура
         mean = self.contour_z_mean()
-        contour = find_contours(np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8))[0][
-            0]  # координаты границы где высота выше средней
+        region = np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8)
+        contours = find_contours(region)[0]  # координаты границы где высота выше средней
+        if contours:
+            contour = contours[0]
+        else:
+            contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0]
         # center_idx = find_center_and_rotation(contour_idx, False)  # индекс центра границы
         # center_idx = tuple(int(round(c)) for c in center_idx)  # округление и перевод в int индекса центра
         center, theta = find_center_and_rotation(
             self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
             :Z])  # плоская координата центра граниы
-        center_z = utilities.mls_height_apprx(self.height_map, center)
+        center_z = mls_height_apprx(self.height_map, center)
         # center, theta = find_center_and_rotation(self.contour_mm('center'))
         center = (*center, center_z)  # простанственные координаты центра (свапнуты из-за opencv)
         rotation = pi / 2 - theta  # перевод в СК принтера
@@ -229,16 +233,8 @@ def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 
         cv2.drawContours(mask, [cookie.contour_global], 0, 255, -1)
         height_map_masked = height_map.copy()
         height_map_masked[..., Z][mask == 0] = 0
+
         M = cv2.moments(height_map_masked[..., Z])
-        # p_std = 0
-        # c_cnt_x = cookie.contour_global[..., 0]
-        # c_cnt_y = cookie.contour_global[..., 1]
-        # c_cnt_z = cookie.contour_coords('center')[..., Z]
-        # # std = c_cnt_z.std()
-        # # mean = c_cnt_z.mean()
-        # median = np.median(c_cnt_z)
-        # weights = 1/(c_cnt_z - median)
-        # weights[np.isnan(weights) | np.isinf(weights)] = np.amax(np.isfinite(weights))
         center_x = int(M['m10'] / M['m00'])
         center_y = int(M['m01'] / M['m00'])
         # while abs(std - p_std) / std > tol and p_std != std:

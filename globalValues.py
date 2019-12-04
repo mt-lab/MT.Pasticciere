@@ -122,6 +122,7 @@ settings_sections = {
     'pixel_size': ('Camera', none_handler(float)),
     'focal_length': ('Camera', none_handler(float)),
     'camera_angle': ('Camera', none_handler(lambda x: radians(float(x)))),
+    'camera_angle_2': ('Camera', none_handler(lambda x: radians(float(x)))),
     'camera_height': ('Camera', none_handler(float)),
     'camera_shift': ('Camera', none_handler(float)),
     'distance_camera2laser': ('Camera', none_handler(float)),
