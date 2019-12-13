@@ -1,6 +1,6 @@
 from math import pi
 from typing import Union, List
-from utilities import X, Y, Z, find_center_and_rotation, find_contours
+from utilities import X, Y, Z, find_center_and_rotation, find_contours, show_height_map, mls_height_apprx, normalize
 import numpy as np
 import cv2
 
@@ -211,7 +211,7 @@ def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray') -> (List
     cookies = []
     for contour in contours:
         mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
-        cv2.drawContours(mask, [contour], -1, 255, -1)
+        cv2.drawContours(mask, [contour], 0, 255, thickness=cv2.FILLED)
         col, row, w, h = cv2.boundingRect(contour)
         height_map_masked = height_map.copy()
         height_map_masked[..., Z][mask == 0] = 0

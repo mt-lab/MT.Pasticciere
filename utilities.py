@@ -106,8 +106,8 @@ def find_contours(img: Union[np.ndarray, str]):
     ret, gausThresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     # нахождение замкнутых объектов на картинке с помощью морфологических алгоритмов
     kernel = np.ones((5, 5), np.uint8)
-    closing = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
-    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=2)
+    # gausThresh = cv2.morphologyEx(gausThresh, cv2.MORPH_CLOSE, kernel, iterations=3)
+    opening = cv2.morphologyEx(gausThresh, cv2.MORPH_OPEN, kernel, iterations=10)
     # найти однозначный задний фон
     sureBg = cv2.dilate(opening, kernel, iterations=3)
     distTrans = cv2.distanceTransform(opening, cv2.DIST_L2, 3)
@@ -125,18 +125,24 @@ def find_contours(img: Union[np.ndarray, str]):
     markers = cv2.watershed(original, markers)
     # выделяем контуры на изображении
     original[markers == -1] = [0, 0, 255]
-    # количество печенек на столе (уникальные маркеры минус фон и контур всего изображения)
-    numOfCookies = len(np.unique(markers)) - 2
     # вырезаем ненужный контур всей картинки
+    contours = []
+    for marker in np.unique(markers):
+        if marker <= 1:
+            continue
+        mask = np.zeros(gray.shape, dtype=np.uint8)
+        mask[markers == marker] = 255
+        tmp = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        tmp = imutils.grab_contours(tmp)
+        contour = sorted(tmp, key=cv2.contourArea, reverse=True)[0]
+        contours.append(contour)
     blankSpace = np.full(gray.shape, 255, dtype='uint8')
-    blankSpace[markers == 1] = 0
-    blankSpaceCropped = np.pad(blankSpace[1:-1, 1:-1], 1, 'constant')
-    # находим контуры на изображении
-    contours = cv2.findContours(blankSpaceCropped.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    contours = imutils.grab_contours(contours)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:numOfCookies]  # сортируем их по площади
+    blankSpace[markers <= 1] = 0
     # применяем на изначальную картинку маску с задним фоном
     result = cv2.bitwise_and(original, original, mask=blankSpace)
+    for contour in contours:
+        cv2.drawContours(result, [contour], -1, np.random.randint(0, 255, 3).tolist(), 1)
+        show_img(result)
     return contours, result
 
 
