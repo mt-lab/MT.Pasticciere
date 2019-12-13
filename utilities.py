@@ -26,6 +26,15 @@ X, Y, Z = 0, 1, 2  # переменные для более явного обр�
 T = TypeVar('T')
 
 
+def show_img(img, winname='image', exit_key=27):
+    cv2.namedWindow(winname)  # создать окно
+    cv2.imshow(winname, img)  # показать в окне картинку
+    # пока окно открыто и кнопка выхода не нажата ждать
+    while cv2.getWindowProperty(winname, 0) >= 0 and cv2.waitKey(50) != exit_key:
+        pass
+    cv2.destroyAllWindows()  # завершить процессы
+
+
 def normalize(img, value=1):
     array = img.copy().astype(np.float64)
     array = (array - array.min()) / (array.max() - array.min()) * value
