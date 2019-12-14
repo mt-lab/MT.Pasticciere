@@ -87,7 +87,7 @@ def get_pcd_of_height_map_with_normals(height_map: np.ndarray, radius=None, knn=
     return pcd
 
 
-def find_contours(img: Union[np.ndarray, str]):
+def find_contours(img: Union[np.ndarray, str]) -> (List, np.ndarray):
     """
     Находит контуры в изображении
 
@@ -151,7 +151,7 @@ def find_contours(img: Union[np.ndarray, str]):
     result = cv2.bitwise_and(original, original, mask=blankSpace)
     for contour in contours:
         cv2.drawContours(result, [contour], -1, np.random.randint(0, 255, 3).tolist(), 1)
-        show_img(result)
+        # show_img(result)
     return contours, result
 
 
