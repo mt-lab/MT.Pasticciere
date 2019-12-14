@@ -166,9 +166,7 @@ class Cookie:
         if contours:
             contour = contours[0]
         else:
-            contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0]
-        # center_idx = find_center_and_rotation(contour_idx, False)  # индекс центра границы
-        # center_idx = tuple(int(round(c)) for c in center_idx)  # округление и перевод в int индекса центра
+            contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0][0]
         center, theta = find_center_and_rotation(
             self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
             :Z])  # плоская координата центра граниы
@@ -224,6 +222,7 @@ def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray') -> (List
 
 def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 0.05, img: np.ndarray = None) \
         -> (List, np.ndarray):
+    # TODO: допилить. взять кусок с обрезанием по высоте печеньки и вставить сюда. вызывать после find_cookies в scan
     pos_img = (height_map[..., Z].copy() / np.amax(height_map[..., Z]) * 255).astype(np.uint8) if img is None else img
     processed = []
     while len(cookies) != 0:

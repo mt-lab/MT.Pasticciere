@@ -16,6 +16,7 @@ from cookie import *
 import time
 
 # TODO: написать логи
+# TODO: почистить код
 
 # масштабные коэффициенты для построения облака точек
 kx = 1 / 3  # мм/кадр
@@ -64,7 +65,7 @@ def find_chekpoint(coords: np.ndarray,
         w = w[cond]  # ширина правильных переходов
         g = np.abs(starts_coords[1:] - ends_coords[:-1])
     if gaps is not None:
-        if isinstance(gaps, float) or isinstance(gaps, int) or (isinstance(gaps, np.ndarray) and gaps.size == g.size):
+        if isinstance(gaps, (float, int)) or (isinstance(gaps, np.ndarray) and gaps.size == g.size):
             if np.any(np.abs(g - gaps) > gap_tol):
                 return False, None, None
         else:
@@ -361,7 +362,7 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
 def detect_start_img(img, height, width=None, gaps=None, n=None, tol=0.5, roi=None, debug=False, **kwargs):
     mirror = kwargs.pop('mirrored', False)
     reverse = kwargs.pop('reverse', False)
-    row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, img.shape[0], 0, img.shape[1])
+    row_start, row_stop, col_start, col_stop = roi or (0, img.shape[0], 0, img.shape[1])
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
     pad = kwargs.pop('pad', int((col_stop - col_start) * 0.1 // 2))
@@ -410,7 +411,7 @@ def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=Non
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     upside_down = kwargs.get('camera_upside_down', True)
-    row_start, row_stop, col_start, col_stop = roi if roi is not None else (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
+    row_start, row_stop, col_start, col_stop = roi or (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
     while cap.isOpened() and not detected:
@@ -522,7 +523,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     hsv_upper_bound = kwargs.pop('hsv_upper_bound', (0, 0, 0))
     hsv_lower_bound = kwargs.pop('hsv_lower_bound', (255, 255, 255))
     verbosity = kwargs.pop('verbosity', 0)
-    row_start, row_stop, col_start, col_stop = kwargs.pop('roi', (0, FRAME_HEIGHT, 0, FRAME_WIDTH))
+    row_start, row_stop, col_start, col_stop = kwargs.pop('roi', None) or (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     zero_level_padl, zero_level_padr = kwargs.pop('zero_level_zone', (10, 10))
     zero_level_n = kwargs.pop('zero_level_n', None)
     debug = kwargs.pop('debug', False)
