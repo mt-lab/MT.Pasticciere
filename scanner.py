@@ -290,6 +290,7 @@ def get_max_height(contour, height_map: 'np.ndarray' = globalValues.height_map):
 
 
 def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
+    # TODO: delete. not used
     if threshhold < 0:
         yield True
     start = False
@@ -320,7 +321,6 @@ def detect_start3(cap, threshhold=50, roi=None, verbosity=0, debug=False):
         thresh = np.zeros(frame.shape[:2], dtype='uint8')
         thresh[laser.astype(int)[laser.astype(int).nonzero()], laser.astype(int).nonzero()] = 255
         thresh = cv2.GaussianBlur(thresh, (5, 5), 0)
-        # TODO: проверку стабильности пропажи и появления лазера
         lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshhold, None, roi.shape[1] * 0.96, 10)
         if lines is not None:
             for count, line in enumerate(lines):

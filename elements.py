@@ -18,7 +18,6 @@ from numpy import cos, sin, pi
 
 
 # TODO: нарзека одновременно с расчётом Z координаты
-# TODO: MLS для расчёта Z координаты
 
 
 class Element():
@@ -603,11 +602,6 @@ class Drawing:
         organized bool: True if elements are ordered and contours are constructed
     """
 
-    # TODO: шаблон dxf по которому рисунок делится на слои:
-    #   0 - общий контур печенья, по которому найти центр и поворот рисунка
-    #   1 - самый внешний/важный контур
-    #   ...
-    #   last - элементы для печати в конце
     def __init__(self, dxf=None, center: Vector = None, rotation: float = None):
         """
         :param dxf: открытый библиотекой рисунок
