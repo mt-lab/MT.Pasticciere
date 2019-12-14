@@ -6,7 +6,7 @@ import cv2
 
 
 class Cookie:
-    def __init__(self, height_map, contour_global, bounding_box=None, contour_center=None):
+    def __init__(self, height_map=None, contour_global=None, bounding_box=None, contour_center=None):
         self._contour_global = contour_global  # контур из целой карты высот (col, row)
         self._contour_local = None  # контур в локальной карте высот (col, row)
         self._contour_center = contour_center

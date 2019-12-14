@@ -757,9 +757,7 @@ class Drawing:
         self._length = None
         print(f'Объекты нарезаны с шагом {step:2.1f} мм')
 
-    def add_z(self, height_map: np.ndarray, point_apprx=False, **kwargs):
-        if height_map is None:
-            pass
+    def add_z(self, height_map: Optional[np.ndarray] = None, point_apprx=False, **kwargs):
         for element in self.elements:
             element.add_z(height_map, point_apprx=point_apprx, **kwargs)
         self._length = None

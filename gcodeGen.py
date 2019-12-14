@@ -86,8 +86,8 @@ class Gcode:
         self.name = name
         self.instructions = instructions if instructions else []  # type: List[str]
 
-    def save(self):
-        write_gcode(self.instructions)
+    def save(self, filename='cookie.gcode'):
+        write_gcode(self.instructions, filename=filename)
 
     def __str__(self) -> str:
         return f'Gcode {self.name}. Contains {self.__len__()} instructions.'

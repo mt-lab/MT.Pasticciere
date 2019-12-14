@@ -50,22 +50,22 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
     """
     # TODO: дописать под работу для генерации тестового gcode (печать по плоскости на расстоянии от стола)
     # TODO: дописать под генерацию НЕдинамической подачи
+    filename = kwargs.get('filename', 'cookie.gcode')
     Z_max = kwargs.get('table_height', DEFAULT_TABLE_HEIGHT)
     F0 = kwargs.get('F0', DEFAULT_F0)
     F1 = kwargs.get('F1', DEFAULT_F1)
-    point_apprx = kwargs.get('point_apprx', 'nearest')
+    point_apprx = kwargs.get('point_apprx', 'mls')
     E = 0
-    gcode = Gcode()
+    gcode = Gcode() + kwargs.get('pre_gcode', [])
     gcode += home()
     gcode += set_position(E=0)
     gcode += move_Z(Z_max, F0)
     for count, cookie in enumerate(cookies, 1):
         Z_up = cookie.max_height + 5 if cookie.max_height + 5 <= Z_max else Z_max
         gcode += gcode_comment(f'{count:3d} cookie')
-        dwg.center = cookie.center
+        dwg.center = cookie.center[:2]
         dwg.rotation = cookie.rotation
-        dwg.add_z(cookie.height_map if cookie.height_map is not None else height_map, point_apprx=point_apprx,
-                  height=kwargs.get('height', 0))
+        dwg.add_z(height_map or cookie.height_map, point_apprx=point_apprx, height=kwargs.get('height', 0))
         for layer_index, layer in enumerate(sorted(dwg.layers.values(), key=lambda x: x.priority)):
             gcode += gcode_comment(f'{layer_index:3d} layer: {layer.name} in drawing')
             if layer.name == 'Contour':  # or layer.priority == 0:
@@ -102,25 +102,52 @@ def gcode_generator(dwg: Drawing, cookies: Optional[List[Cookie]] = None,
     gcode += move_Z(Z_max)
     gcode += home()
     print('Команды сгенерированы')
-    gcode.save()
+    gcode.save(filename)
 
 
-def test_gcode(path_to_dxf, d_e=0.041, *args, **kwargs):
-    if 'dynamic_extrusion' in args:
-        p_0 = kwargs.get('p0', 0.05)
-        p_1 = kwargs.get('p1', 0.15)
-        p_2 = kwargs.get('p2', 0.9)
-        k = kwargs.get('extrusion_multiplex', p_1 / p_0)
+def test_gcode(path_to_dxf, d_e=0.041, height=0, center=(0, 0), rotation=0, *, dynamic_extrusion=True, **kwargs):
+    """
+    Функция генерирующая тестовый gcode на плоскости
+    для дополнительных параметров смотреть gcode_generator
+
+    :param path_to_dxf: путь до рисунка
+    :param d_e: коэффициент подачи глазури
+    :param height: высота от стола на которой печатать
+    :param center: центр печеньки как (Х, Y)
+    :param rotation: угол поворота печеньки в радианах
+    параметры доступные только через ключевые слова
+    :keyword dynamic_extrusion: динамическая подача или нет (изменяется ли коэффициент подачи в процессе)
+    :param kwargs:
+        :keyword filename: имя файла тестового gcode (default - planar_test.gcode)
+        :keyword p0: относительная длина первого участка линии на котором подача равна k * d_e
+        :keyword p1: относительная длина участка линии на котором подача равна 0 (за исключением первого участка,
+                     если он не ноль)
+        :keyword p2: относительная длина участка линии на котором подача равна d_e (за исключением второго участка)
+                     после этого и до конца линии подача 0
+        :keyword extrusion_multiplex: коэффициент усиления подачи на первом участке, (default p2/p1)
+    :return: None
+    """
+    filename = kwargs.pop('filename', 'planar_test.gcode')
+    if dynamic_extrusion:
+        p0 = kwargs.get('p0', 0.05)
+        p1 = kwargs.get('p1', 0.15)
+        p2 = kwargs.get('p2', 0.9)
+        k = kwargs.get('extrusion_multiplex', p1 / p0)
     else:
         k = 1
-        p_0 = 0
-        p_1 = 0
-        p_2 = 0
+        p0 = 0
+        p1 = 0
+        p2 = 0
     dxf = ez.readfile(path_to_dxf)
     dwg = Drawing(dxf)
     dwg.slice()
-    preGcode = ['G0 E1 F300', 'G92 E0', 'G0 F3000']
-    gcode_generator(dwg, None, None, d_e, k, p_0, p_1, p_2, preGcode=preGcode, **kwargs)
+    preGcode = kwargs.get('pre_gcode') or ['G0 E1 F300', 'G92 E0', 'G0 F3000']
+    cookie = Cookie()
+    cookie._center = (*center, 0)
+    cookie._rotation = rotation
+    cookie._max_height = height
+    gcode_generator(dwg, [cookie], None, d_e, k, p0, p1, p2, pre_gcode=preGcode, point_apprx='constant',
+                    height=height, filename=filename, **kwargs)
 
 
 def dxf2gcode(path_to_dxf: str, *args, **kwargs):
