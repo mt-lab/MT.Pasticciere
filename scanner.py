@@ -83,7 +83,7 @@ def find_coords(frame_idx: int, laser: np.ndarray, zero_level: np.ndarray,
                 camera_height: float = 150,
                 camera_shift: float = 113,
                 camera_angle: float = pi / 6,
-                camera_angle_2: float = 0,
+                camera_angle_2: float = 1.7 * pi / 180,
                 focal_length: float = 2.9,
                 pixel_size: float = 0.005, **kwargs) -> np.ndarray:
     """

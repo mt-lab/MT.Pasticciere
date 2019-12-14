@@ -771,6 +771,7 @@ def height_from_stream(video):
                              camera_shift=113,
                              **values)
         height = coords[:, Z]
+        frame[:, frame.shape[1] // 2 - 1] = (0, 255, 0)
         for column in range(col_start, col_stop):
             row = laser[column]
             frame[int(row), column] = (0, 255, 0)
