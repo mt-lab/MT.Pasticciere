@@ -633,7 +633,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[laser.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
-                cv2.circle(frame, (laser.argmax(), int(np.amax(laser))), 3,
+                cv2.circle(frame, (laser.argmin(), int(np.amin(laser))), 3,
                            (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
@@ -683,7 +683,10 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     scanner_sets = get_settings_values(**{k: settings_sections[k] for k in settings_sections if
                                           settings_sections[k][0] == 'Scanner'})
 
+    initial_frame = kw.pop('initial_frame', 0)
+
     cap = cv2.VideoCapture(path_to_video)  # чтение видео
+    cap.set(cv2.CAP_PROP_POS_FRAMES, initial_frame)
     calibrate_kx(cap.get(cv2.CAP_PROP_FPS))  # откалибровать kx согласно FPS
 
     try:  # найти кадр начала сканирования
@@ -718,7 +721,7 @@ def scan(path_to_video: str, colored: bool = False, debug=False, verbosity=0, **
     scale_factor = factory / factorx
     height_map_8bit_real = cv2.resize(height_map_8bit, None, fx=scale_factor if scale_factor > 0 else 1, fy=1)
     cookies, detected_contours = find_cookies(height_map_8bit, height_map)
-    # cookies, detected_contours = procecc_cookies(cookies, height_map, img=detected_contours)
+    cookies, detected_contours = process_cookies(cookies, height_map, img=detected_contours)
     detected_contours_real = cv2.resize(detected_contours, None, fx=scale_factor, fy=1)
     print('Положения печений найдены.')
     if len(cookies) != 0:
