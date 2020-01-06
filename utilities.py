@@ -252,12 +252,12 @@ def find_center_and_rotation(contour, rotation=True):
     :param contour: контур для расчётв
     :param rotation: находить ли его поворот
     :return:
-        центр контура
-        центр контура и его поворот
+        центр контура (row, col)
+        центр контура (row, col) и его поворот
     """
     moments = cv2.moments(contour)
-    center_x = moments['m10'] / moments['m00']
-    center_y = moments['m01'] / moments['m00']
+    center_x = moments['m10'] / moments['m00']  # row
+    center_y = moments['m01'] / moments['m00']  # column
     center = (center_x, center_y)
     if rotation:
         a = moments['m20'] / moments['m00'] - center_x ** 2

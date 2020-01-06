@@ -160,19 +160,19 @@ class Cookie:
         # center_z = self.height_map[center_row, center_col, Z]
         # Найти центр и поворот контура по точкам в мм
         # contour_idx = self.contour_idx()  # индексы границы контура
-        mean = self.contour_z_mean()
-        region = np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8)
-        contours = find_contours(region)[0]  # координаты границы где высота выше средней
-        if contours:
-            contour = contours[0]
-        else:
-            contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0][0]
-        center, theta = find_center_and_rotation(
-            self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
-            :Z])  # плоская координата центра граниы
-        center_z = mls_height_apprx(self.height_map, center)
-        # center, theta = find_center_and_rotation(self.contour_mm('center'))
-        center = (*center, center_z)  # простанственные координаты центра (свапнуты из-за opencv)
+        # mean = self.contour_z_mean()
+        # region = np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8)
+        # contours = find_contours(region)[0]  # координаты границы где высота выше средней
+        # if contours:
+        #     contour = contours[0]
+        # else:
+        #     contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0][0]
+        # center, theta = find_center_and_rotation(
+        #     self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
+        #     :Z])  # плоская координата центра граниы
+        center, theta = find_center_and_rotation(self.contour_mm('center'))
+        center_z = mls_height_apprx(self.height_map, center[::-1])
+        center = (*center[::-1], center_z)  # простанственные координаты центра (свапнуты из-за opencv)
         rotation = pi / 2 - theta  # перевод в СК принтера
         self._center = center
         self._rotation = rotation
@@ -218,6 +218,32 @@ def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray') -> (List
         cookies.append(cookie)
         cv2.circle(result, cookie.center_pixel, 3, (0, 255, 0), -1)
     return cookies, result
+
+
+def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: np.ndarray = None, tol=0.3):
+    img = cv2.normalize(height_map[..., Z], None, 0, 255, cv2.NORM_MINMAX, np.uint8) if img is None else img
+    processed = []
+    while cookies:
+        cookie = cookies.pop(0)
+        anchor = cookie.bounding_box[:2]  # col, row
+        mean_height = cookie.contour_z_mean()
+        mask = np.zeros(height_map.shape[:2], np.uint8)
+        cv2.drawContours(mask, [cookie.contour_global], -1, 255, -1)
+        masked_height_map = height_map.copy()
+        masked_height_map[..., Z] = np.where(height_map[..., Z] < mean_height, 0, height_map[..., Z])
+        masked_img = img.copy()
+        masked_img[mask == 0] = (0,0,0)
+        new_cookies, _ = find_cookies(masked_img, masked_height_map)
+        if len(new_cookies) <= 1:
+            cv2.drawContours(img, [cookie.contour_global], -1, (0, 0, 255))
+            cv2.circle(img, cookie.center_pixel, 2, (255, 0, 0), -1)
+            processed.append(cookie)
+        else:
+            area1 = sorted(new_cookies, key=lambda cookie: cv2.contourArea(cookie.contour_global), reverse=True)[0]
+            for cookie in new_cookies:
+                if (1 - cv2.contourArea(cookie.contour_global / area1)) < tol:
+                    cookies.append(cookie)
+    return processed, img
 
 
 def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 0.05, img: np.ndarray = None) \
