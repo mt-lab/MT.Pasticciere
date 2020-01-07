@@ -119,10 +119,23 @@ def checker(coords, height, width=None, gaps=None, n: int = None, tol: float = 0
     m = {a: ['end'], b: [-b, -(a + b)], a + b: [-b, -(a + b)], -a: [a + b], -b: ['end'], -(a + b): [a]}
 
     def gaps_check(checkpoint: Checkpoint, gaps, gap_tol):
-        return not gaps or np.all(np.abs(np.array(checkpoint.gaps) - gaps) < gap_tol)
+        if isinstance(gaps, (int, float)) or gaps is None:
+            n = checkpoint.n
+        elif isinstance(gaps, np.ndarray):
+            n = gaps.size
+        else:
+            raise TypeError('width is either a number or 1D ndarray')
+        return not gaps or (n == checkpoint.n and np.all(np.abs(np.array(checkpoint.gaps) - gaps) < gap_tol))
 
     def width_check(checkpoint: Checkpoint, width, width_tol):
-        return not width or np.all(np.abs(np.array([mark.width for mark in checkpoint.marks]) - width) < width_tol)
+        if isinstance(width, (int, float)) or width is None:
+            n = checkpoint.n
+        elif isinstance(width, np.ndarray):
+            n = width.size
+        else:
+            raise TypeError('width is either a number or 1D ndarray')
+        return not width or (n == checkpoint.n and np.all(
+            np.abs(np.array([mark.width for mark in checkpoint.marks]) - width) < width_tol))
 
     def n_check(checkpoint: Checkpoint, n):
         return not n or checkpoint.n == n
