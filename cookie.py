@@ -5,6 +5,8 @@ import numpy as np
 import cv2
 
 
+# TODO: документация и комментарии
+
 class Cookie:
     def __init__(self, height_map=None, contour_global=None, bounding_box=None, contour_center=None):
         self._contour_global = contour_global  # контур из целой карты высот (col, row)
@@ -156,20 +158,6 @@ class Cookie:
         return self.contour_coords(contour)[..., Z].std()
 
     def find_center_and_rotation(self):
-        # center_col, center_row = self.center_local
-        # center_z = self.height_map[center_row, center_col, Z]
-        # Найти центр и поворот контура по точкам в мм
-        # contour_idx = self.contour_idx()  # индексы границы контура
-        # mean = self.contour_z_mean()
-        # region = np.where(self.height_map[..., Z] < mean, 0, 255).astype(np.uint8)
-        # contours = find_contours(region)[0]  # координаты границы где высота выше средней
-        # if contours:
-        #     contour = contours[0]
-        # else:
-        #     contour = find_contours(normalize(self.height_map, 255).astype(np.uint8))[0][0]
-        # center, theta = find_center_and_rotation(
-        #     self.height_map[tuple(np.hsplit(np.fliplr(contour.reshape(contour.shape[0], 2)), 2))][...,
-        #     :Z])  # плоская координата центра граниы
         center, theta = find_center_and_rotation(self.contour_mm('center'))
         center_z = mls_height_apprx(self.height_map, center[::-1])
         center = (*center[::-1], center_z)  # простанственные координаты центра (свапнуты из-за opencv)
@@ -225,14 +213,13 @@ def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: np.ndarr
     processed = []
     while cookies:
         cookie = cookies.pop(0)
-        anchor = cookie.bounding_box[:2]  # col, row
         mean_height = cookie.contour_z_mean()
         mask = np.zeros(height_map.shape[:2], np.uint8)
         cv2.drawContours(mask, [cookie.contour_global], -1, 255, -1)
         masked_height_map = height_map.copy()
         masked_height_map[..., Z] = np.where(height_map[..., Z] < mean_height, 0, height_map[..., Z])
         masked_img = img.copy()
-        masked_img[mask == 0] = (0,0,0)
+        masked_img[mask == 0] = (0, 0, 0)
         new_cookies, _ = find_cookies(masked_img, masked_height_map)
         if len(new_cookies) <= 1:
             cv2.drawContours(img, [cookie.contour_global], -1, (0, 0, 255))
@@ -244,42 +231,3 @@ def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: np.ndarr
                 if (1 - cv2.contourArea(cookie.contour_global / area1)) < tol:
                     cookies.append(cookie)
     return processed, img
-
-
-def procecc_cookies(cookies: List[Cookie], height_map: np.ndarray, tol: float = 0.05, img: np.ndarray = None) \
-        -> (List, np.ndarray):
-    # TODO: допилить. взять кусок с обрезанием по высоте печеньки и вставить сюда. вызывать после find_cookies в scan
-    pos_img = (height_map[..., Z].copy() / np.amax(height_map[..., Z]) * 255).astype(np.uint8) if img is None else img
-    processed = []
-    while len(cookies) != 0:
-        cookie = cookies.pop()
-        # anchor = np.array(cookie.bounding_box[:2])
-        mask = np.zeros(height_map.shape[:2], dtype=np.uint8)
-        cv2.drawContours(mask, [cookie.contour_global], 0, 255, -1)
-        height_map_masked = height_map.copy()
-        height_map_masked[..., Z][mask == 0] = 0
-
-        M = cv2.moments(height_map_masked[..., Z])
-        center_x = int(M['m10'] / M['m00'])
-        center_y = int(M['m01'] / M['m00'])
-        # while abs(std - p_std) / std > tol and p_std != std:
-        #     height_map_masked[..., Z][height_map_masked[..., Z] < mean] = 0
-        #     img = (height_map_masked[..., Z] / np.amax(height_map_masked[..., Z]) * 255).astype(np.uint8)
-        #     new_cookies, _ = find_cookies(img, height_map_masked)
-        #     if len(new_cookies) == 1:
-        #         cookie.contour_center = new_cookies[0].contour_global + anchor
-        #         p_std = std
-        #         c_cnt_z = cookie.contour_coords('center')[..., Z]
-        #         c_cnt_z[c_cnt_z == 0] = c_cnt_z.mean()
-        #         std = c_cnt_z.std()
-        #         mean = c_cnt_z.mean()
-        #     elif len(new_cookies) == 0:
-        #         break
-        #     elif len(new_cookies) > 1:
-        #         cookies += [Cookie(new_cookie.height_map, new_cookie.contour_global + anchor) for new_cookie in
-        #                     new_cookies if new_cookie.area / cookie.area >= .5]
-        #         break
-        processed.append(cookie)
-        cv2.drawContours(pos_img, [cookie.contour_center], 0, (255, 0, 255), 1)
-        cv2.circle(pos_img, (center_x, center_y), 3, (255, 0, 0), -1)
-    return processed, pos_img
