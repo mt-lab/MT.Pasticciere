@@ -994,18 +994,12 @@ def generate_chessboard(square_size=30, grid=(8, 8)):
     return chessboard
 
 
-def find_pose_video(video, grid=(8, 8), **kwargs):
+def find_pose_video(video, mtx, grid=(8, 8), **kwargs):
     # TODO: после калибровки прописать углы и расстояния в конфиг автоматически
     gen = decor_stream2img(camera_pose_img)
     cv2.imshow('chb', generate_chessboard(75, grid))
     cv2.waitKey(500)
-    # mtx, newmtx, dist, r, t, roi = camera_calibration(video, (grid[0] - 1, grid[1] - 1), square_size=square_size,
-    #                                                   **kwargs)
-    # cv2.imshow('chb', generate_chessboard(75, grid))
-    # cv2.waitKey(500)
-    for res in gen(video, mtx=np.array([[2.9 / 0.005, 0, 319],
-                                        [0, 2.9 / 0.005, 239],
-                                        [0, 0, 1]]), grid=(grid[0] - 1, grid[1] - 1), draw=True, **kwargs):
+    for res in gen(video, mtx=mtx, grid=(grid[0] - 1, grid[1] - 1), draw=True, **kwargs):
         if res[0] is not None:
             print(f'X: {res[0][X]:4.2f} units, {np.rad2deg(res[1][X]):4.1f} grad\n'
                   f'Y: {res[0][Y]:4.2f} units, {np.rad2deg(res[1][Y]):4.1f} grad\n'
