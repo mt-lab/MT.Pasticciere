@@ -329,6 +329,7 @@ def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, pad=
     :param mid_row: средний ряд кадра, значение по умолчанию если расчёт не получится
     :return: массив точек нулевой линии и тангенс наклона линии от горизонтали
     """
+    deg = kwargs.get('deg', 1)
     padl = kwargs.get('padl', abs(pad) if pad is not None else None)
     padr = kwargs.get('padr', abs(pad) if pad is not None else None)
     nl = kwargs.get('nl', abs(n) // 2 if n is not None else None)
@@ -342,7 +343,7 @@ def predict_zero_level(laser: np.ndarray, mid_row: Union[int, float] = 239, pad=
         data_x[(data_x < col_start + padl) | (data_x > col_stop - padr)]
     if data_x.size:
         data_y = laser[data_x]
-        k = np.polyfit(data_x, data_y, 1)
+        k = np.polyfit(data_x, data_y, deg)
         zero_level = np.polyval(k, np.mgrid[:laser.size])
         tangent = k[0]
     else:
@@ -625,6 +626,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     row_start, row_stop, col_start, col_stop = kwargs.pop('roi', None) or (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     zero_level_padl, zero_level_padr = kwargs.pop('zero_level_zone', (10, 10))
     zero_level_n = kwargs.pop('zero_level_n', None)
+    zero_level_deg = kwargs.pop('zero_level_deg', 1)
     debug = kwargs.pop('debug', False)
     kwargs = {k: kwargs[k] for k in kwargs if k in settings_sections}
     table_width = kwargs.pop('table_width', 200)
@@ -687,12 +689,14 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             ############################################################################################################
             if AVG_TIME <= 0:  # если не задано усреднять лазер, то считать нулевой уровень в каждом кадре
                 zero_level, _ = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1, col_start=col_start, col_stop=col_stop,
-                                                   padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n)
+                                                   padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n,
+                                                   deg=zero_level_deg)
             elif avg_counter < AVG_TIME:  # если задано усреднять и лазер ещё не усреднён
                 # найти нулевую линию, её угол и отклонение от предыдущего значения
                 zero_level, tangent = predict_zero_level(laser, FRAME_HEIGHT // 2 - 1,
                                                          col_start=col_start, col_stop=col_stop,
-                                                         padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n)
+                                                         padl=zero_level_padl, padr=zero_level_padr, n=zero_level_n,
+                                                         deg=zero_level_deg)
                 angle_error = np.abs(np.arctan(laser_tangent) - np.arctan(tangent))
                 pos_error = abs(laser_row_pos - zero_level[0])
                 #  если параметры линии отклоняются в допустимых пределах
