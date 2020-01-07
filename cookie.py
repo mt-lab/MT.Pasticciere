@@ -1,6 +1,7 @@
 from math import pi
-from typing import Union, List
-from utilities import X, Y, Z, find_center_and_rotation, find_contours, show_height_map, mls_height_apprx, normalize
+from typing import Union, List, Optional
+from utilities import X, Y, Z, find_center_and_rotation, find_contours, show_height_map, mls_height_apprx, normalize, \
+    show_img
 import numpy as np
 import cv2
 
@@ -208,8 +209,9 @@ def find_cookies(img: Union[np.ndarray, str], height_map: 'np.ndarray') -> (List
     return cookies, result
 
 
-def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: np.ndarray = None, tol=0.3):
-    img = cv2.normalize(height_map[..., Z], None, 0, 255, cv2.NORM_MINMAX, np.uint8) if img is None else img
+def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: Optional[np.ndarray] = None, tol=0.3):
+    img = cv2.normalize(np.dstack([height_map[..., Z]] * 3), None, 0, 255, cv2.NORM_MINMAX,
+                        cv2.CV_8UC3) if img is None else img
     processed = []
     while cookies:
         cookie = cookies.pop(0)
@@ -219,15 +221,15 @@ def process_cookies(cookies: List[Cookie], height_map: np.ndarray, img: np.ndarr
         masked_height_map = height_map.copy()
         masked_height_map[..., Z] = np.where(height_map[..., Z] < mean_height, 0, height_map[..., Z])
         masked_img = img.copy()
-        masked_img[mask == 0] = (0, 0, 0)
+        masked_img[(mask == 0) | (masked_height_map[..., Z] == 0)] = (0, 0, 0)
         new_cookies, _ = find_cookies(masked_img, masked_height_map)
         if len(new_cookies) <= 1:
             cv2.drawContours(img, [cookie.contour_global], -1, (0, 0, 255))
             cv2.circle(img, cookie.center_pixel, 2, (255, 0, 0), -1)
             processed.append(cookie)
         else:
-            area1 = sorted(new_cookies, key=lambda cookie: cv2.contourArea(cookie.contour_global), reverse=True)[0]
+            big_cookie = sorted(new_cookies, key=lambda cookie: cv2.contourArea(cookie.contour_global), reverse=True)[0]
             for cookie in new_cookies:
-                if (1 - cv2.contourArea(cookie.contour_global / area1)) < tol:
+                if (1 - cv2.contourArea(cookie.contour_global) / cv2.contourArea(big_cookie.contour_global)) < tol:
                     cookies.append(cookie)
     return processed, img
