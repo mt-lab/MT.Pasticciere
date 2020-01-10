@@ -6,8 +6,9 @@ Author: bedlamzd of MT.lab
 """
 
 import numpy as np
-from dataclasses import dataclass, field
 from numpy import cos, sin, tan, pi, arctan
+from dataclasses import dataclass, field
+import imutils
 from ezdxf.math.vector import Vector
 import cv2
 from typing import Union, Optional, Tuple
@@ -524,6 +525,7 @@ def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=Non
     FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     upside_down = kwargs.get('camera_upside_down', True)
+    camera_angle_3 = kwargs.get('camera_angle_3', 0)
     row_start, row_stop, col_start, col_stop = roi or (0, FRAME_HEIGHT, 0, FRAME_WIDTH)
     if row_start >= row_stop and col_start >= col_stop:
         raise Error('Incorrect bounds of image. row_start should be strictly less then row_stop.')
@@ -533,6 +535,7 @@ def detect_start4(cap: cv2.VideoCapture, ref_height, ref_width=None, ref_gap=Non
         if ret is True:
             if upside_down:
                 cv2.rotate(frame, cv2.ROTATE_180, frame)
+            frame = imutils.rotate_bound(frame, camera_angle_3)
             start, frame, mask = detect_start_img(frame, ref_height, ref_width, ref_gap, ref_n, tol, roi, debug,
                                                   **kwargs)
             #################################################################
@@ -641,6 +644,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
     zero_level_n = kwargs.pop('zero_level_n', None)
     zero_level_deg = kwargs.pop('zero_level_deg', 1)
     debug = kwargs.pop('debug', False)
+    camera_angle_3 = kwargs.pop('camera_angle_3', 0)
     kwargs = {k: kwargs[k] for k in kwargs if k in settings_sections}
     table_width = kwargs.pop('table_width', 200)
     table_length = kwargs.pop('table_length', 200)
@@ -663,6 +667,7 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
         if ret is True:  # пока кадры есть - сканировать
             if UPSIDE_DOWN:
                 cv2.rotate(frame, cv2.ROTATE_180, frame)
+            frame = imutils.rotate_bound(frame, camera_angle_3)
             roi = frame[row_start:row_stop, col_start:col_stop]  # обрезать кадр по зоне интереса
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)  # конвертировать в грейскейл
             blur = cv2.GaussianBlur(gray, (ksize, ksize), sigma)
