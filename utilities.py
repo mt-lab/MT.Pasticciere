@@ -14,7 +14,8 @@ from numpy.polynomial.polynomial import polyvander, polyvander2d, polyval2d
 import cv2
 import open3d
 import imutils
-from numpy import arctan, sqrt, tan, arccos, pi
+from imutils import perspective
+from numpy import arctan, sqrt, tan, arccos, pi, cos, sin
 from ezdxf.math.vector import Vector
 
 """ Some tools for convenience """
@@ -30,7 +31,7 @@ def show_img(img, winname='image', exit_key=27):
     cv2.namedWindow(winname)  # создать окно
     cv2.imshow(winname, img)  # показать в окне картинку
     # пока окно открыто и кнопка выхода не нажата ждать
-    while cv2.getWindowProperty(winname, 0) >= 0 and cv2.waitKey(50) != exit_key:
+    while cv2.getWindowProperty(winname, cv2.WND_PROP_VISIBLE) > 0 and cv2.waitKey(50) != exit_key:
         pass
     cv2.destroyAllWindows()  # завершить процессы
 
@@ -673,7 +674,7 @@ def decor_stream2img(img_func):
     """
     import cv2
     @wraps(img_func)
-    def wrapper(video, loops=False, *args, **kwargs):
+    def wrapper(cap, loops=False, *args, **kwargs):
         """
         Принимает на вход видео к которому покадрово нужно применить функцию
 
@@ -686,9 +687,12 @@ def decor_stream2img(img_func):
         """
         count_loops = 0
         max_loops = kwargs.pop('max_loops', 10)
-        cap = cv2.VideoCapture(video)
-        if isinstance(video, int):
-            loops = False
+        autofocus = kwargs.pop('autofocus', True)
+        if not autofocus:
+            cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+            cv2.namedWindow("Video")
+            focus = int(min(cap.get(cv2.CAP_PROP_FOCUS) * 100, 2 ** 31 - 1))
+            cv2.createTrackbar("Focus", "Video", focus, 1000, lambda v: cap.set(cv2.CAP_PROP_FOCUS, v))
         while cap.isOpened():
             ret, frame = cap.read()
             if ret is True:
@@ -704,6 +708,7 @@ def decor_stream2img(img_func):
             else:
                 print('video ended or crashed')
                 cap.release()
+        cap.release()
 
     return wrapper
 
@@ -884,15 +889,17 @@ def camera_calibration(video,  # видео с которого брать ка�
                        win_size=(5, 5),  # не помню
                        zero_zone=(-1, -1),  # не помню
                        square_size=1,  # размер квадрата сетки
+                       points=None,
                        criteria=None):  # критерии для субпиксельных углов шахматки
     import time
     mtx, rvecs, tvecs, dist, newcameramtx, roi = None, None, None, None, None, None
     once = False
     if criteria is None:
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    points = np.zeros((grid[0] * grid[1], 3), np.float32)
-    points[:, :2] = np.mgrid[:grid[0], :grid[1]].T.reshape(-1, 2) * square_size
+    if points is None:
+        points = np.zeros((grid[0] * grid[1], 3), np.float32)
+        points[:, :2] = np.mgrid[:grid[0], :grid[1]].T.reshape(-1, 2) * square_size
 
     objpoints = []
     imgpoints = []
@@ -912,7 +919,8 @@ def camera_calibration(video,  # видео с которого брать ка�
         if ret:
             if good_samples < samples:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                ret, corners = cv2.findChessboardCorners(gray, grid)
+                ret, corners = cv2.findChessboardCorners(gray, grid,
+                                                         flags=cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_ADAPTIVE_THRESH)
                 if ret:
                     cur_time = time.time()
                     dif = abs(last_time - cur_time)
@@ -923,6 +931,7 @@ def camera_calibration(video,  # видео с которого брать ка�
                         corners = cv2.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
                         imgpoints.append(corners)
                         print(f'sample taken. current samples: {good_samples}')
+                        frame = np.ones_like(frame, dtype=np.uint8) * 255 - frame
                 cv2.drawChessboardCorners(frame, grid, corners, ret)
             elif not once:
                 once = not once
@@ -961,25 +970,32 @@ def find_camera_pose(rvec, tvec):
 def camera_pose_img(img, mtx,  # изображение с шахматкой и матрица параметров камеры
                     grid, square_size=1, first_corner_coord=(0, 0),
                     # размер сетки, размер клетки, координата первого угла
+                    points=None,
                     win_size=(5, 5), zero_zone=(-1, -1), criteria=None,  # параметры поиска углов на изображении
-                    draw=False, rotate=False):  # отрисовывать результат или нет
+                    draw=False, return_corners=False, rotate=False):  # отрисовывать результат или нет
     if rotate:
         img = cv2.rotate(img, cv2.ROTATE_180)
     if criteria is None:
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
-    objp = np.zeros((7 * 7, 3), dtype=np.float32)
-    objp[:, :2] = np.mgrid[:7, :7].T.reshape(-1, 2) * square_size + first_corner_coord
+    if points is None:
+        points = np.zeros((grid[0] * grid[1], 3), dtype=np.float32)
+        points[:, :2] = np.mgrid[:grid[0], :grid[1]].T.reshape(-1, 2) * square_size + first_corner_coord
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, corners = cv2.findChessboardCorners(gray, grid)
+    ret, corners = cv2.findChessboardCorners(gray, grid, flags=cv2.CALIB_CB_FAST_CHECK)
     if ret:
         corners = cv2.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
         if draw:
             cv2.drawChessboardCorners(img, grid, corners, ret)
-        ret, rvec, tvec = cv2.solvePnP(objp, corners, mtx, None)
+        ret, rvec, tvec = cv2.solvePnP(points, corners, mtx, None)
         (coords, angles) = find_camera_pose(rvec, tvec) if ret else (None, None)
     else:
         coords, angles = None, None
-    return coords, angles, img if draw else coords, angles
+    result = [coords, angles]
+    if draw:
+        result.append(img)
+    if return_corners:
+        result.append(corners)
+    return result
 
 
 def generate_chessboard(square_size=30, grid=(8, 8)):
@@ -999,7 +1015,8 @@ def find_pose_video(video, mtx, grid=(8, 8), **kwargs):
     gen = decor_stream2img(camera_pose_img)
     cv2.imshow('chb', generate_chessboard(75, grid))
     cv2.waitKey(500)
-    for res in gen(video, mtx=mtx, grid=(grid[0] - 1, grid[1] - 1), draw=True, **kwargs):
+    cap = cv2.VideoCapture(video)
+    for res in gen(cap, mtx=mtx, grid=(grid[0] - 1, grid[1] - 1), draw=True, **kwargs):
         if res[0] is not None:
             print(f'X: {res[0][X]:4.2f} units, {np.rad2deg(res[1][X]):4.1f} grad\n'
                   f'Y: {res[0][Y]:4.2f} units, {np.rad2deg(res[1][Y]):4.1f} grad\n'
@@ -1007,4 +1024,181 @@ def find_pose_video(video, mtx, grid=(8, 8), **kwargs):
         cv2.imshow('res', res[2])
         if cv2.waitKey(20) == 27:
             break
+    cap.release()
     cv2.destroyAllWindows()
+
+
+def table_points(p1, p2, p3, p4, grid):
+    points = []
+    for i in range(grid[0]):
+        tmp1 = p1.lerp(p4, i / grid[0])
+        tmp2 = p2.lerp(p3, i / grid[0])
+        for j in range(grid[1]):
+            points.append(tmp1.lerp(tmp2, j / grid[1]))
+    return np.array(points)
+
+
+def show_vid(cap: cv2.VideoCapture, winname='video', *, upside_down=False, f=2.9 / 0.005, **kwargs):
+    settings = 'settings'
+    cv2.namedWindow(winname)
+    cv2.namedWindow(settings)
+    cv2.createTrackbar('roll', settings, 900, 1800, nothing)
+    cv2.createTrackbar('pitch', settings, 900, 1800, nothing)
+    cv2.createTrackbar('yaw', settings, 900, 1800, nothing)
+    cv2.createTrackbar('dx', settings, 0, 3000, nothing)
+    cv2.createTrackbar('dy', settings, 0, 3000, nothing)
+    cv2.createTrackbar('dz', settings, int(f), 3000, nothing)
+    cv2.createTrackbar('hline', settings, 0, int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), nothing)
+    cv2.createTrackbar('vline', settings, 0, int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), nothing)
+    cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+    cv2.namedWindow(settings)
+    focus = int(min(cap.get(cv2.CAP_PROP_FOCUS) * 100, 2 ** 31 - 1))
+    cv2.createTrackbar("Focus", settings, focus, 1000, lambda v: cap.set(cv2.CAP_PROP_FOCUS, v))
+    while cap.isOpened():
+        ret, frame = cap.read()
+        roll = cv2.getTrackbarPos('roll', settings) / 10 - 90
+        pitch = cv2.getTrackbarPos('pitch', settings) / 10 - 90
+        yaw = cv2.getTrackbarPos('yaw', settings) / 10 - 90
+        dx = cv2.getTrackbarPos('dx', settings)
+        dy = cv2.getTrackbarPos('dy', settings)
+        dz = cv2.getTrackbarPos('dz', settings)
+        hline = int(cv2.getTrackbarPos('hline', settings))
+        vline = int(cv2.getTrackbarPos('vline', settings))
+        if not ret or cv2.waitKey(25) == 27:
+            cap.release()
+        if upside_down:
+            cv2.rotate(frame, cv2.ROTATE_180, frame)
+        frame = rotate_3d(frame, pitch, yaw, roll, dx, dy, dz, f)
+        cv2.setTrackbarMax('hline', settings, frame.shape[0])
+        cv2.setTrackbarMax('vline', settings, frame.shape[1])
+        frame[hline, :] = (0, 0, 255)
+        frame[:, vline] = (0, 255, 0)
+        cv2.imshow(winname, frame)
+    else:
+        cap.release()
+    cv2.destroyAllWindows()
+
+
+def rotate_3d(img, alpha=0, beta=0, gamma=0, dx=0, dy=0, dz=0, f=580, *, mtx=None):
+    alpha = np.radians(alpha)
+    beta = np.radians(beta)
+    gamma = np.radians(gamma)
+
+    w = 2 * int(mtx[0, 2]) if mtx is not None else img.shape[1]
+    h = 2 * int(mtx[1, 2]) if mtx is not None else img.shape[0]
+
+    A1 = np.array([[1, 0, -w / 2],
+                   [0, 1, -h / 2],
+                   [0, 0, 0],
+                   [0, 0, 1]])
+
+    RX = np.array([[1, 0, 0, 0],
+                   [0, cos(alpha), -sin(alpha), 0],
+                   [0, sin(alpha), cos(alpha), 0],
+                   [0, 0, 0, 1]])
+
+    RY = np.array([[cos(beta), 0, -sin(beta), 0],
+                   [0, 1, 0, 0],
+                   [sin(beta), 0, cos(beta), 0],
+                   [0, 0, 0, 1]])
+
+    RZ = np.array([[cos(gamma), -sin(gamma), 0, 0],
+                   [sin(gamma), cos(gamma), 0, 0],
+                   [0, 0, 1, 0],
+                   [0, 0, 0, 1]])
+
+    R = RX @ RY @ RZ
+    T = np.array([[1, 0, 0, dx],
+                  [0, 1, 0, dy],
+                  [0, 0, 1, dz + f],
+                  [0, 0, 0, 1]], dtype=np.float64)
+
+    D = np.array([[1, 0, 0, -dx],
+                  [0, 1, 0, -dy],
+                  [0, 0, 1, -dz],
+                  [0, 0, 0, 1]], dtype=np.float64)
+
+    A2 = np.c_[mtx, np.zeros((3, 1))] if mtx is not None else np.array([[f, 0, w / 2, 0],
+                                                                        [0, f, h / 2, 0],
+                                                                        [0, 0, 1, 0]])
+
+    trans = A2 @ T @ R @ D @ A1
+
+    return cv2.warpPerspective(cv2.UMat(img), trans, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
+
+# def rectify_plane(video, grid, mtx, **kwargs):
+#     cap = cv2.VideoCapture(video)
+#     gen = decor_stream2img(camera_pose_img)
+#     for coords, angles, img, corners in gen(cap, mtx=mtx, grid=grid, draw=True, return_corners=True, **kwargs):
+#         if angles is not None:
+#             pitch = -np.degrees(angles[0])
+#             yaw = np.degrees(angles[1])
+#             roll = -np.degrees(angles[2])
+#             dx = 0
+#             dy = 0
+#             dz = 0
+#             corners = order_points(corners[[0,5,18,23]].reshape((4, 2)))
+#         else:
+#             pitch, yaw, roll = 0, 0, 0
+#             corners = order_points(np.array([(0, 0), (0, 480), (640, 480), (640, 0)]))
+#             dx,dy,dz = 0,0,0
+#         cv2.imshow('raw', img)
+#         img2 = rotate_3d(img, pitch, yaw, roll,dx,dy,dz, mtx=None)
+#         # (tl, tr, br, bl) = corners
+#         #
+#         # # compute the width of the new image, which will be the
+#         # # maximum distance between bottom-right and bottom-left
+#         # # x-coordiates or the top-right and top-left x-coordinates
+#         # widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+#         # widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+#         # maxWidth = max(int(widthA), int(widthB))
+#         #
+#         # # compute the height of the new image, which will be the
+#         # # maximum distance between the top-right and bottom-right
+#         # # y-coordinates or the top-left and bottom-left y-coordinates
+#         # heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+#         # heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+#         # maxHeight = max(int(heightA), int(heightB))
+#         # dst = np.array([
+#         #     [0, 0],
+#         #     [maxWidth - 1, 0],
+#         #     [maxWidth - 1, maxHeight - 1],
+#         #     [0, maxHeight - 1]], dtype="float32")
+#         #
+#         # # compute the perspective transform matrix and then apply it
+#         # M = cv2.getPerspectiveTransform(corners, dst)
+#         img3 = perspective.four_point_transform(img, corners)
+#         cv2.imshow('rotated', img2)
+#         cv2.imshow('imutils', img3)
+#         if cv2.waitKey(20) == 27:
+#             break
+#     cap.release()
+#     cv2.destroyAllWindows()
+#
+# def order_points(pts):
+#     # sort the points based on their x-coordinates
+#     xSorted = pts[np.argsort(pts[:, 0]), :]
+#
+#     # grab the left-most and right-most points from the sorted
+#     # x-roodinate points
+#     leftMost = xSorted[:2, :]
+#     rightMost = xSorted[-2:, :]
+#
+#     # now, sort the left-most coordinates according to their
+#     # y-coordinates so we can grab the top-left and bottom-left
+#     # points, respectively
+#     leftMost = leftMost[np.argsort(leftMost[:, 1]), :]
+#     (tl, bl) = leftMost
+#
+#     # now that we have the top-left coordinate, use it as an
+#     # anchor to calculate the Euclidean distance between the
+#     # top-left and right-most points; by the Pythagorean
+#     # theorem, the point with the largest distance will be
+#     # our bottom-right point
+#     D = dist.cdist(tl[np.newaxis], rightMost, "euclidean")[0]
+#     (br, tr) = rightMost[np.argsort(D)[::-1], :]
+#
+#     # return the coordinates in top-left, top-right,
+#     # bottom-right, and bottom-left order
+#     return np.array([tl, tr, br, bl], dtype="float32")

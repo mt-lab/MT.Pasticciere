@@ -84,7 +84,7 @@ def find_chekpoint(coords: np.ndarray,
 class Mark:
     idc: Tuple[int]
     coords: Tuple
-    height: float = field(init=False)
+    height: float
     length: float = field(init=False)
     width: float = field(init=False)
     rais: float = field(init=False)
@@ -92,7 +92,7 @@ class Mark:
 
     def __post_init__(self):
         self.coords = tuple(Vector(coord) for coord in self.coords)
-        self.height = (self.coords[1].z + self.coords[-2].z) / 2
+        # self.height = (self.coords[1].z + self.coords[-2].z) / 2
         self.length = self.coords[0].xy.distance(self.coords[-1].xy)
         self.width = self.coords[1].xy.distance(self.coords[-2].xy)
         self.rais = self.coords[0].xy.distance(self.coords[1].xy)
@@ -148,7 +148,7 @@ def checker(coords, height, width=None, gaps=None, n: int = None, tol: float = 0
     def make_sequence(coords, height, height_tol):
         sequence = np.copy(coords[..., Z])
         sequence[np.abs(sequence) < height_tol] = 0
-        sequence[(sequence != 0) & (np.abs(sequence - height) > height_tol)] = -a
+        sequence[(sequence != 0) & (np.abs(sequence - height) >= height_tol)] = -a
         sequence[sequence > 0] = b
         return np.diff(sequence, prepend=0, append=0)[1:-1]
 
@@ -165,7 +165,8 @@ def checker(coords, height, width=None, gaps=None, n: int = None, tol: float = 0
                     idc = idc + [idx, idx] if item == -b else idc + [idx]
                     if len(idc) == 2:
                         print()
-                    marks.append(Mark(idc, coords[idc]))
+                    height = np.amax(coords[..., Z][idc[1]:idc[2]])
+                    marks.append(Mark(idc, coords[idc], height))
                     stack = []
                     idc = []
                     continue
@@ -733,8 +734,8 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
             laser[(laser > zero_level) | (laser == 0)] = zero_level[(laser > zero_level) | (laser == 0)]
             height_map[frame_idx] = find_coords(frame_idx, laser, zero_level, frame_shape=FRAME_SHAPE,
                                                 reverse=REVERSE, mirrored=MIRRORED, **kwargs)[col_start:col_stop]
-            if abs(height_map[0, 0, X] - height_map[-1, 0, X]) > table_length:  # проверка конца сканирования
-                height_map = height_map[:frame_idx]
+            if abs(height_map[0, 0, X] - height_map[frame_idx, 0, X]) > table_length:  # проверка конца сканирования
+                height_map = height_map[:frame_idx+1]
                 cap.release()  # закрыть видео
                 print('Достигнута граница зоны сканирования')
                 print(f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано')
@@ -744,7 +745,6 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 print(
                     f'{frame_idx + initial_frame_idx + 1:{3}}/{TOTAL_FRAMES:{3}} кадров обрабтано за {time.time() - start:4.2f} с\n'
                     f'  X: {height_map[frame_idx][0, X]:4.2f} мм; Zmax: {np.amax(height_map[frame_idx][:, Z]):4.2f} мм')
-            frame_idx += 1
             ############################################################################################################
             # ВЫВОД НА ЭКРАН ИЗОБРАЖЕНИЙ ДЛЯ ОТЛАДКИ
             ############################################################################################################
@@ -754,13 +754,14 @@ def scanning(cap: cv2.VideoCapture, initial_frame_idx: int = 0, **kwargs) -> np.
                 frame[[row_start, row_stop - 1], col_start:col_stop] = (255, 0, 255)
                 frame[laser.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (0, 255, 0)
                 frame[zero_level.astype(np.int)[col_start:col_stop], np.mgrid[col_start:col_stop]] = (255, 0, 0)
-                cv2.circle(frame, (laser.argmin(), int(np.amin(laser))), 3,
-                           (0, 0, 255), -1)
+                idx = height_map[frame_idx][..., Z].argmax() + col_start
+                cv2.circle(frame, (idx, int(laser[idx])), 3, (0, 0, 255), -1)
                 cv2.imshow('frame', frame)
                 cv2.imshow('mask', mask)
                 cv2.imshow('height map', height_map.copy()[..., Z] / np.amax(height_map[..., Z]))
                 cv2.waitKey(15)
             ############################################################################################################
+            frame_idx += 1
         else:  # кадры кончились или побиты(?)
             cap.release()  # закрыть видео
     else:  # когда видео кончилось
