@@ -14,9 +14,10 @@ from numpy.polynomial.polynomial import polyvander, polyvander2d, polyval2d
 import cv2
 import open3d
 import imutils
-from imutils import perspective
+# from imutils import perspective
 from numpy import arctan, sqrt, tan, arccos, pi, cos, sin
 from ezdxf.math.vector import Vector
+# from scipy.spatial import distance as dist
 
 """ Some tools for convenience """
 
